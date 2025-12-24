@@ -114,4 +114,809 @@ local STATE = {
     HasAstralRod = false,
     CurrentRod = "None",
     CurrentBait = "None",
-    CurrentArea = "Curre
+    CurrentArea = "Current Location",
+    NextRodPrice = "N/A",
+    NextBaitPrice = "N/A",
+    RodProgress = "0/8",
+    BaitProgress = "0/7",
+    TotalCoins = 0,
+    AstralProgress = "0%",
+    EstimatedTime = "Calculating...",
+    LastUpdate = os.time(),
+    TotalPurchases = 0,
+    SessionEarnings = 0
+}
+
+-- ===============================
+-- GUI ELEMENTS STORAGE
+-- ===============================
+local GUI = {
+    Frame = nil,
+    CoinValue = nil,
+    RodValue = nil,
+    BaitValue = nil,
+    AreaValue = nil,
+    RodProgressValue = nil,
+    BaitProgressValue = nil,
+    AstralProgressValue = nil,
+    NextRodValue = nil,
+    NextBaitValue = nil,
+    EstimatedTimeValue = nil,
+    PurchasesValue = nil,
+    EarningsValue = nil,
+    StrategyText = nil,
+    ToggleButton = nil
+}
+
+-- ===============================
+-- HELPERS
+-- ===============================
+local function GetCoins()
+    local r = GetPlayerDataReplion()
+    return r and (r:Get("Coins") or 0) or 0
+end
+
+local function FormatNumber(num)
+    if num >= 1000000 then
+        return string.format("%.1fM", num/1000000)
+    elseif num >= 1000 then
+        return string.format("%.1fK", num/1000)
+    else
+        return tostring(num)
+    end
+end
+
+local function ExtractBaitId(b)
+    return b.ItemId or b.Id or (b.Item and b.Item.Id)
+end
+
+local function GetOwnedRods(inv)
+    local owned = {}
+    for _, r in ipairs(inv["Fishing Rods"] or {}) do
+        table.insert(owned, tonumber(r.Id))
+    end
+    return owned
+end
+
+local function GetOwnedBaits(inv)
+    local owned = {}
+    for _, b in pairs(inv.Baits or {}) do
+        local id = ExtractBaitId(b)
+        table.insert(owned, id)
+    end
+    return owned
+end
+
+local function UpdateAstralStatus()
+    local r = GetPlayerDataReplion()
+    if not r then return end
+    local inv = r:GetExpect("Inventory")
+    
+    local ownedRods = GetOwnedRods(inv)
+    STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
+    
+    -- Calculate rod progress
+    local ownedCount = #ownedRods
+    STATE.RodProgress = string.format("%d/%d", ownedCount, #ShopRods)
+    
+    -- Calculate bait progress
+    local ownedBaits = GetOwnedBaits(inv)
+    STATE.BaitProgress = string.format("%d/%d", #ownedBaits, #ShopBaits)
+    
+    -- Update Astral progress
+    local coins = GetCoins()
+    if not STATE.HasAstralRod then
+        local progress = math.min(coins / 1000000 * 100, 100)
+        STATE.AstralProgress = string.format("%.1f%%", progress)
+    else
+        STATE.AstralProgress = "COMPLETED ✓"
+    end
+    
+    STATE.TotalCoins = coins
+end
+
+local function TeleportToArea(name)
+    local a = FishingAreas[name]
+    if not a then return end
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart",10)
+    hrp.CFrame = CFrame.new(a.Pos, a.Pos + a.Look)
+    STATE.CurrentArea = name
+end
+
+-- ===============================
+-- BUY STRATEGY: ASTRAL ROD FIRST
+-- ===============================
+local function GetNextAffordableRod()
+    local coins = GetCoins()
+    local r = GetPlayerDataReplion()
+    if not r then return false, nil end
+    
+    local inv = r:GetExpect("Inventory")
+    local ownedRods = GetOwnedRods(inv)
+    
+    -- If we already have Astral Rod, return false
+    if STATE.HasAstralRod then
+        return false, nil
+    end
+    
+    -- Find the next rod we don't own and can afford
+    for _, rod in ipairs(ShopRods) do
+        if not table.find(ownedRods, rod.ID) and coins >= rod.Price then
+            return true, rod
+        end
+    end
+    
+    return false, nil
+end
+
+local function GetNextAffordableBait()
+    if not STATE.HasAstralRod then
+        return false, nil -- Don't buy bait until we have Astral Rod
+    end
+    
+    local coins = GetCoins()
+    local r = GetPlayerDataReplion()
+    if not r then return false, nil end
+    
+    local inv = r:GetExpect("Inventory")
+    local ownedBaits = GetOwnedBaits(inv)
+    
+    -- Find the next bait we don't own and can afford
+    for _, bait in ipairs(ShopBaits) do
+        if not table.find(ownedBaits, bait.ID) and coins >= bait.Price then
+            return true, bait
+        end
+    end
+    
+    return false, nil
+end
+
+local function PurchaseRod(rod)
+    print("[AUTO BUY] Purchasing rod:", rod.Name, "Price:", FormatNumber(rod.Price))
+    
+    local success, result = pcall(function()
+        return RF_PurchaseFishingRod:InvokeServer(rod.ID)
+    end)
+    
+    if success then
+        print("[AUTO BUY] Successfully purchased:", rod.Name)
+        STATE.TotalPurchases = STATE.TotalPurchases + 1
+        return true
+    else
+        warn("[AUTO BUY] Failed to purchase rod:", result)
+        return false
+    end
+end
+
+local function PurchaseBait(bait)
+    print("[AUTO BUY] Purchasing bait:", bait.Name, "Price:", FormatNumber(bait.Price))
+    
+    local success, result = pcall(function()
+        return RF_PurchaseBait:InvokeServer(bait.ID)
+    end)
+    
+    if success then
+        print("[AUTO BUY] Successfully purchased:", bait.Name)
+        STATE.TotalPurchases = STATE.TotalPurchases + 1
+        return true
+    else
+        warn("[AUTO BUY] Failed to purchase bait:", result)
+        return false
+    end
+end
+
+-- ===============================
+-- EQUIP BEST GEAR WITH STRATEGY
+-- ===============================
+local function EquipBestGear()
+    local r = GetPlayerDataReplion()
+    if not r then return end
+    local inv = r:GetExpect("Inventory")
+    
+    UpdateAstralStatus()
+    
+    -- PHASE 1: Focus on getting Astral Rod
+    if not STATE.HasAstralRod then
+        local canBuyRod, nextRod = GetNextAffordableRod()
+        if canBuyRod then
+            STATE.NextRodPrice = FormatNumber(nextRod.Price)
+            local purchased = PurchaseRod(nextRod)
+            if purchased then
+                task.wait(1) -- Wait for inventory update
+                inv = r:GetExpect("Inventory")
+                UpdateAstralStatus()
+            end
+        else
+            -- Show how much more we need for next rod
+            local ownedRods = GetOwnedRods(inv)
+            for _, rod in ipairs(ShopRods) do
+                if not table.find(ownedRods, rod.ID) then
+                    STATE.NextRodPrice = FormatNumber(rod.Price)
+                    break
+                end
+            end
+        end
+        STATE.NextBaitPrice = "LOCKED 🔒"
+    else
+        -- PHASE 2: We have Astral Rod, now focus on bait
+        STATE.NextRodPrice = "MAX ✓"
+        
+        local canBuyBait, nextBait = GetNextAffordableBait()
+        if canBuyBait then
+            STATE.NextBaitPrice = FormatNumber(nextBait.Price)
+            local purchased = PurchaseBait(nextBait)
+            if purchased then
+                task.wait(1)
+                inv = r:GetExpect("Inventory")
+                UpdateAstralStatus()
+            end
+        else
+            -- Show next bait price
+            local ownedBaits = GetOwnedBaits(inv)
+            for _, bait in ipairs(ShopBaits) do
+                if not table.find(ownedBaits, bait.ID) then
+                    STATE.NextBaitPrice = FormatNumber(bait.Price)
+                    break
+                else
+                    STATE.NextBaitPrice = "MAX ✓"
+                end
+            end
+        end
+    end
+    
+    -- Equip best rod
+    local bestRod, bestPrice = nil, -1
+    for _, rod in ipairs(inv["Fishing Rods"] or {}) do
+        for _, s in ipairs(ShopRods) do
+            if s.ID == tonumber(rod.Id) and s.Price > bestPrice then
+                bestRod, bestPrice = rod, s.Price
+                STATE.CurrentRod = s.Name
+            end
+        end
+    end
+
+    if bestRod then
+        RE_EquipItem:FireServer(bestRod.UUID, "Fishing Rods")
+        task.wait(0.2)
+        RE_EquipToolFromHotbar:FireServer(1)
+    end
+    
+    -- Equip best bait (only if we have Astral Rod, otherwise use default)
+    local bestBait, bestPrice2 = nil, -1
+    for _, bait in pairs(inv.Baits or {}) do
+        local id = ExtractBaitId(bait)
+        for _, s in ipairs(ShopBaits) do
+            if s.ID == id and s.Price > bestPrice2 then
+                bestBait, bestPrice2 = s, s.Price
+                STATE.CurrentBait = s.Name
+            end
+        end
+    end
+
+    if bestBait then
+        RE_EquipBait:FireServer(bestBait.ID)
+    elseif STATE.HasAstralRod then
+        STATE.CurrentBait = "None"
+    end
+end
+
+-- ===============================
+-- AUTO SELL
+-- ===============================
+local sellThread, sellState = nil, false
+local function RunAutoSell()
+    if sellThread then task.cancel(sellThread) end
+    sellThread = task.spawn(function()
+        local lastSellCoins = GetCoins()
+        while sellState do
+            local beforeSell = GetCoins()
+            pcall(function() RF_SellAllItems:InvokeServer() end)
+            task.wait(1) -- Wait for coins to update
+            
+            local afterSell = GetCoins()
+            local profit = afterSell - beforeSell
+            if profit > 0 then
+                STATE.SessionEarnings = STATE.SessionEarnings + profit
+                STATE.LastUpdate = os.time()
+            end
+            
+            task.wait(29) -- Total 30 seconds between sells
+        end
+    end)
+end
+
+-- ===============================
+-- AUTO FISH (FIXED HOOK)
+-- ===============================
+local AutoFish = {Active=false, Minigame=false}
+local clickThread
+
+local function ClickLoop()
+    while AutoFish.Active and AutoFish.Minigame do
+        FishingController:RequestFishingMinigameClick()
+        task.wait(0.05)
+    end
+end
+
+local oldStart = FishingController.FishingRodStarted
+FishingController.FishingRodStarted = function(self, ...)
+    oldStart(self, ...)
+    if AutoFish.Active then
+        AutoFish.Minigame = true
+        if clickThread then task.cancel(clickThread) end
+        clickThread = task.spawn(ClickLoop)
+    end
+end
+
+local oldStop = FishingController.FishingStopped
+FishingController.FishingStopped = function(self, ...)
+    oldStop(self, ...)
+    AutoFish.Minigame = false
+end
+
+-- ===============================
+-- AUTO BUY CHECK LOOP
+-- ===============================
+local buyCheckThread
+local function StartAutoBuyCheck()
+    if buyCheckThread then task.cancel(buyCheckThread) end
+    
+    buyCheckThread = task.spawn(function()
+        while AutoFish.Active do
+            task.wait(10) -- Check every 10 seconds
+            
+            if AutoFish.Active then
+                EquipBestGear() -- This handles buying strategy
+                UpdateAstralStatus()
+                
+                -- Calculate estimated time to Astral Rod
+                if not STATE.HasAstralRod then
+                    local coins = GetCoins()
+                    local needed = 1000000 - coins
+                    
+                    -- Estimate based on session earnings
+                    local timePassed = os.time() - STATE.LastUpdate
+                    if timePassed > 0 and STATE.SessionEarnings > 0 then
+                        local coinsPerHour = (STATE.SessionEarnings / timePassed) * 3600
+                        if coinsPerHour > 0 then
+                            local hoursNeeded = needed / coinsPerHour
+                            if hoursNeeded < 1 then
+                                STATE.EstimatedTime = string.format("%.0f minutes", hoursNeeded * 60)
+                            else
+                                STATE.EstimatedTime = string.format("%.1f hours", hoursNeeded)
+                            end
+                        end
+                    end
+                else
+                    STATE.EstimatedTime = "ACHIEVED ✓"
+                end
+            end
+        end
+    end)
+end
+
+-- ===============================
+-- TOGGLE AUTO FISH
+-- ===============================
+local function ToggleAutoFish(state)
+    AutoFish.Active = state
+
+    if state then
+        local r = GetPlayerDataReplion()
+        if r then
+            local inv = r:GetExpect("Inventory")
+            UpdateAstralStatus()
+            
+            -- Always teleport to Esoteric Island until we have Astral Rod
+            if not STATE.HasAstralRod then
+                TeleportToArea("Esoteric Island")
+                task.wait(3)
+            end
+        end
+
+        EquipBestGear()
+        RF_UpdateAutoFishingState:InvokeServer(true)
+        
+        -- Start auto-buy check loop
+        StartAutoBuyCheck()
+
+        sellState = true
+        RunAutoSell()
+    else
+        AutoFish.Minigame = false
+        if clickThread then task.cancel(clickThread) end
+        RF_UpdateAutoFishingState:InvokeServer(false)
+        
+        -- Stop auto-buy check
+        if buyCheckThread then
+            task.cancel(buyCheckThread)
+            buyCheckThread = nil
+        end
+
+        sellState = false
+        if sellThread then task.cancel(sellThread) end
+    end
+end
+
+-- ===============================
+-- CREATE GUI
+-- ===============================
+local function CreateGUI()
+    -- Create ScreenGui
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "EnochHUB_FishIt_Pro"
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    gui.ResetOnSpawn = false
+    gui.Parent = game.CoreGui
+
+    -- Main frame
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromOffset(420, 520)
+    frame.Position = UDim2.fromScale(0.5, 0.5)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
+    frame.Active = true
+    frame.Draggable = true
+    frame.ZIndex = 10
+    frame.Parent = gui
+    
+    GUI.Frame = frame
+
+    -- Gradient effect
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 25, 45)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 15, 30))
+    }
+    gradient.Rotation = 45
+    gradient.Parent = frame
+
+    -- Corner radius
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+
+    -- Top bar with EnochHUB branding
+    local topBar = Instance.new("Frame")
+    topBar.Size = UDim2.new(1, 0, 0, 60)
+    topBar.Position = UDim2.new(0, 0, 0, 0)
+    topBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    topBar.BackgroundTransparency = 0.7
+    topBar.ZIndex = 11
+    topBar.Parent = frame
+
+    -- EnochHUB Title
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -120, 0, 30)
+    title.Position = UDim2.new(0, 15, 0, 5)
+    title.BackgroundTransparency = 1
+    title.Text = "✨ ENOCHHUB | FISH IT PRO"
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 20
+    title.TextColor3 = Color3.fromRGB(255, 215, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 12
+    title.Parent = topBar
+
+    local subtitle = Instance.new("TextLabel")
+    subtitle.Size = UDim2.new(1, -120, 0, 20)
+    subtitle.Position = UDim2.new(0, 15, 0, 30)
+    subtitle.BackgroundTransparency = 1
+    subtitle.Text = "Astral Rod Priority System"
+    subtitle.Font = Enum.Font.GothamBold
+    subtitle.TextSize = 12
+    subtitle.TextColor3 = Color3.fromRGB(180, 220, 255)
+    subtitle.TextXAlignment = Enum.TextXAlignment.Left
+    subtitle.ZIndex = 12
+    subtitle.Parent = topBar
+
+    -- Top buttons
+    local function CreateTopButton(txt, x, color, tooltip)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.fromOffset(32, 32)
+        b.Position = UDim2.fromOffset(x, 14)
+        b.Text = txt
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 16
+        b.BackgroundColor3 = color
+        b.TextColor3 = Color3.new(1, 1, 1)
+        b.ZIndex = 12
+        b.AutoButtonColor = false
+        b.Parent = topBar
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 8)
+        btnCorner.Parent = b
+        
+        return b
+    end
+
+    local hideBtn = CreateTopButton("–", 330, Color3.fromRGB(40, 120, 180), "Minimize")
+    local closeBtn = CreateTopButton("X", 370, Color3.fromRGB(180, 40, 60), "Close")
+
+    -- Status Panel
+    local statusPanel = Instance.new("Frame")
+    statusPanel.Size = UDim2.new(0.9, 0, 0, 350)
+    statusPanel.Position = UDim2.fromScale(0.05, 0.12)
+    statusPanel.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
+    statusPanel.BackgroundTransparency = 0.5
+    statusPanel.ZIndex = 11
+    statusPanel.Parent = frame
+
+    local statusCorner = Instance.new("UICorner")
+    statusCorner.CornerRadius = UDim.new(0, 10)
+    statusCorner.Parent = statusPanel
+
+    -- Status labels with icons
+    local function CreateStatusRow(y, icon, label, value, isHighlight)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(0.9, 0, 0, 28)
+        row.Position = UDim2.fromScale(0.05, y)
+        row.BackgroundTransparency = 1
+        row.ZIndex = 12
+        row.Parent = statusPanel
+        
+        local iconLabel = Instance.new("TextLabel")
+        iconLabel.Size = UDim2.fromOffset(28, 28)
+        iconLabel.Position = UDim2.fromOffset(0, 0)
+        iconLabel.BackgroundTransparency = 1
+        iconLabel.Text = icon
+        iconLabel.Font = Enum.Font.GothamBold
+        iconLabel.TextSize = 16
+        iconLabel.TextColor3 = isHighlight and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(100, 200, 255)
+        iconLabel.TextXAlignment = Enum.TextXAlignment.Left
+        iconLabel.ZIndex = 13
+        iconLabel.Parent = row
+        
+        local labelText = Instance.new("TextLabel")
+        labelText.Size = UDim2.fromOffset(150, 28)
+        labelText.Position = UDim2.fromOffset(35, 0)
+        labelText.BackgroundTransparency = 1
+        labelText.Text = label
+        labelText.Font = Enum.Font.Gotham
+        labelText.TextSize = 13
+        labelText.TextColor3 = Color3.fromRGB(200, 200, 220)
+        labelText.TextXAlignment = Enum.TextXAlignment.Left
+        labelText.ZIndex = 13
+        labelText.Parent = row
+        
+        local valueText = Instance.new("TextLabel")
+        valueText.Size = UDim2.fromOffset(180, 28)
+        valueText.Position = UDim2.fromOffset(185, 0)
+        valueText.BackgroundTransparency = 1
+        valueText.Text = value
+        valueText.Font = Enum.Font.GothamBold
+        valueText.TextSize = 13
+        valueText.TextColor3 = isHighlight and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(220, 240, 255)
+        valueText.TextXAlignment = Enum.TextXAlignment.Right
+        valueText.ZIndex = 13
+        valueText.Parent = row
+        
+        return valueText
+    end
+
+    -- Create status rows
+    GUI.CoinValue = CreateStatusRow(0.02, "💰", "Coins:", "0", true)
+    GUI.RodValue = CreateStatusRow(0.10, "🎣", "Current Rod:", "None", false)
+    GUI.BaitValue = CreateStatusRow(0.18, "🪱", "Current Bait:", "None", false)
+    GUI.AreaValue = CreateStatusRow(0.26, "📍", "Area:", "Current Location", false)
+    GUI.RodProgressValue = CreateStatusRow(0.34, "📊", "Rod Progress:", "0/8", false)
+    GUI.BaitProgressValue = CreateStatusRow(0.42, "📈", "Bait Progress:", "0/7", false)
+    GUI.AstralProgressValue = CreateStatusRow(0.50, "⭐", "Astral Progress:", "0%", true)
+    GUI.NextRodValue = CreateStatusRow(0.58, "⬆️", "Next Rod Cost:", "N/A", false)
+    GUI.NextBaitValue = CreateStatusRow(0.66, "⬆️", "Next Bait Cost:", "N/A", false)
+    GUI.EstimatedTimeValue = CreateStatusRow(0.74, "⏱️", "Est. Time Astral:", "Calculating...", true)
+    GUI.PurchasesValue = CreateStatusRow(0.82, "🛒", "Total Purchases:", "0", false)
+    GUI.EarningsValue = CreateStatusRow(0.90, "💸", "Session Earnings:", "0", true)
+
+    -- Strategy Indicator
+    local strategyBox = Instance.new("Frame")
+    strategyBox.Size = UDim2.new(0.9, 0, 0, 40)
+    strategyBox.Position = UDim2.fromScale(0.05, 0.78)
+    strategyBox.BackgroundColor3 = Color3.fromRGB(30, 40, 70)
+    strategyBox.ZIndex = 11
+    strategyBox.Parent = frame
+
+    local strategyCorner = Instance.new("UICorner")
+    strategyCorner.CornerRadius = UDim.new(0, 8)
+    strategyCorner.Parent = strategyBox
+
+    GUI.StrategyText = Instance.new("TextLabel")
+    GUI.StrategyText.Size = UDim2.new(1, 0, 1, 0)
+    GUI.StrategyText.Position = UDim2.fromScale(0, 0)
+    GUI.StrategyText.BackgroundTransparency = 1
+    GUI.StrategyText.Text = "STRATEGY: Acquiring Astral Rod First"
+    GUI.StrategyText.Font = Enum.Font.GothamBold
+    GUI.StrategyText.TextSize = 14
+    GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
+    GUI.StrategyText.ZIndex = 12
+    GUI.StrategyText.Parent = strategyBox
+
+    -- Main toggle button
+    GUI.ToggleButton = Instance.new("TextButton")
+    GUI.ToggleButton.Size = UDim2.fromOffset(360, 50)
+    GUI.ToggleButton.Position = UDim2.fromOffset(30, 440)
+    GUI.ToggleButton.Text = "🚀 START AUTO FISH"
+    GUI.ToggleButton.Font = Enum.Font.GothamBlack
+    GUI.ToggleButton.TextSize = 18
+    GUI.ToggleButton.BackgroundColor3 = Color3.fromRGB(40, 120, 180)
+    GUI.ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+    GUI.ToggleButton.ZIndex = 12
+    GUI.ToggleButton.AutoButtonColor = false
+    GUI.ToggleButton.Parent = frame
+
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 12)
+    toggleCorner.Parent = GUI.ToggleButton
+
+    local toggleStroke = Instance.new("UIStroke")
+    toggleStroke.Color = Color3.fromRGB(80, 160, 220)
+    toggleStroke.Thickness = 3
+    toggleStroke.Transparency = 0.3
+    toggleStroke.Parent = GUI.ToggleButton
+
+    -- Show/hide button
+    local showBtn = Instance.new("TextButton")
+    showBtn.Size = UDim2.fromOffset(180, 50)
+    showBtn.Position = UDim2.fromScale(0.02, 0.5)
+    showBtn.AnchorPoint = Vector2.new(0, 0.5)
+    showBtn.Text = "✨ ENOCHHUB"
+    showBtn.Font = Enum.Font.GothamBlack
+    showBtn.TextSize = 16
+    showBtn.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
+    showBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+    showBtn.Visible = false
+    showBtn.ZIndex = 1000
+    showBtn.AutoButtonColor = false
+    showBtn.Parent = gui
+
+    local showCorner = Instance.new("UICorner")
+    showCorner.CornerRadius = UDim.new(0, 18)
+    showCorner.Parent = showBtn
+
+    local showStroke = Instance.new("UIStroke")
+    showStroke.Color = Color3.fromRGB(255, 215, 0)
+    showStroke.Thickness = 3
+    showStroke.Transparency = 0.3
+    showStroke.Parent = showBtn
+
+    -- Button animations
+    local function AnimateButton(button)
+        TweenService:Create(button, TweenInfo.new(0.1), {Size = UDim2.fromOffset(button.Size.X.Offset - 6, button.Size.Y.Offset - 6)}):Play()
+        task.wait(0.1)
+        TweenService:Create(button, TweenInfo.new(0.1), {Size = UDim2.fromOffset(button.Size.X.Offset + 6, button.Size.Y.Offset + 6)}):Play()
+    end
+
+    -- Update strategy display
+    local function UpdateStrategyDisplay()
+        if STATE.HasAstralRod then
+            GUI.StrategyText.Text = "STRATEGY: Astral Rod Acquired! Upgrading Bait"
+            GUI.StrategyText.TextColor3 = Color3.fromRGB(100, 255, 100)
+            strategyBox.BackgroundColor3 = Color3.fromRGB(30, 70, 40)
+        else
+            GUI.StrategyText.Text = "STRATEGY: Priority → Astral Rod (1M Coins)"
+            GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
+            strategyBox.BackgroundColor3 = Color3.fromRGB(70, 40, 30)
+        end
+    end
+
+    -- Toggle auto fish
+    GUI.ToggleButton.MouseButton1Click:Connect(function()
+        AnimateButton(GUI.ToggleButton)
+        ToggleAutoFish(not AutoFish.Active)
+        
+        if AutoFish.Active then
+            GUI.ToggleButton.Text = "⏸️ STOP AUTO FISH"
+            TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(180, 40, 60)}):Play()
+            TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(220, 80, 100)}):Play()
+        else
+            GUI.ToggleButton.Text = "🚀 START AUTO FISH"
+            TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(40, 120, 180)}):Play()
+            TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(80, 160, 220)}):Play()
+        end
+    end)
+
+    -- Hide/show GUI
+    hideBtn.MouseButton1Click:Connect(function()
+        AnimateButton(hideBtn)
+        TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(1.5, 0.5)}):Play()
+        task.wait(0.3)
+        frame.Visible = false
+        showBtn.Visible = true
+    end)
+
+    showBtn.MouseButton1Click:Connect(function()
+        AnimateButton(showBtn)
+        frame.Visible = true
+        showBtn.Visible = false
+        TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(0.5, 0.5)}):Play()
+    end)
+
+    closeBtn.MouseButton1Click:Connect(function()
+        AnimateButton(closeBtn)
+        ToggleAutoFish(false)
+        TweenService:Create(gui, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(0.5, 1.5)}):Play()
+        task.wait(0.3)
+        gui:Destroy()
+    end)
+
+    -- Add watermark
+    local watermark = Instance.new("TextLabel")
+    watermark.Size = UDim2.new(1, 0, 0, 20)
+    watermark.Position = UDim2.new(0, 0, 1, -20)
+    watermark.BackgroundTransparency = 1
+    watermark.Text = "✨ EnochHUB Fish It Pro v2.1 | Astral Rod Priority System"
+    watermark.Font = Enum.Font.Gotham
+    watermark.TextSize = 11
+    watermark.TextColor3 = Color3.fromRGB(255, 215, 0)
+    watermark.TextTransparency = 0.7
+    watermark.ZIndex = 1000
+    watermark.Parent = gui
+
+    -- Initial animation
+    frame.Position = UDim2.fromScale(0.5, -0.5)
+    TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.fromScale(0.5, 0.5)
+    }):Play()
+
+    return gui, UpdateStrategyDisplay
+end
+
+-- ===============================
+-- INITIALIZE
+-- ===============================
+local function Initialize()
+    print("✨ ENOCHHUB Fish It Pro INITIALIZING...")
+    
+    -- Create GUI first
+    local gui, updateStrategyFunc = CreateGUI()
+    
+    -- Initialize state
+    task.wait(2) -- Wait for game to fully load
+    UpdateAstralStatus()
+    updateStrategyFunc()
+    
+    -- Start update loop
+    task.spawn(function()
+        while task.wait(0.5) do
+            if GUI.CoinValue then
+                -- Update all GUI values
+                GUI.CoinValue.Text = FormatNumber(STATE.TotalCoins)
+                GUI.RodValue.Text = STATE.CurrentRod
+                GUI.BaitValue.Text = STATE.CurrentBait
+                GUI.AreaValue.Text = STATE.CurrentArea
+                GUI.RodProgressValue.Text = STATE.RodProgress
+                GUI.BaitProgressValue.Text = STATE.BaitProgress
+                GUI.AstralProgressValue.Text = STATE.AstralProgress
+                GUI.NextRodValue.Text = STATE.NextRodPrice
+                GUI.NextBaitValue.Text = STATE.NextBaitPrice
+                GUI.EstimatedTimeValue.Text = STATE.EstimatedTime
+                GUI.PurchasesValue.Text = tostring(STATE.TotalPurchases)
+                GUI.EarningsValue.Text = FormatNumber(STATE.SessionEarnings)
+                
+                -- Update strategy display
+                if updateStrategyFunc then
+                    updateStrategyFunc()
+                end
+                
+                -- Highlight Astral progress if not completed
+                if not STATE.HasAstralRod then
+                    GUI.AstralProgressValue.TextColor3 = Color3.fromRGB(255, 200, 100)
+                else
+                    GUI.AstralProgressValue.TextColor3 = Color3.fromRGB(100, 255, 100)
+                end
+            end
+        end
+    end)
+    
+    print("✅ ENOCHHUB Fish It Pro LOADED")
+    print("🎯 Strategy: Astral Rod Priority System")
+    print("📊 Phase 1: Focus on Astral Rod (1M Coins)")
+    print("📊 Phase 2: Upgrade all baits")
+    print("🎯 All monitoring displayed in GUI")
+end
+
+-- Start initialization
+task.spawn(Initialize)
