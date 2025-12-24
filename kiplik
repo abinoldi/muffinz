@@ -1,0 +1,117 @@
+-- ======================================================
+-- ANTI-AFK SYSTEM
+-- ======================================================
+pcall(function()
+    local player = game:GetService("Players").LocalPlayer
+    
+    -- Disable all idle connections to prevent AFK kick
+    for i, v in pairs(getconnections(player.Idled)) do
+        if v.Disable then
+            v:Disable()
+            print("[Anti-AFK] Enabled")
+        end
+    end
+end)
+
+-- ======================================================
+-- ENOCHHUB | FISH IT - ASTRAL ROD PRIORITY
+-- ======================================================
+
+repeat task.wait() until game:IsLoaded()
+
+-- ===============================
+-- SERVICES
+-- ===============================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local lp = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+
+-- ===============================
+-- CONTROLLERS
+-- ===============================
+local FishingController = require(
+    ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("FishingController")
+)
+
+-- ===============================
+-- MODULES
+-- ===============================
+local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+
+-- ===============================
+-- REMOTES
+-- ===============================
+local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
+
+local function GetRemote(path, name)
+    local cur = ReplicatedStorage
+    for _, p in ipairs(path) do
+        cur = cur:WaitForChild(p)
+    end
+    return cur:FindFirstChild(name)
+end
+
+local RE_EquipItem              = GetRemote(RPath, "RE/EquipItem")
+local RE_EquipBait              = GetRemote(RPath, "RE/EquipBait")
+local RE_EquipToolFromHotbar    = GetRemote(RPath, "RE/EquipToolFromHotbar")
+local RF_UpdateAutoFishingState = GetRemote(RPath, "RF/UpdateAutoFishingState")
+local RF_SellAllItems           = GetRemote(RPath, "RF/SellAllItems")
+local RF_PurchaseFishingRod     = GetRemote(RPath, "RF/PurchaseFishingRod")
+local RF_PurchaseBait           = GetRemote(RPath, "RF/PurchaseBait")
+
+-- ===============================
+-- REPLION
+-- ===============================
+local ReplionClient = require(
+    ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Replion")
+).Client
+
+local PlayerDataReplion
+local function GetPlayerDataReplion()
+    if PlayerDataReplion then return PlayerDataReplion end
+    PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
+    return PlayerDataReplion
+end
+
+-- ===============================
+-- FISHING AREAS (FULL)
+-- ===============================
+local FishingAreas = {
+    ["Esoteric Island"] = {Pos=Vector3.new(2164.470,3.220,1242.390),Look=Vector3.new(0,0,-1)},
+    ["Ancient Jungle"]  = {Pos=Vector3.new(1535.639,3.159,-193.352),Look=Vector3.new(0.505,0,0.863)},
+    ["Sacred Temple"]   = {Pos=Vector3.new(1461.815,-22.125,-670.234),Look=Vector3.new(-0.990,0,0.143)},
+}
+
+-- ===============================
+-- SHOP DATA (PRICE ORDER - FROM LOWEST TO HIGHEST)
+-- ===============================
+local ShopRods = {
+    {Name="Luck Rod",ID=79,Price=325},
+    {Name="Carbon Rod",ID=76,Price=750},
+    {Name="Grass Rod",ID=85,Price=1500},
+    {Name="Demascus Rod",ID=77,Price=3000},
+    {Name="Ice Rod",ID=78,Price=5000},
+    {Name="Lucky Rod",ID=4,Price=15000},
+    {Name="Midnight Rod",ID=80,Price=50000},
+    {Name="Astral Rod",ID=5,Price=1000000}, -- GOAL ROD
+}
+
+local ShopBaits = {
+    {Name="Midnight Bait",ID=3,Price=3000},
+    {Name="Nature Bait",ID=17,Price=83500},
+    {Name="Chroma Bait",ID=6,Price=290000},
+    {Name="Dark Matter Bait",ID=8,Price=630000},
+    {Name="Corrupt Bait",ID=15,Price=1148484},
+    {Name="Aether Bait",ID=16,Price=3700000},
+    {Name="Floral Bait",ID=20,Price=4000000},
+}
+
+-- ===============================
+-- GLOBAL STATE
+-- ===============================
+local STATE = {
+    HasAstralRod = false,
+    CurrentRod = "None",
+    CurrentBait = "None",
+    CurrentArea = "Curre
