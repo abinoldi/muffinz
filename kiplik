@@ -477,21 +477,15 @@ local function CheckAndUpgradeBait()
 end
 
 -- ===============================
--- TELEPORTATION SYSTEM
+-- SIMPLE FIXED TELEPORTATION
 -- ===============================
 local function TeleportToArea(name)
     if STATE.Teleporting then return false end
     
-    local a = FishingAreas[name]
-    if not a then 
-        print("[TELEPORT] Area not found:", name)
-        return false
-    end
-    
     STATE.Teleporting = true
     STATE.CurrentArea = "Teleporting to " .. name
     
-    print("[TELEPORT] Starting teleport to:", name, "at position:", a.Pos)
+    print("[TELEPORT] Starting teleport to:", name)
     
     local success, errorMsg = pcall(function()
         local character = lp.Character
@@ -504,34 +498,38 @@ local function TeleportToArea(name)
             error("HumanoidRootPart not found")
         end
         
-        -- Check if we're already close to the target
-        local currentPosition = humanoidRootPart.Position
-        local distance = (currentPosition - a.Pos).Magnitude
-        if distance < 50 then
-            print("[TELEPORT] Already near target, distance:", distance)
-            STATE.Teleporting = false
-            STATE.CurrentArea = name
-            return true
+        -- Predefined working CFrames for each fishing area
+        local areaCFrames = {
+            ["Esoteric Island"] = CFrame.new(2164.470, 3.220, 1242.390) * CFrame.Angles(0, math.rad(180), 0),
+            ["Ancient Jungle"] = CFrame.new(1535.639, 3.159, -193.352) * CFrame.Angles(0, math.rad(30), 0),
+            ["Sacred Temple"] = CFrame.new(1461.815, -22.125, -670.234) * CFrame.Angles(0, math.rad(170), 0),
+            ["Sisyphus Statue"] = CFrame.new(-3743.745, -135.074, -1007.554) * CFrame.Angles(0, math.rad(-18), 0),
+            ["Treasure Room"] = CFrame.new(-3598.440, -281.274, -1645.855) * CFrame.Angles(0, math.rad(184), 0),
+        }
+        
+        local targetCFrame = areaCFrames[name]
+        if not targetCFrame then
+            error("No CFrame defined for area: " .. name)
         end
         
-        -- Teleport the character
-        humanoidRootPart.CFrame = CFrame.new(a.Pos) * CFrame.Angles(0, math.rad(180), 0)
+        print("[TELEPORT] Using CFrame:", targetCFrame)
         
-        -- Wait for teleport to complete
-        task.wait(2)
+        -- Simple teleport to the working CFrame
+        humanoidRootPart.CFrame = targetCFrame
+        task.wait(1.5) -- Wait for teleport to complete
         
-        -- Verify we reached the destination
-        local newPosition = humanoidRootPart.Position
-        local newDistance = (newPosition - a.Pos).Magnitude
+        -- Optional: Verify we're at the right spot
+        local currentPos = humanoidRootPart.Position
+        local targetPos = targetCFrame.Position
+        local distance = (currentPos - targetPos).Magnitude
         
-        if newDistance > 100 then
-            -- Try alternative teleport method
-            print("[TELEPORT] First attempt failed, trying alternative...")
-            character:MoveTo(a.Pos)
-            task.wait(2)
+        if distance > 10 then
+            print("[TELEPORT] Position correction needed, distance:", distance)
+            humanoidRootPart.CFrame = targetCFrame
+            task.wait(0.5)
         end
         
-        print("[TELEPORT] Teleport successful to:", name)
+        print("[TELEPORT] Successfully teleported to", name)
         STATE.CurrentArea = name
         return true
     end)
