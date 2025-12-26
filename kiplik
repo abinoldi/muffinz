@@ -397,6 +397,57 @@ local function GetOptimalQuestLocation()
 end
 
 -- ===============================
+-- ROD BUYING FUNCTIONS
+-- ===============================
+local function GetNextAffordableRod()
+    local coins = GetCoins()
+    local r = GetPlayerDataReplion()
+    if not r then return false, nil end
+    
+    local inv = r:GetExpect("Inventory")
+    local ownedRods = GetOwnedRods(inv)
+    
+    -- If we already have Astral Rod, return false
+    if table.find(ownedRods, 5) then -- Astral Rod ID is 5
+        STATE.HasAstralRod = true
+        return false, nil
+    end
+    
+    -- Find the next rod we don't own and can afford
+    for _, rod in ipairs(ShopRods) do
+        if not table.find(ownedRods, rod.ID) and coins >= rod.Price then
+            return true, rod
+        end
+    end
+    
+    return false, nil
+end
+
+local function PurchaseRod(rod)
+    print("[ROD UPGRADE] Purchasing rod:", rod.Name, "Price:", FormatNumber(rod.Price))
+    
+    local success, result = pcall(function()
+        return RF_PurchaseFishingRod:InvokeServer(rod.ID)
+    end)
+    
+    if success then
+        print("[ROD UPGRADE] Successfully purchased:", rod.Name)
+        STATE.TotalPurchases = STATE.TotalPurchases + 1
+        
+        -- Check if this was the Astral Rod
+        if rod.ID == 5 then
+            STATE.HasAstralRod = true
+            print("[ROD UPGRADE] 🎉 ASTRAL ROD ACQUIRED!")
+        end
+        
+        return true
+    else
+        warn("[ROD UPGRADE] Failed to purchase rod:", result)
+        return false
+    end
+end
+
+-- ===============================
 -- BAIT UPGRADE FUNCTIONS
 -- ===============================
 local function GetNextAffordableBait()
@@ -586,22 +637,58 @@ local function EquipBestGear()
     
     UpdateAstralStatus()
     
-    -- PHASE 1: Focus on getting Astral Rod (NO BAIT UPGRADES)
+    -- PHASE 1: Focus on getting Astral Rod
     if not STATE.HasAstralRod then
+        print("[GEAR] No Astral Rod detected, checking for upgrades...")
+        
+        -- First, check if we can afford any rod upgrade
+        local canBuyRod, nextRod = GetNextAffordableRod()
+        if canBuyRod then
+            print("[GEAR] Can afford rod upgrade:", nextRod.Name, "Price:", FormatNumber(nextRod.Price))
+            local purchased = PurchaseRod(nextRod)
+            if purchased then
+                task.wait(1) -- Wait for inventory update
+                inv = r:GetExpect("Inventory")
+                UpdateAstralStatus()
+            end
+        else
+            print("[GEAR] Cannot afford next rod upgrade or already have all rods")
+            
+            -- Check what the next rod would be
+            local ownedRods = GetOwnedRods(inv)
+            for _, rod in ipairs(ShopRods) do
+                if not table.find(ownedRods, rod.ID) then
+                    print("[GEAR] Next rod needed:", rod.Name, "Cost:", FormatNumber(rod.Price))
+                    break
+                end
+            end
+        end
+        
         STATE.NextBaitPrice = "LOCKED 🔒"
     else
         -- PHASE 2: We have Astral Rod
-        -- Check for bait upgrades (but don't force buy during quest)
-        -- This will be handled by CheckAndUpgradeBait() separately
+        print("[GEAR] Astral Rod already owned, focusing on bait upgrades")
         
-        -- Show next bait price
-        local ownedBaits = GetOwnedBaits(inv)
-        for _, bait in ipairs(ShopBaits) do
-            if not table.find(ownedBaits, bait.ID) then
-                STATE.NextBaitPrice = FormatNumber(bait.Price)
-                break
-            else
-                STATE.NextBaitPrice = "MAX ✓"
+        -- Check for bait upgrades
+        local canBuyBait, nextBait = GetNextAffordableBait()
+        if canBuyBait then
+            STATE.NextBaitPrice = FormatNumber(nextBait.Price)
+            local purchased = PurchaseBait(nextBait)
+            if purchased then
+                task.wait(1)
+                inv = r:GetExpect("Inventory")
+                UpdateAstralStatus()
+            end
+        else
+            -- Show next bait price
+            local ownedBaits = GetOwnedBaits(inv)
+            for _, bait in ipairs(ShopBaits) do
+                if not table.find(ownedBaits, bait.ID) then
+                    STATE.NextBaitPrice = FormatNumber(bait.Price)
+                    break
+                else
+                    STATE.NextBaitPrice = "MAX ✓"
+                end
             end
         end
     end
@@ -618,9 +705,13 @@ local function EquipBestGear()
     end
 
     if bestRod then
+        print("[GEAR] Equipping best rod:", STATE.CurrentRod)
         RE_EquipItem:FireServer(bestRod.UUID, "Fishing Rods")
         task.wait(0.2)
         RE_EquipToolFromHotbar:FireServer(1)
+    else
+        print("[GEAR] No rods found in inventory")
+        STATE.CurrentRod = "None"
     end
     
     -- Always equip best available bait
@@ -636,6 +727,7 @@ local function EquipBestGear()
     end
 
     if bestBait then
+        print("[GEAR] Equipping best bait:", STATE.CurrentBait)
         RE_EquipBait:FireServer(bestBait.ID)
     elseif STATE.HasAstralRod then
         STATE.CurrentBait = "None"
@@ -697,13 +789,13 @@ FishingController.FishingStopped = function(self, ...)
 end
 
 -- ===============================
--- AUTO QUEST & BAIT UPGRADE LOOP
+-- AUTO QUEST & GEAR UPGRADE LOOP
 -- ===============================
-local questBaitThread
-local function StartAutoQuestBaitCheck()
-    if questBaitThread then task.cancel(questBaitThread) end
+local questGearThread
+local function StartAutoQuestGearCheck()
+    if questGearThread then task.cancel(questGearThread) end
     
-    questBaitThread = task.spawn(function()
+    questGearThread = task.spawn(function()
         while AutoFish.Active do
             task.wait(10) -- Check every 10 seconds
             
@@ -713,17 +805,18 @@ local function StartAutoQuestBaitCheck()
                 UpdateDeepSeaQuestStatus()
                 STATE.LastQuestCheck = os.time()
                 
-                -- Ensure we're at the optimal location
-                print("[QUEST CHECK] Ensuring optimal location...")
-                EnsureAtOptimalLocation()
-                
-                -- Handle gear upgrades (equip best available)
+                -- Always check for gear upgrades (including rods)
+                print("[GEAR CHECK] Checking for gear upgrades...")
                 EquipBestGear()
                 
                 -- Check for bait upgrades (only if we have Astral Rod)
                 if STATE.HasAstralRod then
                     CheckAndUpgradeBait()
                 end
+                
+                -- Ensure we're at the optimal location
+                print("[LOCATION CHECK] Ensuring optimal location...")
+                EnsureAtOptimalLocation()
                 
                 UpdateAstralStatus()
             end
@@ -758,8 +851,8 @@ local function ToggleAutoFish(state)
         EquipBestGear()
         RF_UpdateAutoFishingState:InvokeServer(true)
         
-        -- Start auto-quest & bait upgrade loop
-        StartAutoQuestBaitCheck()
+        -- Start auto-quest & gear upgrade loop
+        StartAutoQuestGearCheck()
 
         sellState = true
         RunAutoSell()
@@ -768,10 +861,10 @@ local function ToggleAutoFish(state)
         if clickThread then task.cancel(clickThread) end
         RF_UpdateAutoFishingState:InvokeServer(false)
         
-        -- Stop auto-quest bait check
-        if questBaitThread then
-            task.cancel(questBaitThread)
-            questBaitThread = nil
+        -- Stop auto-quest gear check
+        if questGearThread then
+            task.cancel(questGearThread)
+            questGearThread = nil
         end
 
         sellState = false
@@ -845,7 +938,7 @@ local function CreateGUI()
     subtitle.Size = UDim2.new(1, -120, 0, 20)
     subtitle.Position = UDim2.new(0, 15, 0, 30)
     subtitle.BackgroundTransparency = 1
-    subtitle.Text = "Auto Quest + Auto Bait"
+    subtitle.Text = "Auto Quest + Auto Gear"
     subtitle.Font = Enum.Font.GothamBold
     subtitle.TextSize = 12
     subtitle.TextColor3 = Color3.fromRGB(180, 220, 255)
@@ -1119,7 +1212,7 @@ local function CreateGUI()
     watermark.Size = UDim2.new(1, 0, 0, 20)
     watermark.Position = UDim2.new(0, 0, 1, -20)
     watermark.BackgroundTransparency = 1
-    watermark.Text = "✨ EnochHUB Fish It Pro | Auto-Quest + Auto-Bait"
+    watermark.Text = "✨ EnochHUB Fish It Pro | Auto-Quest + Auto-Gear"
     watermark.Font = Enum.Font.Gotham
     watermark.TextSize = 11
     watermark.TextColor3 = Color3.fromRGB(255, 215, 0)
