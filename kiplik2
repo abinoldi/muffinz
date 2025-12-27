@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 -- ===============================
 -- CONTROLLERS
@@ -79,11 +80,11 @@ end
 -- FISHING AREAS (FULL WITH EXACT CFrames)
 -- ===============================
 local FishingAreas = {
-    ["Esoteric Island"] = {Pos=Vector3.new(3221.594, -1302.855, 1397.083),Look=Vector3.new(0,0,1)},
-    ["Ancient Jungle"]  = {Pos=Vector3.new(1535.639, 3.159, -193.352),Look=Vector3.new(0.505,0,0.863)},
-    ["Sacred Temple"]   = {Pos=Vector3.new(1461.815, -22.125, -670.234),Look=Vector3.new(-0.990,0,0.143)},
-    ["Sisyphus Statue"] = {Pos=Vector3.new(-3702.000, -135.074, -1009.000), Look=Vector3.new(0,0,1)},
-    ["Treasure Room"] = {Pos=Vector3.new(-3609.000, -279.074, -1591.000), Look=Vector3.new(0,0,1)},
+    ["Esoteric Island"] = CFrame.new(3221.594, -1302.855, 1397.083),
+    ["Ancient Jungle"]  = CFrame.new(1535.639, 3.159, -193.352) * CFrame.Angles(0, math.rad(30), 0),
+    ["Sacred Temple"]   = CFrame.new(1461.815, -22.125, -670.234) * CFrame.Angles(0, math.rad(170), 0),
+    ["Sisyphus Statue"] = CFrame.new(-3702.000, -135.074, -1009.000),
+    ["Treasure Room"]   = CFrame.new(-3609.000, -279.074, -1591.000),
 }
 
 -- ===============================
@@ -528,7 +529,7 @@ local function CheckAndUpgradeBait()
 end
 
 -- ===============================
--- SIMPLE FIXED TELEPORTATION WITH EXACT CFrames
+-- IMPROVED TELEPORTATION SYSTEM
 -- ===============================
 local function TeleportToArea(name)
     if STATE.Teleporting then return false end
@@ -536,12 +537,13 @@ local function TeleportToArea(name)
     STATE.Teleporting = true
     STATE.CurrentArea = "Teleporting to " .. name
     
-    print("[TELEPORT] Starting teleport to:", name)
+    print("[TELEPORT] Starting improved teleport to:", name)
     
     local success, errorMsg = pcall(function()
         local character = lp.Character
-        if not character then
+        if not character or not character:IsDescendantOf(Workspace) then
             character = lp.CharacterAdded:Wait()
+            task.wait(1) -- Wait for character to fully load
         end
         
         local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
@@ -549,41 +551,78 @@ local function TeleportToArea(name)
             error("HumanoidRootPart not found")
         end
         
-        -- EXACT CFrames as provided by user
-        local areaCFrames = {
-            ["Esoteric Island"] = CFrame.new(3221.594, -1302.855, 1397.083),  -- Exact esoteric depth
-            ["Ancient Jungle"] = CFrame.new(1535.639, 3.159, -193.352) * CFrame.Angles(0, math.rad(30), 0),
-            ["Sacred Temple"] = CFrame.new(1461.815, -22.125, -670.234) * CFrame.Angles(0, math.rad(170), 0),
-            ["Sisyphus Statue"] = CFrame.new(-3702.000, -135.074, -1009.000),  -- Exact sisyphus
-            ["Treasure Room"] = CFrame.new(-3609.000, -279.074, -1591.000),    -- Exact treasure room
-        }
-        
-        local targetCFrame = areaCFrames[name]
+        -- Get the exact CFrame for the area
+        local targetCFrame = FishingAreas[name]
         if not targetCFrame then
             error("No CFrame defined for area: " .. name)
         end
         
         print("[TELEPORT] Using EXACT CFrame for", name, ":", targetCFrame)
         
-        -- Simple teleport to the exact CFrame (no rotation needed for your spots)
-        humanoidRootPart.CFrame = targetCFrame
-        task.wait(1.5) -- Wait for teleport to complete
+        -- METHOD 1: Direct teleport with verification
+        local attempts = 0
+        local maxAttempts = 3
         
-        -- Optional: Verify we're at the right spot
-        local currentPos = humanoidRootPart.Position
-        local targetPos = targetCFrame.Position
-        local distance = (currentPos - targetPos).Magnitude
-        
-        if distance > 10 then
-            print("[TELEPORT] Position correction needed, distance:", distance)
+        while attempts < maxAttempts do
+            attempts = attempts + 1
+            print("[TELEPORT] Attempt", attempts, "of", maxAttempts)
+            
+            -- Ensure character physics are enabled
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.PlatformStand = false
+            end
+            
+            -- Teleport directly
             humanoidRootPart.CFrame = targetCFrame
-            task.wait(0.5)
+            
+            -- Wait for physics to settle
+            task.wait(1)
+            
+            -- Verify position
+            local currentPos = humanoidRootPart.Position
+            local targetPos = targetCFrame.Position
+            local distance = (currentPos - targetPos).Magnitude
+            
+            print("[TELEPORT] Distance from target:", distance)
+            
+            if distance < 5 then -- Within 5 studs is acceptable
+                print("[TELEPORT] Successfully teleported to", name)
+                print("[TELEPORT] Final position:", humanoidRootPart.Position)
+                STATE.CurrentArea = name
+                
+                -- Small adjustment to ensure perfect position
+                if distance > 2 then
+                    print("[TELEPORT] Making final position adjustment")
+                    task.wait(0.5)
+                    humanoidRootPart.CFrame = targetCFrame
+                    task.wait(0.5)
+                end
+                
+                STATE.Teleporting = false
+                return true
+            else
+                print("[TELEPORT] Position not accurate, retrying...")
+                
+                -- Alternative method: Tween for smoother movement
+                local tweenInfo = TweenInfo.new(
+                    1, -- Time
+                    Enum.EasingStyle.Linear,
+                    Enum.EasingDirection.Out,
+                    0, -- Repeat count
+                    false, -- Reverse
+                    0 -- Delay
+                )
+                
+                local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = targetCFrame})
+                tween:Play()
+                task.wait(1.5) -- Wait for tween to complete
+            end
         end
         
-        print("[TELEPORT] Successfully teleported to", name)
-        print("[TELEPORT] Final position:", humanoidRootPart.Position)
-        STATE.CurrentArea = name
-        return true
+        -- If we get here, all attempts failed
+        error("Failed to teleport after " .. maxAttempts .. " attempts")
+        
     end)
     
     STATE.Teleporting = false
