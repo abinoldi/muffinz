@@ -28,6 +28,7 @@ local lp = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 -- ===============================
 -- CONTROLLERS
@@ -77,7 +78,7 @@ local function GetPlayerDataReplion()
 end
 
 -- ===============================
--- FISHING AREAS (YOUR NEW POSITIONS - NO ROTATION)
+-- FISHING AREAS (EXACT SAME AS CFrame TESTER SCRIPT)
 -- ===============================
 local FishingAreas = {
     ["Enchant Room"] = {
@@ -135,7 +136,7 @@ local ShopBaits = {
 }
 
 -- ===============================
--- DEEP SEA QUEST TARGETS (CORRECTED)
+-- DEEP SEA QUEST TARGETS
 -- ===============================
 local DeepSeaQuestTargets = {
     [1] = 300,      -- Catch 300 Epic/Rare fish in Treasure Room
@@ -145,7 +146,7 @@ local DeepSeaQuestTargets = {
 }
 
 -- ===============================
--- GLOBAL STATE (INITIAL STATE - NOT ACTIVE)
+-- GLOBAL STATE
 -- ===============================
 local STATE = {
     HasAstralRod = false,
@@ -173,11 +174,11 @@ local STATE = {
     
     -- Bait upgrade tracking
     LastBaitUpgradeTime = 0,
-    BaitUpgradeCooldown = 30, -- Seconds between bait upgrade checks
+    BaitUpgradeCooldown = 30,
     
     -- Quest tracking
     LastQuestCheck = 0,
-    QuestCheckCooldown = 10, -- Check quest every 10 seconds
+    QuestCheckCooldown = 10,
     
     -- Script state
     ScriptRunning = false
@@ -208,7 +209,7 @@ local GUI = {
 }
 
 -- ===============================
--- HELPERS
+-- HELPER FUNCTIONS (SAME AS CFRAEM TESTER)
 -- ===============================
 local function GetCoins()
     local r = GetPlayerDataReplion()
@@ -253,16 +254,85 @@ local function UpdateAstralStatus()
     
     local ownedRods = GetOwnedRods(inv)
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
-    
     STATE.TotalCoins = GetCoins()
 end
 
 -- ===============================
--- CFrame HELPER FUNCTION (NO ROTATION CALCULATION)
+-- TELEPORT FUNCTIONS (EXACT SAME AS CFrame TESTER)
 -- ===============================
-local function CreateCFrameFromData(position, lookVector)
-    -- Create CFrame that faces the correct direction using position and look vector
-    return CFrame.new(position, position + lookVector)
+local function CreateCFrame(position, lookVector)
+    -- EXACT SAME FUNCTION AS CFrame TESTER
+    local lookAt = position + lookVector
+    return CFrame.new(position, lookAt)
+end
+
+local function TeleportToArea(name)
+    if STATE.Teleporting then 
+        print("Already teleporting, please wait...")
+        return false 
+    end
+    
+    STATE.Teleporting = true
+    STATE.CurrentArea = "Teleporting to " .. name
+    
+    -- Get the location data
+    local areaData = FishingAreas[name]
+    if not areaData then
+        warn("[TELEPORT] No data found for area:", name)
+        STATE.Teleporting = false
+        return false
+    end
+    
+    -- EXACT SAME TELEPORT FUNCTION AS CFrame TESTER
+    local cframe = CreateCFrame(areaData.Pos, areaData.Look)
+    
+    print("[TELEPORT] Going to:", name)
+    print("[TELEPORT] Position:", areaData.Pos)
+    print("[TELEPORT] Look vector:", areaData.Look)
+    
+    local success, errorMsg = pcall(function()
+        local character = lp.Character
+        if not character then
+            character = lp.CharacterAdded:Wait()
+        end
+        
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
+        if not humanoidRootPart then
+            error("HumanoidRootPart not found")
+        end
+        
+        -- Teleport to the calculated CFrame
+        humanoidRootPart.CFrame = cframe
+        task.wait(0.5)
+        
+        -- Verify position
+        local currentPos = humanoidRootPart.Position
+        local targetPos = areaData.Pos
+        local distance = (currentPos - targetPos).Magnitude
+        
+        print("[TELEPORT] Success!")
+        print("[TELEPORT] Target:", targetPos)
+        print("[TELEPORT] Current:", currentPos)
+        print("[TELEPORT] Distance:", math.floor(distance * 100) / 100, "studs")
+        
+        if distance > 10 then
+            print("[TELEPORT] Correcting position...")
+            humanoidRootPart.CFrame = cframe
+            task.wait(0.2)
+        end
+        
+        return true
+    end)
+    
+    if not success then
+        warn("[TELEPORT] Failed:", errorMsg)
+    end
+    
+    task.wait(0.5)
+    STATE.Teleporting = false
+    STATE.CurrentArea = name
+    
+    return success
 end
 
 -- ===============================
@@ -340,10 +410,9 @@ local function UpdateDeepSeaQuestStatus()
         end
     end
     
-    -- Determine actual current objective based on completion
+    -- Determine actual current objective
     local actualCurrentObj = STATE.CurrentQuestObj
     
-    -- If current objective is complete, check next objectives
     if STATE.CurrentQuestObj == 1 and obj1Complete then
         print("[QUEST] Objective 1 complete! Moving to Objective 2")
         actualCurrentObj = 2
@@ -355,10 +424,9 @@ local function UpdateDeepSeaQuestStatus()
         actualCurrentObj = 4
     elseif STATE.CurrentQuestObj == 4 and obj4Complete then
         print("[QUEST] All objectives complete!")
-        actualCurrentObj = 5 -- Quest complete
+        actualCurrentObj = 5
     end
     
-    -- Update displayed current objective
     if actualCurrentObj ~= STATE.CurrentQuestObj then
         STATE.CurrentQuestObj = actualCurrentObj
     end
@@ -392,40 +460,54 @@ end
 
 local function GetOptimalQuestLocation()
     if not STATE.HasDeepSeaQuest then
-        return "Esoteric Island" -- Default if no quest
+        return "Esoteric Island"
     end
     
-    print("[QUEST LOCATION] Current Objective:", STATE.CurrentQuestObj)
-    
     if STATE.CurrentQuestObj == 1 then
-        print("[QUEST LOCATION] Returning Treasure Room for Objective 1")
         return "Treasure Room"
     elseif STATE.CurrentQuestObj == 2 or STATE.CurrentQuestObj == 3 then
-        print("[QUEST LOCATION] Returning Sisyphus Statue for Objective", STATE.CurrentQuestObj)
         return "Sisyphus Statue"
     elseif STATE.CurrentQuestObj == 4 then
-        -- For earning coins, go to best fishing spot
         if STATE.HasAstralRod then
-            print("[QUEST LOCATION] Returning Sacred Temple for coins (Astral Rod)")
-            return "Sacred Temple" -- Best spot for coins
+            return "Sacred Temple"
         else
-            print("[QUEST LOCATION] Returning Esoteric Island for coins (No Astral)")
             return "Esoteric Island"
         end
     else
-        -- Quest completed or not started
         if STATE.HasAstralRod then
-            print("[QUEST LOCATION] Quest complete, returning Sacred Temple")
             return "Sacred Temple"
         else
-            print("[QUEST LOCATION] Quest complete, returning Esoteric Island")
             return "Esoteric Island"
         end
     end
 end
 
+local function EnsureAtOptimalLocation()
+    if STATE.HasAstralRod and STATE.HasDeepSeaQuest then
+        local currentTime = os.time()
+        if currentTime - STATE.LastQuestCheck >= STATE.QuestCheckCooldown then
+            UpdateDeepSeaQuestStatus()
+            STATE.LastQuestCheck = currentTime
+        end
+        
+        local targetLocation = GetOptimalQuestLocation()
+        
+        if STATE.CurrentArea ~= targetLocation then
+            print("[QUEST TELEPORT] Going to", targetLocation, "for Quest Objective", STATE.CurrentQuestObj)
+            return TeleportToArea(targetLocation)
+        end
+    elseif not STATE.HasAstralRod then
+        if STATE.CurrentArea ~= "Esoteric Island" then
+            print("[ASTRAL] No Astral Rod, going to Esoteric Island")
+            return TeleportToArea("Esoteric Island")
+        end
+    end
+    
+    return true
+end
+
 -- ===============================
--- ROD BUYING FUNCTIONS
+-- GEAR UPGRADE FUNCTIONS
 -- ===============================
 local function GetNextAffordableRod()
     local coins = GetCoins()
@@ -435,13 +517,11 @@ local function GetNextAffordableRod()
     local inv = r:GetExpect("Inventory")
     local ownedRods = GetOwnedRods(inv)
     
-    -- If we already have Astral Rod, return false
-    if table.find(ownedRods, 5) then -- Astral Rod ID is 5
+    if table.find(ownedRods, 5) then
         STATE.HasAstralRod = true
         return false, nil
     end
     
-    -- Find the next rod we don't own and can afford
     for _, rod in ipairs(ShopRods) do
         if not table.find(ownedRods, rod.ID) and coins >= rod.Price then
             return true, rod
@@ -452,7 +532,7 @@ local function GetNextAffordableRod()
 end
 
 local function PurchaseRod(rod)
-    print("[ROD UPGRADE] Purchasing rod:", rod.Name, "Price:", FormatNumber(rod.Price))
+    print("[ROD UPGRADE] Purchasing:", rod.Name, "Price:", FormatNumber(rod.Price))
     
     local success, result = pcall(function()
         return RF_PurchaseFishingRod:InvokeServer(rod.ID)
@@ -462,7 +542,6 @@ local function PurchaseRod(rod)
         print("[ROD UPGRADE] Successfully purchased:", rod.Name)
         STATE.TotalPurchases = STATE.TotalPurchases + 1
         
-        -- Check if this was the Astral Rod
         if rod.ID == 5 then
             STATE.HasAstralRod = true
             print("[ROD UPGRADE] 🎉 ASTRAL ROD ACQUIRED!")
@@ -470,17 +549,14 @@ local function PurchaseRod(rod)
         
         return true
     else
-        warn("[ROD UPGRADE] Failed to purchase rod:", result)
+        warn("[ROD UPGRADE] Failed:", result)
         return false
     end
 end
 
--- ===============================
--- BAIT UPGRADE FUNCTIONS
--- ===============================
 local function GetNextAffordableBait()
     if not STATE.HasAstralRod then
-        return false, nil -- Don't buy bait until we have Astral Rod
+        return false, nil
     end
     
     local coins = GetCoins()
@@ -490,7 +566,6 @@ local function GetNextAffordableBait()
     local inv = r:GetExpect("Inventory")
     local ownedBaits = GetOwnedBaits(inv)
     
-    -- Find the next bait we don't own and can afford
     for _, bait in ipairs(ShopBaits) do
         if not table.find(ownedBaits, bait.ID) and coins >= bait.Price then
             return true, bait
@@ -501,7 +576,7 @@ local function GetNextAffordableBait()
 end
 
 local function PurchaseBait(bait)
-    print("[BAIT UPGRADE] Purchasing bait:", bait.Name, "Price:", FormatNumber(bait.Price))
+    print("[BAIT UPGRADE] Purchasing:", bait.Name, "Price:", FormatNumber(bait.Price))
     
     local success, result = pcall(function()
         return RF_PurchaseBait:InvokeServer(bait.ID)
@@ -513,30 +588,27 @@ local function PurchaseBait(bait)
         STATE.LastBaitUpgradeTime = os.time()
         return true
     else
-        warn("[BAIT UPGRADE] Failed to purchase bait:", result)
+        warn("[BAIT UPGRADE] Failed:", result)
         return false
     end
 end
 
 local function CheckAndUpgradeBait()
-    -- Check if enough time has passed since last upgrade
     local timeSinceLastUpgrade = os.time() - STATE.LastBaitUpgradeTime
     if timeSinceLastUpgrade < STATE.BaitUpgradeCooldown then
         return false
     end
     
-    -- Check if we can afford a bait upgrade
     local canBuyBait, nextBait = GetNextAffordableBait()
     if canBuyBait then
         STATE.NextBaitPrice = FormatNumber(nextBait.Price)
         local purchased = PurchaseBait(nextBait)
         if purchased then
-            task.wait(1) -- Wait for inventory update
+            task.wait(1)
             UpdateAstralStatus()
             return true
         end
     else
-        -- Update next bait price display
         local r = GetPlayerDataReplion()
         if r then
             local inv = r:GetExpect("Inventory")
@@ -555,105 +627,6 @@ local function CheckAndUpgradeBait()
     return false
 end
 
--- ===============================
--- TELEPORTATION (USING YOUR POSITIONS)
--- ===============================
-local function TeleportToArea(name)
-    if STATE.Teleporting then return false end
-    
-    STATE.Teleporting = true
-    STATE.CurrentArea = "Teleporting to " .. name
-    
-    print("[TELEPORT] Starting teleport to:", name)
-    
-    local success, errorMsg = pcall(function()
-        local character = lp.Character
-        if not character then
-            character = lp.CharacterAdded:Wait()
-        end
-        
-        local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
-        if not humanoidRootPart then
-            error("HumanoidRootPart not found")
-        end
-        
-        -- Get position data from FishingAreas
-        local areaData = FishingAreas[name]
-        if not areaData then
-            error("No data found for area: " .. name)
-        end
-        
-        -- Create CFrame from position and look vector (NO ROTATION CALCULATION)
-        local targetCFrame = CreateCFrameFromData(areaData.Pos, areaData.Look)
-        
-        print("[TELEPORT] Position:", areaData.Pos)
-        print("[TELEPORT] Look vector:", areaData.Look)
-        
-        -- Simple teleport
-        humanoidRootPart.CFrame = targetCFrame
-        task.wait(1) -- Wait for teleport to complete
-        
-        -- Verify we're at the right spot
-        local currentPos = humanoidRootPart.Position
-        local targetPos = areaData.Pos
-        local distance = (currentPos - targetPos).Magnitude
-        
-        if distance > 10 then
-            print("[TELEPORT] Position correction needed, distance:", distance)
-            humanoidRootPart.CFrame = targetCFrame
-            task.wait(0.5)
-        end
-        
-        print("[TELEPORT] Successfully teleported to", name)
-        STATE.CurrentArea = name
-        return true
-    end)
-    
-    STATE.Teleporting = false
-    
-    if not success then
-        warn("[TELEPORT] Failed to teleport:", errorMsg)
-        STATE.CurrentArea = "Failed to teleport"
-        return false
-    end
-    
-    return true
-end
-
-local function EnsureAtOptimalLocation()
-    if STATE.HasAstralRod and STATE.HasDeepSeaQuest then
-        -- Check if we need to update quest status first
-        local currentTime = os.time()
-        if currentTime - STATE.LastQuestCheck >= STATE.QuestCheckCooldown then
-            UpdateDeepSeaQuestStatus()
-            STATE.LastQuestCheck = currentTime
-        end
-        
-        -- If we have Astral Rod AND Deep Sea Quest, prioritize quest location
-        local targetLocation = GetOptimalQuestLocation()
-        
-        print("[OPTIMAL LOCATION] Current Area:", STATE.CurrentArea, "Target:", targetLocation)
-        
-        if STATE.CurrentArea ~= targetLocation then
-            print("[QUEST TELEPORT] Teleporting from", STATE.CurrentArea, "to", targetLocation, "for Quest Objective", STATE.CurrentQuestObj)
-            return TeleportToArea(targetLocation)
-        else
-            print("[OPTIMAL LOCATION] Already at correct location:", targetLocation)
-        end
-    elseif not STATE.HasAstralRod then
-        -- If no Astral Rod, go to Esoteric Island
-        if STATE.CurrentArea ~= "Esoteric Island" then
-            print("[ASTRAL] No Astral Rod, teleporting to Esoteric Island")
-            return TeleportToArea("Esoteric Island")
-        end
-    end
-    
-    return true
-end
-
--- ===============================
--- EQUIP BEST GEAR WITH STRATEGY
--- ===============================
 local function EquipBestGear()
     local r = GetPlayerDataReplion()
     if not r then return end
@@ -663,37 +636,20 @@ local function EquipBestGear()
     
     -- PHASE 1: Focus on getting Astral Rod
     if not STATE.HasAstralRod then
-        print("[GEAR] No Astral Rod detected, checking for upgrades...")
-        
-        -- First, check if we can afford any rod upgrade
         local canBuyRod, nextRod = GetNextAffordableRod()
         if canBuyRod then
-            print("[GEAR] Can afford rod upgrade:", nextRod.Name, "Price:", FormatNumber(nextRod.Price))
+            print("[GEAR] Can afford rod upgrade:", nextRod.Name)
             local purchased = PurchaseRod(nextRod)
             if purchased then
-                task.wait(1) -- Wait for inventory update
+                task.wait(1)
                 inv = r:GetExpect("Inventory")
                 UpdateAstralStatus()
-            end
-        else
-            print("[GEAR] Cannot afford next rod upgrade or already have all rods")
-            
-            -- Check what the next rod would be
-            local ownedRods = GetOwnedRods(inv)
-            for _, rod in ipairs(ShopRods) do
-                if not table.find(ownedRods, rod.ID) then
-                    print("[GEAR] Next rod needed:", rod.Name, "Cost:", FormatNumber(rod.Price))
-                    break
-                end
             end
         end
         
         STATE.NextBaitPrice = "LOCKED 🔒"
     else
         -- PHASE 2: We have Astral Rod
-        print("[GEAR] Astral Rod already owned, focusing on bait upgrades")
-        
-        -- Check for bait upgrades
         local canBuyBait, nextBait = GetNextAffordableBait()
         if canBuyBait then
             STATE.NextBaitPrice = FormatNumber(nextBait.Price)
@@ -704,24 +660,19 @@ local function EquipBestGear()
                 UpdateAstralStatus()
             end
         else
-            -- Show next bait price
-            local r = GetPlayerDataReplion()
-            if r then
-                local inv = r:GetExpect("Inventory")
-                local ownedBaits = GetOwnedBaits(inv)
-                for _, bait in ipairs(ShopBaits) do
-                    if not table.find(ownedBaits, bait.ID) then
-                        STATE.NextBaitPrice = FormatNumber(bait.Price)
-                        break
-                    else
-                        STATE.NextBaitPrice = "MAX ✓"
-                    end
+            local ownedBaits = GetOwnedBaits(inv)
+            for _, bait in ipairs(ShopBaits) do
+                if not table.find(ownedBaits, bait.ID) then
+                    STATE.NextBaitPrice = FormatNumber(bait.Price)
+                    break
+                else
+                    STATE.NextBaitPrice = "MAX ✓"
                 end
             end
         end
     end
     
-    -- Always equip best available rod
+    -- Equip best rod
     local bestRod, bestPrice = nil, -1
     for _, rod in ipairs(inv["Fishing Rods"] or {}) do
         for _, s in ipairs(ShopRods) do
@@ -733,16 +684,14 @@ local function EquipBestGear()
     end
 
     if bestRod then
-        print("[GEAR] Equipping best rod:", STATE.CurrentRod)
         RE_EquipItem:FireServer(bestRod.UUID, "Fishing Rods")
         task.wait(0.2)
         RE_EquipToolFromHotbar:FireServer(1)
     else
-        print("[GEAR] No rods found in inventory")
         STATE.CurrentRod = "None"
     end
     
-    -- Always equip best available bait
+    -- Equip best bait
     local bestBait, bestPrice2 = nil, -1
     for _, bait in pairs(inv.Baits or {}) do
         local id = ExtractBaitId(bait)
@@ -755,7 +704,6 @@ local function EquipBestGear()
     end
 
     if bestBait then
-        print("[GEAR] Equipping best bait:", STATE.CurrentBait)
         RE_EquipBait:FireServer(bestBait.ID)
     elseif STATE.HasAstralRod then
         STATE.CurrentBait = "None"
@@ -763,7 +711,7 @@ local function EquipBestGear()
 end
 
 -- ===============================
--- AUTO SELL
+-- AUTO FUNCTIONS
 -- ===============================
 local sellThread = nil
 local function RunAutoSell()
@@ -772,7 +720,7 @@ local function RunAutoSell()
         while STATE.ScriptRunning do
             local beforeSell = GetCoins()
             pcall(function() RF_SellAllItems:InvokeServer() end)
-            task.wait(1) -- Wait for coins to update
+            task.wait(1)
             
             local afterSell = GetCoins()
             local profit = afterSell - beforeSell
@@ -781,14 +729,11 @@ local function RunAutoSell()
                 STATE.LastUpdate = os.time()
             end
             
-            task.wait(29) -- Total 30 seconds between sells
+            task.wait(29)
         end
     end)
 end
 
--- ===============================
--- AUTO FISH (FIXED HOOK)
--- ===============================
 local AutoFish = {Active=false, Minigame=false}
 local clickThread
 
@@ -815,34 +760,24 @@ FishingController.FishingStopped = function(self, ...)
     AutoFish.Minigame = false
 end
 
--- ===============================
--- AUTO QUEST & GEAR UPGRADE LOOP
--- ===============================
 local questGearThread
 local function StartAutoQuestGearCheck()
     if questGearThread then task.cancel(questGearThread) end
     
     questGearThread = task.spawn(function()
         while STATE.ScriptRunning do
-            task.wait(10) -- Check every 10 seconds
+            task.wait(10)
             
             if STATE.ScriptRunning then
-                -- Force update quest status
-                print("[QUEST CHECK] Checking quest progress...")
                 UpdateDeepSeaQuestStatus()
                 STATE.LastQuestCheck = os.time()
                 
-                -- Always check for gear upgrades (including rods)
-                print("[GEAR CHECK] Checking for gear upgrades...")
                 EquipBestGear()
                 
-                -- Check for bait upgrades (only if we have Astral Rod)
                 if STATE.HasAstralRod then
                     CheckAndUpgradeBait()
                 end
                 
-                -- Ensure we're at the optimal location
-                print("[LOCATION CHECK] Ensuring optimal location...")
                 EnsureAtOptimalLocation()
                 
                 UpdateAstralStatus()
@@ -852,13 +787,13 @@ local function StartAutoQuestGearCheck()
 end
 
 -- ===============================
--- START/STOP SCRIPT FUNCTION
+-- START/STOP SCRIPT
 -- ===============================
 local function StartScript()
     if STATE.ScriptRunning then return end
     
     print("=========================================")
-    print("🚀 STARTING ENOCHHUB FISH IT PRO SCRIPT")
+    print("🚀 STARTING ENOCHHUB FISH IT PRO")
     print("=========================================")
     
     STATE.ScriptRunning = true
@@ -867,7 +802,6 @@ local function StartScript()
     -- Get initial data
     local r = GetPlayerDataReplion()
     if r then
-        local inv = r:GetExpect("Inventory")
         UpdateAstralStatus()
         UpdateDeepSeaQuestStatus()
         STATE.LastQuestCheck = os.time()
@@ -887,24 +821,18 @@ local function StartScript()
     RF_UpdateAutoFishingState:InvokeServer(true)
     AutoFish.Active = true
     
-    -- Start auto-quest & gear upgrade loop
+    -- Start auto loops
     StartAutoQuestGearCheck()
-
-    -- Start auto sell
     RunAutoSell()
     
-    print("✅ Script started successfully!")
-    print("🎣 Auto Fishing: ON")
-    print("💰 Auto Sell: ON (every 30s)")
-    print("🔄 Auto Quest/Gear: ON (every 10s)")
-    print("📍 Current Area:", STATE.CurrentArea)
+    print("✅ Script started!")
 end
 
 local function StopScript()
     if not STATE.ScriptRunning then return end
     
     print("=========================================")
-    print("🛑 STOPPING ENOCHHUB FISH IT PRO SCRIPT")
+    print("🛑 STOPPING ENOCHHUB FISH IT PRO")
     print("=========================================")
     
     STATE.ScriptRunning = false
@@ -915,36 +843,33 @@ local function StopScript()
     if clickThread then task.cancel(clickThread) end
     RF_UpdateAutoFishingState:InvokeServer(false)
     
-    -- Stop auto-quest gear check
+    -- Stop auto loops
     if questGearThread then
         task.cancel(questGearThread)
         questGearThread = nil
     end
 
-    -- Stop auto sell
     if sellThread then
         task.cancel(sellThread)
         sellThread = nil
     end
     
     STATE.CurrentArea = "Stopped"
-    print("✅ Script stopped successfully!")
+    print("✅ Script stopped!")
 end
 
 -- ===============================
--- CREATE GUI (CLEANER VERSION)
+-- CREATE GUI
 -- ===============================
 local function CreateGUI()
     print("[GUI] Creating EnochHUB Fish It Pro GUI...")
     
-    -- Create ScreenGui
     local gui = Instance.new("ScreenGui")
     gui.Name = "EnochHUB_FishIt_Pro"
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     gui.ResetOnSpawn = false
     gui.Parent = game.CoreGui
 
-    -- Main frame (smaller and cleaner)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.fromOffset(420, 520)
     frame.Position = UDim2.fromScale(0.5, 0.5)
@@ -957,7 +882,6 @@ local function CreateGUI()
     
     GUI.Frame = frame
 
-    -- Gradient effect
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 25, 45)),
@@ -966,12 +890,10 @@ local function CreateGUI()
     gradient.Rotation = 45
     gradient.Parent = frame
 
-    -- Corner radius
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 12)
     corner.Parent = frame
 
-    -- Top bar with EnochHUB branding
     local topBar = Instance.new("Frame")
     topBar.Size = UDim2.new(1, 0, 0, 60)
     topBar.Position = UDim2.new(0, 0, 0, 0)
@@ -980,7 +902,6 @@ local function CreateGUI()
     topBar.ZIndex = 11
     topBar.Parent = frame
 
-    -- EnochHUB Title
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -120, 0, 30)
     title.Position = UDim2.new(0, 15, 0, 5)
@@ -1042,7 +963,7 @@ local function CreateGUI()
     statusCorner.CornerRadius = UDim.new(0, 10)
     statusCorner.Parent = statusPanel
 
-    -- Status labels with icons
+    -- Status labels function
     local function CreateStatusRow(y, icon, label, value, isHighlight)
         local row = Instance.new("Frame")
         row.Size = UDim2.new(0.9, 0, 0, 28)
@@ -1090,7 +1011,7 @@ local function CreateGUI()
         return valueText
     end
 
-    -- Create status rows (clean and organized)
+    -- Create status rows
     GUI.CoinValue = CreateStatusRow(0.02, "💰", "Coins:", "0", true)
     GUI.RodValue = CreateStatusRow(0.10, "🎣", "Current Rod:", "None", false)
     GUI.BaitValue = CreateStatusRow(0.18, "🪱", "Current Bait:", "None", false)
@@ -1190,7 +1111,7 @@ local function CreateGUI()
         TweenService:Create(button, TweenInfo.new(0.1), {Size = UDim2.fromOffset(button.Size.X.Offset + 6, button.Size.Y.Offset + 6)}):Play()
     end
 
-    -- Update strategy display function
+    -- Update strategy display
     local function UpdateStrategyDisplay()
         if not STATE.ScriptRunning then
             GUI.StrategyText.Text = "STATUS: Ready to Start"
@@ -1234,20 +1155,16 @@ local function CreateGUI()
         AnimateButton(GUI.ToggleButton)
         
         if not STATE.ScriptRunning then
-            -- Start the script
             GUI.ToggleButton.Text = "⏸️ STOP AUTO FISH"
             TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(180, 40, 60)}):Play()
             TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(220, 80, 100)}):Play()
             
-            -- Start the entire script
             task.spawn(StartScript)
         else
-            -- Stop the script
             GUI.ToggleButton.Text = "🚀 START AUTO FISH"
             TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(40, 120, 180)}):Play()
             TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(80, 160, 220)}):Play()
             
-            -- Stop the entire script
             StopScript()
         end
     end)
@@ -1277,7 +1194,7 @@ local function CreateGUI()
         gui:Destroy()
     end)
 
-    -- Add watermark
+    -- Watermark
     local watermark = Instance.new("TextLabel")
     watermark.Size = UDim2.new(1, 0, 0, 20)
     watermark.Position = UDim2.new(0, 0, 1, -20)
@@ -1302,34 +1219,37 @@ local function CreateGUI()
 end
 
 -- ===============================
--- INITIALIZE GUI ONLY (NO AUTO-START)
+-- INITIALIZE
 -- ===============================
 local function Initialize()
     print("✨ ENOCHHUB Fish It Pro INITIALIZING...")
     print("📌 Script will NOT auto-start")
     print("🎮 Press the START button to begin")
     
-    -- Print all fishing areas
+    -- Print all fishing areas (same format as CFrame tester)
     print("\n" .. string.rep("=", 60))
-    print("📍 FISHING AREAS AVAILABLE (NO ROTATION):")
+    print("📍 FISHING AREAS AVAILABLE (SAME AS CFRAEM TESTER):")
     print(string.rep("=", 60))
     for areaName, data in pairs(FishingAreas) do
         print(string.format("📌 %s:", areaName))
-        print(string.format("   Position:  %.3f, %.3f, %.3f", 
+        print(string.format("   Position:  Vector3.new(%.3f, %.3f, %.3f)", 
             data.Pos.X, data.Pos.Y, data.Pos.Z))
-        print(string.format("   Look:      %.3f, %.3f, %.3f", 
+        print(string.format("   Look:      Vector3.new(%.3f, %.3f, %.3f)", 
             data.Look.X, data.Look.Y, data.Look.Z))
+        
+        local cframe = CreateCFrame(data.Pos, data.Look)
+        print(string.format("   CFrame:    CFrame.new(%.1f, %.1f, %.1f)", 
+            cframe.X, cframe.Y, cframe.Z))
     end
     print(string.rep("=", 60))
     
-    -- Create GUI first
+    -- Create GUI
     local gui, updateStrategyFunc = CreateGUI()
     
-    -- Start update loop for GUI only
+    -- Start GUI update loop
     task.spawn(function()
         while task.wait(0.5) do
             if GUI.CoinValue then
-                -- Update all GUI values
                 GUI.CoinValue.Text = FormatNumber(STATE.TotalCoins)
                 GUI.RodValue.Text = STATE.CurrentRod
                 GUI.BaitValue.Text = STATE.CurrentBait
@@ -1338,7 +1258,6 @@ local function Initialize()
                 GUI.PurchasesValue.Text = tostring(STATE.TotalPurchases)
                 GUI.EarningsValue.Text = FormatNumber(STATE.SessionEarnings)
                 
-                -- Update quest values
                 GUI.QuestStatusValue.Text = STATE.QuestStatus
                 GUI.QuestLocationValue.Text = STATE.QuestLocation
                 GUI.QuestTargetValue.Text = STATE.QuestTarget
@@ -1348,19 +1267,16 @@ local function Initialize()
                 GUI.QuestProgress3Value.Text = STATE.QuestProgress3
                 GUI.QuestProgress4Value.Text = STATE.QuestProgress4
                 
-                -- Update strategy display
                 if updateStrategyFunc then
                     updateStrategyFunc()
                 end
                 
-                -- Highlight bait upgrade availability
                 if STATE.HasAstralRod and STATE.NextBaitPrice ~= "MAX ✓" and STATE.NextBaitPrice ~= "N/A" then
                     GUI.NextBaitValue.TextColor3 = Color3.fromRGB(255, 200, 100)
                 else
                     GUI.NextBaitValue.TextColor3 = Color3.fromRGB(220, 240, 255)
                 end
                 
-                -- Highlight quest status
                 if STATE.HasDeepSeaQuest then
                     if STATE.QuestStatus == "Active" then
                         GUI.QuestStatusValue.TextColor3 = Color3.fromRGB(100, 200, 255)
@@ -1375,13 +1291,15 @@ local function Initialize()
     print("✅ ENOCHHUB Fish It Pro LOADED")
     print("📌 Script is IDLE - Press START button to begin")
     print("🎯 Features:")
+    print("   - EXACT SAME TELEPORT SYSTEM AS CFRAEM TESTER")
     print("   - Auto Quest Progress")
     print("   - Auto Gear Upgrades")
     print("   - Auto Teleport to optimal locations")
     print("   - Auto Sell (every 30s)")
     print("   - Auto Fishing with minigame clicker")
     print("📍 Total fishing areas:", #FishingAreas)
+    print("🎮 Control: Start/Stop with the button")
 end
 
--- Start initialization (GUI only, no auto-start)
+-- Start initialization
 task.spawn(Initialize)
