@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 -- ===============================
 -- CONTROLLERS
@@ -76,7 +77,7 @@ local function GetPlayerDataReplion()
 end
 
 -- ===============================
--- FISHING AREAS (UPDATED WITH YOUR POSITIONS)
+-- FISHING AREAS (YOUR NEW POSITIONS - NO ROTATION)
 -- ===============================
 local FishingAreas = {
     ["Enchant Room"] = {
@@ -103,8 +104,8 @@ local FishingAreas = {
         Pos = Vector3.new(1479.587, 128.295, -604.224),
         Look = Vector3.new(-0.298, 0.000, -0.955)
     },
-    ["Esoteric Island"] = { -- Keeping as fallback
-        Pos = Vector3.new(2164.470, 3.220, 1242.390),
+    ["Esoteric Island"] = {
+        Pos = Vector3.new(3221.594, -1302.855, 1397.083),
         Look = Vector3.new(0, 0, -1)
     }
 }
@@ -144,13 +145,13 @@ local DeepSeaQuestTargets = {
 }
 
 -- ===============================
--- GLOBAL STATE
+-- GLOBAL STATE (INITIAL STATE - NOT ACTIVE)
 -- ===============================
 local STATE = {
     HasAstralRod = false,
     CurrentRod = "None",
     CurrentBait = "None",
-    CurrentArea = "Current Location",
+    CurrentArea = "Waiting for Start",
     NextBaitPrice = "N/A",
     TotalCoins = 0,
     LastUpdate = os.time(),
@@ -177,6 +178,9 @@ local STATE = {
     -- Quest tracking
     LastQuestCheck = 0,
     QuestCheckCooldown = 10, -- Check quest every 10 seconds
+    
+    -- Script state
+    ScriptRunning = false
 }
 
 -- ===============================
@@ -254,12 +258,11 @@ local function UpdateAstralStatus()
 end
 
 -- ===============================
--- CFrame HELPER FUNCTION
+-- CFrame HELPER FUNCTION (NO ROTATION CALCULATION)
 -- ===============================
 local function CreateCFrameFromData(position, lookVector)
-    -- Create a CFrame that faces the look direction
-    local lookAt = position + lookVector
-    return CFrame.new(position, lookAt)
+    -- Create CFrame that faces the correct direction using position and look vector
+    return CFrame.new(position, position + lookVector)
 end
 
 -- ===============================
@@ -553,7 +556,7 @@ local function CheckAndUpgradeBait()
 end
 
 -- ===============================
--- TELEPORTATION (UPDATED WITH YOUR POSITIONS)
+-- TELEPORTATION (USING YOUR POSITIONS)
 -- ===============================
 local function TeleportToArea(name)
     if STATE.Teleporting then return false end
@@ -580,16 +583,15 @@ local function TeleportToArea(name)
             error("No data found for area: " .. name)
         end
         
-        -- Create CFrame from position and look vector
+        -- Create CFrame from position and look vector (NO ROTATION CALCULATION)
         local targetCFrame = CreateCFrameFromData(areaData.Pos, areaData.Look)
         
-        print("[TELEPORT] Using CFrame:", targetCFrame)
         print("[TELEPORT] Position:", areaData.Pos)
         print("[TELEPORT] Look vector:", areaData.Look)
         
         -- Simple teleport
         humanoidRootPart.CFrame = targetCFrame
-        task.wait(1.5) -- Wait for teleport to complete
+        task.wait(1) -- Wait for teleport to complete
         
         -- Verify we're at the right spot
         local currentPos = humanoidRootPart.Position
@@ -763,12 +765,11 @@ end
 -- ===============================
 -- AUTO SELL
 -- ===============================
-local sellThread, sellState = nil, false
+local sellThread = nil
 local function RunAutoSell()
     if sellThread then task.cancel(sellThread) end
     sellThread = task.spawn(function()
-        local lastSellCoins = GetCoins()
-        while sellState do
+        while STATE.ScriptRunning do
             local beforeSell = GetCoins()
             pcall(function() RF_SellAllItems:InvokeServer() end)
             task.wait(1) -- Wait for coins to update
@@ -822,10 +823,10 @@ local function StartAutoQuestGearCheck()
     if questGearThread then task.cancel(questGearThread) end
     
     questGearThread = task.spawn(function()
-        while AutoFish.Active do
+        while STATE.ScriptRunning do
             task.wait(10) -- Check every 10 seconds
             
-            if AutoFish.Active then
+            if STATE.ScriptRunning then
                 -- Force update quest status
                 print("[QUEST CHECK] Checking quest progress...")
                 UpdateDeepSeaQuestStatus()
@@ -851,51 +852,83 @@ local function StartAutoQuestGearCheck()
 end
 
 -- ===============================
--- TOGGLE AUTO FISH
+-- START/STOP SCRIPT FUNCTION
 -- ===============================
-local function ToggleAutoFish(state)
-    AutoFish.Active = state
-
-    if state then
-        local r = GetPlayerDataReplion()
-        if r then
-            local inv = r:GetExpect("Inventory")
-            UpdateAstralStatus()
-            UpdateDeepSeaQuestStatus()
-            STATE.LastQuestCheck = os.time()
-            
-            -- Auto-teleport to optimal location
-            print("[AUTO TELEPORT] Finding optimal location...")
-            print("[AUTO TELEPORT] Has Astral Rod:", STATE.HasAstralRod)
-            print("[AUTO TELEPORT] Has Deep Sea Quest:", STATE.HasDeepSeaQuest)
-            print("[AUTO TELEPORT] Current Quest Objective:", STATE.CurrentQuestObj)
-            
-            EnsureAtOptimalLocation()
-            task.wait(3)
-        end
-
-        EquipBestGear()
-        RF_UpdateAutoFishingState:InvokeServer(true)
+local function StartScript()
+    if STATE.ScriptRunning then return end
+    
+    print("=========================================")
+    print("🚀 STARTING ENOCHHUB FISH IT PRO SCRIPT")
+    print("=========================================")
+    
+    STATE.ScriptRunning = true
+    STATE.CurrentArea = "Initializing..."
+    
+    -- Get initial data
+    local r = GetPlayerDataReplion()
+    if r then
+        local inv = r:GetExpect("Inventory")
+        UpdateAstralStatus()
+        UpdateDeepSeaQuestStatus()
+        STATE.LastQuestCheck = os.time()
         
-        -- Start auto-quest & gear upgrade loop
-        StartAutoQuestGearCheck()
-
-        sellState = true
-        RunAutoSell()
-    else
-        AutoFish.Minigame = false
-        if clickThread then task.cancel(clickThread) end
-        RF_UpdateAutoFishingState:InvokeServer(false)
+        -- Auto-teleport to optimal location
+        print("[AUTO TELEPORT] Finding optimal location...")
+        print("[AUTO TELEPORT] Has Astral Rod:", STATE.HasAstralRod)
+        print("[AUTO TELEPORT] Has Deep Sea Quest:", STATE.HasDeepSeaQuest)
+        print("[AUTO TELEPORT] Current Quest Objective:", STATE.CurrentQuestObj)
         
-        -- Stop auto-quest gear check
-        if questGearThread then
-            task.cancel(questGearThread)
-            questGearThread = nil
-        end
-
-        sellState = false
-        if sellThread then task.cancel(sellThread) end
+        EnsureAtOptimalLocation()
+        task.wait(3)
     end
+
+    -- Start fishing
+    EquipBestGear()
+    RF_UpdateAutoFishingState:InvokeServer(true)
+    AutoFish.Active = true
+    
+    -- Start auto-quest & gear upgrade loop
+    StartAutoQuestGearCheck()
+
+    -- Start auto sell
+    RunAutoSell()
+    
+    print("✅ Script started successfully!")
+    print("🎣 Auto Fishing: ON")
+    print("💰 Auto Sell: ON (every 30s)")
+    print("🔄 Auto Quest/Gear: ON (every 10s)")
+    print("📍 Current Area:", STATE.CurrentArea)
+end
+
+local function StopScript()
+    if not STATE.ScriptRunning then return end
+    
+    print("=========================================")
+    print("🛑 STOPPING ENOCHHUB FISH IT PRO SCRIPT")
+    print("=========================================")
+    
+    STATE.ScriptRunning = false
+    
+    -- Stop fishing
+    AutoFish.Active = false
+    AutoFish.Minigame = false
+    if clickThread then task.cancel(clickThread) end
+    RF_UpdateAutoFishingState:InvokeServer(false)
+    
+    -- Stop auto-quest gear check
+    if questGearThread then
+        task.cancel(questGearThread)
+        questGearThread = nil
+    end
+
+    -- Stop auto sell
+    if sellThread then
+        task.cancel(sellThread)
+        sellThread = nil
+    end
+    
+    STATE.CurrentArea = "Stopped"
+    print("✅ Script stopped successfully!")
 end
 
 -- ===============================
@@ -964,7 +997,7 @@ local function CreateGUI()
     subtitle.Size = UDim2.new(1, -120, 0, 20)
     subtitle.Position = UDim2.new(0, 15, 0, 30)
     subtitle.BackgroundTransparency = 1
-    subtitle.Text = "Auto Quest + Auto Gear"
+    subtitle.Text = "Press START to begin"
     subtitle.Font = Enum.Font.GothamBold
     subtitle.TextSize = 12
     subtitle.TextColor3 = Color3.fromRGB(180, 220, 255)
@@ -1062,10 +1095,10 @@ local function CreateGUI()
     GUI.RodValue = CreateStatusRow(0.10, "🎣", "Current Rod:", "None", false)
     GUI.BaitValue = CreateStatusRow(0.18, "🪱", "Current Bait:", "None", false)
     GUI.NextBaitValue = CreateStatusRow(0.26, "⬆️", "Next Bait Cost:", "N/A", false)
-    GUI.AreaValue = CreateStatusRow(0.34, "📍", "Area:", "Current Location", false)
+    GUI.AreaValue = CreateStatusRow(0.34, "📍", "Area:", "Waiting for Start", false)
     
     -- Quest Info
-    GUI.QuestStatusValue = CreateStatusRow(0.42, "🌊", "Deep Sea Quest:", "Not Found", true)
+    GUI.QuestStatusValue = CreateStatusRow(0.42, "🌊", "Deep Sea Quest:", "Not Started", true)
     GUI.QuestLocationValue = CreateStatusRow(0.50, "📍", "Quest Location:", "None", false)
     GUI.QuestTargetValue = CreateStatusRow(0.58, "🎯", "Current Target:", "N/A", false)
     GUI.QuestProgressValue = CreateStatusRow(0.66, "📈", "Quest Progress:", "0%", true)
@@ -1095,7 +1128,7 @@ local function CreateGUI()
     GUI.StrategyText.Size = UDim2.new(1, 0, 1, 0)
     GUI.StrategyText.Position = UDim2.fromScale(0, 0)
     GUI.StrategyText.BackgroundTransparency = 1
-    GUI.StrategyText.Text = "STRATEGY: Acquiring Astral Rod First"
+    GUI.StrategyText.Text = "STATUS: Ready to Start"
     GUI.StrategyText.Font = Enum.Font.GothamBold
     GUI.StrategyText.TextSize = 14
     GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
@@ -1159,7 +1192,11 @@ local function CreateGUI()
 
     -- Update strategy display function
     local function UpdateStrategyDisplay()
-        if not STATE.HasAstralRod then
+        if not STATE.ScriptRunning then
+            GUI.StrategyText.Text = "STATUS: Ready to Start"
+            GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
+            strategyBox.BackgroundColor3 = Color3.fromRGB(30, 40, 70)
+        elseif not STATE.HasAstralRod then
             GUI.StrategyText.Text = "STRATEGY: Priority → Astral Rod (1M Coins)"
             GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
             strategyBox.BackgroundColor3 = Color3.fromRGB(70, 40, 30)
@@ -1192,19 +1229,26 @@ local function CreateGUI()
         end
     end
 
-    -- Toggle auto fish
+    -- Toggle script start/stop
     GUI.ToggleButton.MouseButton1Click:Connect(function()
         AnimateButton(GUI.ToggleButton)
-        ToggleAutoFish(not AutoFish.Active)
         
-        if AutoFish.Active then
+        if not STATE.ScriptRunning then
+            -- Start the script
             GUI.ToggleButton.Text = "⏸️ STOP AUTO FISH"
             TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(180, 40, 60)}):Play()
             TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(220, 80, 100)}):Play()
+            
+            -- Start the entire script
+            task.spawn(StartScript)
         else
+            -- Stop the script
             GUI.ToggleButton.Text = "🚀 START AUTO FISH"
             TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(40, 120, 180)}):Play()
             TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(80, 160, 220)}):Play()
+            
+            -- Stop the entire script
+            StopScript()
         end
     end)
 
@@ -1226,7 +1270,7 @@ local function CreateGUI()
 
     closeBtn.MouseButton1Click:Connect(function()
         AnimateButton(closeBtn)
-        ToggleAutoFish(false)
+        StopScript()
         TweenService:Create(gui, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
         TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(0.5, 1.5)}):Play()
         task.wait(0.3)
@@ -1238,7 +1282,7 @@ local function CreateGUI()
     watermark.Size = UDim2.new(1, 0, 0, 20)
     watermark.Position = UDim2.new(0, 0, 1, -20)
     watermark.BackgroundTransparency = 1
-    watermark.Text = "✨ EnochHUB Fish It Pro | Auto-Quest + Auto-Gear"
+    watermark.Text = "✨ EnochHUB Fish It Pro | Press START to begin"
     watermark.Font = Enum.Font.Gotham
     watermark.TextSize = 11
     watermark.TextColor3 = Color3.fromRGB(255, 215, 0)
@@ -1258,14 +1302,16 @@ local function CreateGUI()
 end
 
 -- ===============================
--- INITIALIZE
+-- INITIALIZE GUI ONLY (NO AUTO-START)
 -- ===============================
 local function Initialize()
     print("✨ ENOCHHUB Fish It Pro INITIALIZING...")
+    print("📌 Script will NOT auto-start")
+    print("🎮 Press the START button to begin")
     
     -- Print all fishing areas
     print("\n" .. string.rep("=", 60))
-    print("📍 FISHING AREAS AVAILABLE:")
+    print("📍 FISHING AREAS AVAILABLE (NO ROTATION):")
     print(string.rep("=", 60))
     for areaName, data in pairs(FishingAreas) do
         print(string.format("📌 %s:", areaName))
@@ -1279,30 +1325,7 @@ local function Initialize()
     -- Create GUI first
     local gui, updateStrategyFunc = CreateGUI()
     
-    -- Initialize state after GUI is created
-    task.wait(2) -- Wait for game to fully load
-    
-    -- Initial status updates
-    UpdateAstralStatus()
-    UpdateDeepSeaQuestStatus()
-    
-    if updateStrategyFunc then
-        updateStrategyFunc()
-    end
-    
-    -- Auto-teleport to optimal location on startup
-    task.spawn(function()
-        task.wait(3) -- Give more time for game to load
-        
-        print("[AUTO TELEPORT] Finding optimal location on startup...")
-        print("[AUTO TELEPORT] Has Astral Rod:", STATE.HasAstralRod)
-        print("[AUTO TELEPORT] Has Deep Sea Quest:", STATE.HasDeepSeaQuest)
-        print("[AUTO TELEPORT] Current Quest Objective:", STATE.CurrentQuestObj)
-        
-        EnsureAtOptimalLocation()
-    end)
-    
-    -- Start update loop
+    -- Start update loop for GUI only
     task.spawn(function()
         while task.wait(0.5) do
             if GUI.CoinValue then
@@ -1350,12 +1373,15 @@ local function Initialize()
     end)
     
     print("✅ ENOCHHUB Fish It Pro LOADED")
-    print("🎯 Strategy: Astral Rod Priority System")
-    print("🌊 Deep Sea Quest: Auto-Progress Enabled")
-    print("🪱 Auto-Bait: Continuous upgrades during quest")
-    print("📍 Auto-Teleport: Quest-based location switching")
-    print("📌 Total fishing areas:", #FishingAreas)
+    print("📌 Script is IDLE - Press START button to begin")
+    print("🎯 Features:")
+    print("   - Auto Quest Progress")
+    print("   - Auto Gear Upgrades")
+    print("   - Auto Teleport to optimal locations")
+    print("   - Auto Sell (every 30s)")
+    print("   - Auto Fishing with minigame clicker")
+    print("📍 Total fishing areas:", #FishingAreas)
 end
 
--- Start initialization
+-- Start initialization (GUI only, no auto-start)
 task.spawn(Initialize)
