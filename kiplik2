@@ -172,9 +172,9 @@ local STATE = {
     QuestProgress3 = "0/1 (0%)",
     QuestProgress4 = "0/1M (0%)",
     
-    -- Bait upgrade tracking
-    LastBaitUpgradeTime = 0,
-    BaitUpgradeCooldown = 30,
+    -- Gear upgrade tracking
+    LastGearUpgradeTime = 0,
+    GearUpgradeCooldown = 5, -- Check every 5 seconds
     
     -- Quest tracking
     LastQuestCheck = 0,
@@ -242,7 +242,9 @@ local function GetOwnedBaits(inv)
     local owned = {}
     for _, b in pairs(inv.Baits or {}) do
         local id = ExtractBaitId(b)
-        table.insert(owned, id)
+        if id then
+            table.insert(owned, id)
+        end
     end
     return owned
 end
@@ -255,13 +257,30 @@ local function UpdateAstralStatus()
     local ownedRods = GetOwnedRods(inv)
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     STATE.TotalCoins = GetCoins()
+    
+    -- Update bait status
+    if STATE.HasAstralRod then
+        local ownedBaits = GetOwnedBaits(inv)
+        local foundNext = false
+        for _, bait in ipairs(ShopBaits) do
+            if not table.find(ownedBaits, bait.ID) then
+                STATE.NextBaitPrice = FormatNumber(bait.Price)
+                foundNext = true
+                break
+            end
+        end
+        if not foundNext then
+            STATE.NextBaitPrice = "MAX ✓"
+        end
+    else
+        STATE.NextBaitPrice = "LOCKED 🔒"
+    end
 end
 
 -- ===============================
 -- TELEPORT FUNCTIONS (EXACT SAME AS CFrame TESTER)
 -- ===============================
 local function CreateCFrame(position, lookVector)
-    -- EXACT SAME FUNCTION AS CFrame TESTER
     local lookAt = position + lookVector
     return CFrame.new(position, lookAt)
 end
@@ -283,7 +302,6 @@ local function TeleportToArea(name)
         return false
     end
     
-    -- EXACT SAME TELEPORT FUNCTION AS CFrame TESTER
     local cframe = CreateCFrame(areaData.Pos, areaData.Look)
     
     print("[TELEPORT] Going to:", name)
@@ -507,7 +525,7 @@ local function EnsureAtOptimalLocation()
 end
 
 -- ===============================
--- GEAR UPGRADE FUNCTIONS
+-- GEAR MANAGEMENT FUNCTIONS (FIXED VERSION)
 -- ===============================
 local function GetNextAffordableRod()
     local coins = GetCoins()
@@ -542,9 +560,14 @@ local function PurchaseRod(rod)
         print("[ROD UPGRADE] Successfully purchased:", rod.Name)
         STATE.TotalPurchases = STATE.TotalPurchases + 1
         
+        -- IMMEDIATELY EQUIP THE NEW ROD
+        task.wait(0.5) -- Wait for data to update
+        
         if rod.ID == 5 then
             STATE.HasAstralRod = true
             print("[ROD UPGRADE] 🎉 ASTRAL ROD ACQUIRED!")
+            -- Auto-teleport to quest location when getting Astral Rod
+            EnsureAtOptimalLocation()
         end
         
         return true
@@ -585,46 +608,12 @@ local function PurchaseBait(bait)
     if success then
         print("[BAIT UPGRADE] Successfully purchased:", bait.Name)
         STATE.TotalPurchases = STATE.TotalPurchases + 1
-        STATE.LastBaitUpgradeTime = os.time()
+        STATE.LastGearUpgradeTime = os.time()
         return true
     else
         warn("[BAIT UPGRADE] Failed:", result)
         return false
     end
-end
-
-local function CheckAndUpgradeBait()
-    local timeSinceLastUpgrade = os.time() - STATE.LastBaitUpgradeTime
-    if timeSinceLastUpgrade < STATE.BaitUpgradeCooldown then
-        return false
-    end
-    
-    local canBuyBait, nextBait = GetNextAffordableBait()
-    if canBuyBait then
-        STATE.NextBaitPrice = FormatNumber(nextBait.Price)
-        local purchased = PurchaseBait(nextBait)
-        if purchased then
-            task.wait(1)
-            UpdateAstralStatus()
-            return true
-        end
-    else
-        local r = GetPlayerDataReplion()
-        if r then
-            local inv = r:GetExpect("Inventory")
-            local ownedBaits = GetOwnedBaits(inv)
-            for _, bait in ipairs(ShopBaits) do
-                if not table.find(ownedBaits, bait.ID) then
-                    STATE.NextBaitPrice = FormatNumber(bait.Price)
-                    break
-                else
-                    STATE.NextBaitPrice = "MAX ✓"
-                end
-            end
-        end
-    end
-    
-    return false
 end
 
 local function EquipBestGear()
@@ -633,44 +622,6 @@ local function EquipBestGear()
     local inv = r:GetExpect("Inventory")
     
     UpdateAstralStatus()
-    
-    -- PHASE 1: Focus on getting Astral Rod
-    if not STATE.HasAstralRod then
-        local canBuyRod, nextRod = GetNextAffordableRod()
-        if canBuyRod then
-            print("[GEAR] Can afford rod upgrade:", nextRod.Name)
-            local purchased = PurchaseRod(nextRod)
-            if purchased then
-                task.wait(1)
-                inv = r:GetExpect("Inventory")
-                UpdateAstralStatus()
-            end
-        end
-        
-        STATE.NextBaitPrice = "LOCKED 🔒"
-    else
-        -- PHASE 2: We have Astral Rod
-        local canBuyBait, nextBait = GetNextAffordableBait()
-        if canBuyBait then
-            STATE.NextBaitPrice = FormatNumber(nextBait.Price)
-            local purchased = PurchaseBait(nextBait)
-            if purchased then
-                task.wait(1)
-                inv = r:GetExpect("Inventory")
-                UpdateAstralStatus()
-            end
-        else
-            local ownedBaits = GetOwnedBaits(inv)
-            for _, bait in ipairs(ShopBaits) do
-                if not table.find(ownedBaits, bait.ID) then
-                    STATE.NextBaitPrice = FormatNumber(bait.Price)
-                    break
-                else
-                    STATE.NextBaitPrice = "MAX ✓"
-                end
-            end
-        end
-    end
     
     -- Equip best rod
     local bestRod, bestPrice = nil, -1
@@ -684,6 +635,7 @@ local function EquipBestGear()
     end
 
     if bestRod then
+        print("[GEAR] Equipping best rod:", STATE.CurrentRod)
         RE_EquipItem:FireServer(bestRod.UUID, "Fishing Rods")
         task.wait(0.2)
         RE_EquipToolFromHotbar:FireServer(1)
@@ -704,10 +656,80 @@ local function EquipBestGear()
     end
 
     if bestBait then
+        print("[GEAR] Equipping best bait:", STATE.CurrentBait)
         RE_EquipBait:FireServer(bestBait.ID)
-    elseif STATE.HasAstralRod then
+    else
         STATE.CurrentBait = "None"
     end
+    
+    -- Update bait upgrade status
+    if STATE.HasAstralRod then
+        local ownedBaits = GetOwnedBaits(inv)
+        local foundNext = false
+        for _, bait in ipairs(ShopBaits) do
+            if not table.find(ownedBaits, bait.ID) then
+                STATE.NextBaitPrice = FormatNumber(bait.Price)
+                foundNext = true
+                break
+            end
+        end
+        if not foundNext then
+            STATE.NextBaitPrice = "MAX ✓"
+        end
+    else
+        STATE.NextBaitPrice = "LOCKED 🔒"
+    end
+end
+
+-- ===============================
+-- AUTO-GEAR CHECK FUNCTION (FIXED)
+-- ===============================
+local function CheckAndUpgradeGear()
+    local currentTime = os.time()
+    if currentTime - STATE.LastGearUpgradeTime < STATE.GearUpgradeCooldown then
+        return false
+    end
+    
+    STATE.LastGearUpgradeTime = currentTime
+    
+    -- First, update our inventory data
+    UpdateAstralStatus()
+    
+    local r = GetPlayerDataReplion()
+    if not r then return false end
+    
+    local inv = r:GetExpect("Inventory")
+    local coins = GetCoins()
+    
+    -- PHASE 1: Check for rod upgrades
+    if not STATE.HasAstralRod then
+        local canBuyRod, nextRod = GetNextAffordableRod()
+        if canBuyRod then
+            print("[AUTO-GEAR] Can afford rod upgrade:", nextRod.Name)
+            local purchased = PurchaseRod(nextRod)
+            if purchased then
+                task.wait(1) -- Wait for data update
+                EquipBestGear() -- Force equip new gear
+                return true
+            end
+        end
+    end
+    
+    -- PHASE 2: Check for bait upgrades (only with Astral Rod)
+    if STATE.HasAstralRod then
+        local canBuyBait, nextBait = GetNextAffordableBait()
+        if canBuyBait then
+            print("[AUTO-GEAR] Can afford bait upgrade:", nextBait.Name)
+            local purchased = PurchaseBait(nextBait)
+            if purchased then
+                task.wait(0.5) -- Wait for data update
+                EquipBestGear() -- Re-equip gear to use new bait
+                return true
+            end
+        end
+    end
+    
+    return false -- No upgrades made
 end
 
 -- ===============================
@@ -766,20 +788,23 @@ local function StartAutoQuestGearCheck()
     
     questGearThread = task.spawn(function()
         while STATE.ScriptRunning do
-            task.wait(10)
+            task.wait(5) -- Check every 5 seconds
             
             if STATE.ScriptRunning then
+                -- Update quest status
                 UpdateDeepSeaQuestStatus()
                 STATE.LastQuestCheck = os.time()
                 
+                -- Try to upgrade gear
+                CheckAndUpgradeGear()
+                
+                -- Always ensure best gear is equipped
                 EquipBestGear()
                 
-                if STATE.HasAstralRod then
-                    CheckAndUpgradeBait()
-                end
-                
+                -- Ensure we're in optimal location
                 EnsureAtOptimalLocation()
                 
+                -- Update display
                 UpdateAstralStatus()
             end
         end
@@ -806,6 +831,11 @@ local function StartScript()
         UpdateDeepSeaQuestStatus()
         STATE.LastQuestCheck = os.time()
         
+        -- Force equip best gear on start
+        print("[STARTUP] Equipping best available gear...")
+        EquipBestGear()
+        task.wait(1)
+        
         -- Auto-teleport to optimal location
         print("[AUTO TELEPORT] Finding optimal location...")
         print("[AUTO TELEPORT] Has Astral Rod:", STATE.HasAstralRod)
@@ -817,7 +847,6 @@ local function StartScript()
     end
 
     -- Start fishing
-    EquipBestGear()
     RF_UpdateAutoFishingState:InvokeServer(true)
     AutoFish.Active = true
     
@@ -1291,9 +1320,10 @@ local function Initialize()
     print("✅ ENOCHHUB Fish It Pro LOADED")
     print("📌 Script is IDLE - Press START button to begin")
     print("🎯 Features:")
+    print("   - AUTO-EQUIP new rods/bait (no restart needed)")
     print("   - EXACT SAME TELEPORT SYSTEM AS CFRAEM TESTER")
     print("   - Auto Quest Progress")
-    print("   - Auto Gear Upgrades")
+    print("   - Auto Gear Upgrades (every 5 seconds)")
     print("   - Auto Teleport to optimal locations")
     print("   - Auto Sell (every 30s)")
     print("   - Auto Fishing with minigame clicker")
