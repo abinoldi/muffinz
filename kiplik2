@@ -172,6 +172,9 @@ local STATE = {
     QuestProgress3 = "0/1 (0%)",
     QuestProgress4 = "0/1M (0%)",
     
+    -- Sisyphus check tracking
+    HasCheckedSisyphus = false,
+    
     -- Gear upgrade tracking
     LastGearUpgradeTime = 0,
     GearUpgradeCooldown = 5, -- Check every 5 seconds
@@ -501,24 +504,45 @@ local function GetOptimalQuestLocation()
 end
 
 local function EnsureAtOptimalLocation()
-    if STATE.HasAstralRod and STATE.HasDeepSeaQuest then
-        local currentTime = os.time()
-        if currentTime - STATE.LastQuestCheck >= STATE.QuestCheckCooldown then
-            UpdateDeepSeaQuestStatus()
-            STATE.LastQuestCheck = currentTime
-        end
+    -- Update quest status first
+    local currentTime = os.time()
+    if currentTime - STATE.LastQuestCheck >= STATE.QuestCheckCooldown then
+        UpdateDeepSeaQuestStatus()
+        STATE.LastQuestCheck = currentTime
+    end
+    
+    -- If we have Astral Rod and haven't checked Sisyphus yet
+    if STATE.HasAstralRod and not STATE.HasCheckedSisyphus then
+        print("[ASTRAL DETECTED] Teleporting to Sisyphus to check Deep Sea Quest...")
+        TeleportToArea("Sisyphus Statue")
+        STATE.HasCheckedSisyphus = true
         
+        -- Wait 5 seconds for quest to update
+        task.wait(5)
+        
+        -- Force update quest status
+        UpdateDeepSeaQuestStatus()
+        print("[QUEST CHECK] Deep Sea Quest status updated at Sisyphus")
+        print("[QUEST] Objective:", STATE.CurrentQuestObj)
+        print("[QUEST] Target:", STATE.QuestTarget)
+        print("[QUEST] Progress:", STATE.QuestProgress)
+        
+        -- Now determine optimal location
         local targetLocation = GetOptimalQuestLocation()
+        if targetLocation ~= "Sisyphus Statue" then
+            print("[QUEST] Going to", targetLocation, "for fishing")
+            TeleportToArea(targetLocation)
+        end
         
-        if STATE.CurrentArea ~= targetLocation then
-            print("[QUEST TELEPORT] Going to", targetLocation, "for Quest Objective", STATE.CurrentQuestObj)
-            return TeleportToArea(targetLocation)
-        end
-    elseif not STATE.HasAstralRod then
-        if STATE.CurrentArea ~= "Esoteric Island" then
-            print("[ASTRAL] No Astral Rod, going to Esoteric Island")
-            return TeleportToArea("Esoteric Island")
-        end
+        return true
+    end
+    
+    -- Normal location logic
+    local targetLocation = GetOptimalQuestLocation()
+    
+    if STATE.CurrentArea ~= targetLocation then
+        print("[TELEPORT] Going to", targetLocation, "for optimal fishing")
+        return TeleportToArea(targetLocation)
     end
     
     return true
@@ -560,14 +584,13 @@ local function PurchaseRod(rod)
         print("[ROD UPGRADE] Successfully purchased:", rod.Name)
         STATE.TotalPurchases = STATE.TotalPurchases + 1
         
-        -- IMMEDIATELY EQUIP THE NEW ROD
-        task.wait(0.5) -- Wait for data to update
+        -- Check if we just got Astral Rod
+        task.wait(0.5)
+        UpdateAstralStatus()
         
         if rod.ID == 5 then
-            STATE.HasAstralRod = true
             print("[ROD UPGRADE] 🎉 ASTRAL ROD ACQUIRED!")
-            -- Auto-teleport to quest location when getting Astral Rod
-            EnsureAtOptimalLocation()
+            -- Sisyphus check will happen in EnsureAtOptimalLocation
         end
         
         return true
@@ -795,6 +818,9 @@ local function StartAutoQuestGearCheck()
                 UpdateDeepSeaQuestStatus()
                 STATE.LastQuestCheck = os.time()
                 
+                -- Update Astral Rod status
+                UpdateAstralStatus()
+                
                 -- Try to upgrade gear
                 CheckAndUpgradeGear()
                 
@@ -823,6 +849,7 @@ local function StartScript()
     
     STATE.ScriptRunning = true
     STATE.CurrentArea = "Initializing..."
+    STATE.HasCheckedSisyphus = false  -- Reset flag on start
     
     -- Get initial data
     local r = GetPlayerDataReplion()
@@ -836,12 +863,8 @@ local function StartScript()
         EquipBestGear()
         task.wait(1)
         
-        -- Auto-teleport to optimal location
+        -- Auto-teleport to optimal location (this will trigger Sisyphus check if needed)
         print("[AUTO TELEPORT] Finding optimal location...")
-        print("[AUTO TELEPORT] Has Astral Rod:", STATE.HasAstralRod)
-        print("[AUTO TELEPORT] Has Deep Sea Quest:", STATE.HasDeepSeaQuest)
-        print("[AUTO TELEPORT] Current Quest Objective:", STATE.CurrentQuestObj)
-        
         EnsureAtOptimalLocation()
         task.wait(3)
     end
@@ -865,6 +888,7 @@ local function StopScript()
     print("=========================================")
     
     STATE.ScriptRunning = false
+    STATE.HasCheckedSisyphus = false  -- Reset flag on stop
     
     -- Stop fishing
     AutoFish.Active = false
