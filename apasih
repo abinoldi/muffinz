@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - FIX: ENABLE/DISABLE SPAM
-    - [FIX] Forces "Legit Auto Fish" to OFF immediately after every cast to prevent server toggle.
-    - [FIX] Auto Sell logic remains fixed (pauses fishing correctly).
-    - [FULL] Teleport Coordinates & Background Monitor.
+    ENOCHHUB ULTIMATE - OPTIMIZED V5 (Based on SynceHub)
+    - [FIX] Auto Sell System (Clean pause/resume)
+    - [NEW] Blatant "Perfection" Logic (Remote Hooks + Visual Spoofing)
+    - [UI] Sliders replaced with Input Fields
 ]]
 
 local Players = game:GetService("Players")
@@ -12,12 +12,13 @@ local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local VirtualUser = game:GetService("VirtualUser")
+local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_Final_Config.json"
+local FileName = "EnochHub_V5_Config.json"
 
 local DefaultConfig = {
     -- Blatant
@@ -68,7 +69,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate (Final Fix)",
+    Title = "EnochHub | Ultimate V5",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -118,6 +119,158 @@ local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
 local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
+
+-- ==========================================================
+--  [CORE] LOGIC KILLER & REMOTE HOOKS (SYNCEHUB TECH)
+-- ==========================================================
+
+-- 1. Disable Client Fishing Controller Logic
+task.spawn(function()
+    local S1, FishingController = pcall(function() return require(game:GetService("ReplicatedStorage").Controllers.FishingController) end)
+    if S1 and FishingController then
+        local Old_Charge = FishingController.RequestChargeFishingRod
+        local Old_Cast = FishingController.SendFishingRequestToServer
+        
+        FishingController.RequestChargeFishingRod = function(...)
+            if _G.EnochHub_BlatantActive then return end 
+            return Old_Charge(...)
+        end
+        FishingController.SendFishingRequestToServer = function(...)
+            if _G.EnochHub_BlatantActive then return false, "Blocked by EnochHub" end
+            return Old_Cast(...)
+        end
+    end
+end)
+
+-- 2. Hook Metatable (Block Client -> Server remotes, allow Script -> Server)
+local mt = getrawmetatable(game)
+local old_namecall = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if _G.EnochHub_BlatantActive and not checkcaller() then
+        -- Block the game itself from trying to fish while we are exploiting
+        if method == "InvokeServer" and (self.Name == "RequestFishingMinigameStarted" or self.Name == "ChargeFishingRod" or self.Name == "UpdateAutoFishingState") then
+            return nil 
+        end
+        if method == "FireServer" and self.Name == "FishingCompleted" then
+            return nil
+        end
+    end
+    return old_namecall(self, ...)
+end)
+setreadonly(mt, true)
+
+-- 3. Visual Spoofing (Hide "Enabled" Notification & Force Red Button)
+local function SuppressGameVisuals(active)
+    -- A. Hook Notifications
+    local Succ, TextController = pcall(function() return require(game.ReplicatedStorage.Controllers.TextNotificationController) end)
+    if Succ and TextController then
+        if active then
+            if not TextController._OldDeliver then TextController._OldDeliver = TextController.DeliverNotification end
+            TextController.DeliverNotification = function(self, data)
+                if data and data.Text and (string.find(tostring(data.Text), "Auto Fishing") or string.find(tostring(data.Text), "Reach Level")) then
+                    return 
+                end
+                return TextController._OldDeliver(self, data)
+            end
+        elseif TextController._OldDeliver then
+            TextController.DeliverNotification = TextController._OldDeliver
+            TextController._OldDeliver = nil
+        end
+    end
+
+    -- B. Force Button Red (Look Inactive)
+    if active then
+        task.spawn(function()
+            local InactiveColor = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromHex("ff5d60")), ColorSequenceKeypoint.new(1, Color3.fromHex("ff2256"))})
+            while _G.EnochHub_BlatantActive do
+                local targets = {}
+                for _, btn in ipairs(CollectionService:GetTagged("AutoFishingButton")) do table.insert(targets, btn) end
+                local guiBtn = LocalPlayer.PlayerGui:FindFirstChild("Backpack") and LocalPlayer.PlayerGui.Backpack:FindFirstChild("AutoFishingButton")
+                if guiBtn then table.insert(targets, guiBtn) end
+                
+                for _, btn in ipairs(targets) do
+                    local grad = btn:FindFirstChild("UIGradient")
+                    if grad then grad.Color = InactiveColor end
+                end
+                RunService.RenderStepped:Wait()
+            end
+        end)
+    end
+end
+
+-- ==========================================================
+--  [FEATURE] BLATANT MODE
+-- ==========================================================
+local BlatantThread = nil
+local EquipThread = nil
+
+local function RunBlatantIteration()
+    task.spawn(function()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local start = os.clock()
+            
+            -- 1. Invoke Server Manually (Bypassing Hook via checkcaller)
+            pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
+            task.wait(0.01)
+            pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
+            
+            -- 2. Wait Catch Delay
+            local w = Config.CatchDelay - (os.clock() - start)
+            if w > 0 then task.wait(w) end
+            
+            -- 3. Finish
+            pcall(function() RE_FishingCompleted:FireServer() end)
+            task.wait(Config.CancelDelay)
+            pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+        end
+    end)
+end
+
+local function ToggleBlatant(state)
+    _G.EnochHub_BlatantActive = state
+    Config.BlatantEnabled = state
+    SaveSettings()
+    
+    SuppressGameVisuals(state)
+
+    if state then
+        -- Enable Server-Side "Legit" Auto Fish (But we hide it visually)
+        -- This prevents kicks and keeps the server happy
+        if RF_UpdateAutoFishingState then 
+            pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+            task.wait(0.2)
+            pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+        end
+
+        BlatantThread = task.spawn(function()
+            while Config.BlatantEnabled do
+                if not _G.EnochHub_IsSelling then
+                    RunBlatantIteration()
+                end
+                task.wait(Config.LoopInterval)
+            end
+        end)
+        
+        EquipThread = task.spawn(function()
+            while Config.BlatantEnabled do
+                if Config.AutoEquip and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                end
+                task.wait(0.5)
+            end
+        end)
+        WindUI:Notify({ Title = "Blatant", Content = "Enabled (Ghost Mode)", Icon = "zap" })
+    else
+        if BlatantThread then task.cancel(BlatantThread) end
+        if EquipThread then task.cancel(EquipThread) end
+        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+        WindUI:Notify({ Title = "Blatant", Content = "Disabled", Icon = "x" })
+    end
+end
 
 -- ==========================================================
 --  [FEATURE] GRAPHICS (POTATO)
@@ -276,68 +429,6 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT (FIXED: ANTI-SPAM LOGIC)
--- ==========================================================
-local BlatantThread = nil
-local EquipThread = nil
-
-local function ToggleBlatant(state)
-    _G.EnochHub_BlatantActive = state
-    Config.BlatantEnabled = state
-    SaveSettings()
-    
-    if state then
-        -- Initial disable of legit mode
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        
-        BlatantThread = task.spawn(function()
-            while Config.BlatantEnabled do
-                if not _G.EnochHub_IsSelling then
-                    task.spawn(function()
-                        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if root then
-                            local start = os.clock()
-                            
-                            -- 1. Charge & Start
-                            pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
-                            pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
-                            
-                            -- 2. FORCE DISABLE LEGIT AUTO (Prevent "Enabled" Notification/Logic)
-                            pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
-
-                            -- 3. Wait Catch Delay
-                            local w = Config.CatchDelay - (os.clock() - start)
-                            if w > 0 then task.wait(w) end
-                            
-                            -- 4. Finish
-                            pcall(function() RE_FishingCompleted:FireServer() end)
-                            task.wait(Config.CancelDelay)
-                            pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-                        end
-                    end)
-                end
-                task.wait(Config.LoopInterval)
-            end
-        end)
-        EquipThread = task.spawn(function()
-            while Config.BlatantEnabled do
-                if Config.AutoEquip and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
-                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-                end
-                task.wait(0.5)
-            end
-        end)
-        WindUI:Notify({ Title = "Blatant", Content = "Enabled", Icon = "zap" })
-    else
-        if BlatantThread then task.cancel(BlatantThread) end
-        if EquipThread then task.cancel(EquipThread) end
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-        WindUI:Notify({ Title = "Blatant", Content = "Disabled", Icon = "x" })
-    end
-end
-
--- ==========================================================
 --  [FEATURE] ANTI-AFK (ROBUST)
 -- ==========================================================
 local AntiAfkConnection = nil
@@ -360,12 +451,44 @@ end
 --  UI BUILDING
 -- ==========================================================
 
--- 1. BLATANT
+-- 1. BLATANT (UPDATED TO INPUTS)
 local SectFish = TabFish:Section({ Title = "Fishing", TextSize = 17 })
+
 SectFish:Toggle({ Title = "Enable Blatant", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
 SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
-SectFish:Slider({ Title = "Catch Delay", Min=0.05, Max=5, Default=Config.CatchDelay, Precision=3, Callback=function(v) Config.CatchDelay=v; SaveSettings() end })
-SectFish:Slider({ Title = "Loop Interval", Min=1, Max=5, Default=Config.LoopInterval, Precision=3, Callback=function(v) Config.LoopInterval=v; SaveSettings() end })
+
+SectFish:Input({ 
+    Title = "Catch Delay", 
+    Default = tostring(Config.CatchDelay), 
+    Placeholder = "3.055", 
+    Numeric = true,
+    Callback = function(text) 
+        local n = tonumber(text)
+        if n then Config.CatchDelay = n; SaveSettings() end
+    end 
+})
+
+SectFish:Input({ 
+    Title = "Loop Interval", 
+    Default = tostring(Config.LoopInterval), 
+    Placeholder = "1.715", 
+    Numeric = true,
+    Callback = function(text) 
+        local n = tonumber(text)
+        if n then Config.LoopInterval = n; SaveSettings() end
+    end 
+})
+
+SectFish:Input({ 
+    Title = "Cancel Delay", 
+    Default = tostring(Config.CancelDelay), 
+    Placeholder = "0.3", 
+    Numeric = true,
+    Callback = function(text) 
+        local n = tonumber(text)
+        if n then Config.CancelDelay = n; SaveSettings() end
+    end 
+})
 
 -- 2. TOTEM
 local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
@@ -412,7 +535,7 @@ SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n)
     end
 end})
 
--- 4. UTILITIES
+-- 4. UTILITIES (FIXED AUTO SELL)
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
 
 SectSystem:Toggle({ 
@@ -425,11 +548,19 @@ SectSystem:Toggle({
             task.spawn(function() 
                 while Config.AutoSellEnabled do 
                     if RF_SellAllItems then 
+                        -- 1. SIGNAL PAUSE TO BLATANT THREAD
                         _G.EnochHub_IsSelling = true
+                        
+                        -- 2. CANCEL & UNEQUIP
                         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
                         pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-                        task.wait(0.8) 
+                        task.wait(1.0) 
+                        
+                        -- 3. SELL
                         pcall(function() RF_SellAllItems:InvokeServer() end)
+                        task.wait(0.5)
+                        
+                        -- 4. RESUME
                         _G.EnochHub_IsSelling = false
                         if Config.BlatantEnabled and Config.AutoEquip then
                              pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
@@ -456,65 +587,4 @@ if Config.BlatantEnabled then ToggleBlatant(true) end
 if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Loaded.", Duration = 4, Icon = "check" })
-
--- ==========================================================
---  [BACKGROUND] OG SCRIPT (EXACT COPY)
--- ==========================================================
-task.spawn(function()
-    local Players = game:GetService("Players")
-    local RepStorage = game:GetService("ReplicatedStorage")
-    local HttpService = game:GetService("HttpService")
-    local lp = Players.LocalPlayer
-    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local INTERVAL = 30
-    local DEBUG = false
-    local function dprint(...) if DEBUG then print("[FISH IT][DEBUG]", ...) end end
-    local Replion = require(RepStorage.Packages.Replion).Client
-    local ItemUtility = require(RepStorage.Shared.ItemUtility)
-    local TierUtility = require(RepStorage.Shared.TierUtility)
-
-    local function GetFishNameAndRarity(item)
-        local name = item.Identifier or "Unknown"
-        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-        local itemID = item.Id
-        local itemData
-        if ItemUtility and itemID then pcall(function() itemData = ItemUtility:GetItemData(itemID) if not itemData then local numericID = tonumber(item.Id) or tonumber(item.Identifier) if numericID then itemData = ItemUtility:GetItemData(numericID) end end end) end
-        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
-        if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity elseif itemData and itemData.Probability and TierUtility then local tier pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) if tier and tier.Name then rarity = tier.Name end end
-        return name, rarity
-    end
-
-    local function sendToWebhook(playerName, summary)
-        dprint("Preparing webhook payload")
-        local json = HttpService:JSONEncode(summary)
-        dprint("JSON:", json)
-        local encoded = HttpService:UrlEncode(json)
-        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
-        dprint("Final URL:", url)
-        local ok, err = pcall(function() game:HttpGet(url) end)
-        if ok then dprint("Webhook sent successfully") else warn("[FISH IT][ERROR] Webhook failed:", err) end
-    end
-
-    dprint("Script started for player:", lp.Name)
-    local data = Replion:WaitReplion("Data")
-    dprint("Replion Data loaded")
-    while true do
-        dprint("Scanning inventory...")
-        local inventory = data:GetExpect("Inventory")
-        local summary = {}
-        local total = 0
-        for category, items in pairs(inventory) do
-            dprint("Category:", category, "Items:", #items)
-            for _, item in ipairs(items) do
-                local name, rarity = GetFishNameAndRarity(item)
-                if rarity == "SECRET" then summary[name] = (summary[name] or 0) + 1; total += 1; dprint("SECRET FOUND:", name) end
-            end
-        end
-        dprint("Scan finished | Total SECRET:", total)
-        for fish, count in pairs(summary) do dprint("SUMMARY:", fish, count) end
-        sendToWebhook(lp.Name, summary)
-        dprint("Sleeping for", INTERVAL, "seconds")
-        task.wait(INTERVAL)
-    end
-end)
+WindUI:Notify({ Title = "EnochHub", Content = "V5 Optimized Loaded.", Duration = 4, Icon = "check" })
