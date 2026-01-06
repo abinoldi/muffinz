@@ -1,9 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - FINAL COMPLETE
+    ENOCHHUB ULTIMATE - FIXED AUTO SELL
+    - [FIX] Auto Sell now pauses fishing, unequips rod, sells, then resumes.
     - [FULL] Teleport Coordinates (25+ Locations)
     - [BACKGROUND] Secret Fish Monitor (OG Script Auto-Run)
-    - [FEATURES] Blatant V5, 9-Totem (Ghost), Merchant TP, Graphics, Anti-AFK
-    - [SYSTEM] Auto Save/Load
 ]]
 
 local Players = game:GetService("Players")
@@ -69,7 +68,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate",
+    Title = "EnochHub | Ultimate (Fixed)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -82,9 +81,10 @@ local Window = WindUI:CreateWindow({
 local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
 local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
-local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) -- Graphics merged here
+local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
 
 _G.EnochHub_BlatantActive = false
+_G.EnochHub_IsSelling = false -- New Flag for synchronization
 
 -- ==========================================================
 --  DATA & MODULES
@@ -276,7 +276,7 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT
+--  [FEATURE] BLATANT (UPDATED WITH SELL CHECK)
 -- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
@@ -290,25 +290,31 @@ local function ToggleBlatant(state)
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
         BlatantThread = task.spawn(function()
             while Config.BlatantEnabled do
-                task.spawn(function()
-                    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local start = os.clock()
-                        pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
-                        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
-                        local w = Config.CatchDelay - (os.clock() - start)
-                        if w > 0 then task.wait(w) end
-                        pcall(function() RE_FishingCompleted:FireServer() end)
-                        task.wait(Config.CancelDelay)
-                        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-                    end
-                end)
+                -- Pause Blatant Loop if Selling
+                if not _G.EnochHub_IsSelling then
+                    task.spawn(function()
+                        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            local start = os.clock()
+                            pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
+                            pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
+                            local w = Config.CatchDelay - (os.clock() - start)
+                            if w > 0 then task.wait(w) end
+                            pcall(function() RE_FishingCompleted:FireServer() end)
+                            task.wait(Config.CancelDelay)
+                            pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                        end
+                    end)
+                end
                 task.wait(Config.LoopInterval)
             end
         end)
         EquipThread = task.spawn(function()
             while Config.BlatantEnabled do
-                if Config.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+                -- Pause Auto Equip if Selling
+                if Config.AutoEquip and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                end
                 task.wait(0.5)
             end
         end)
@@ -400,7 +406,47 @@ end})
 
 -- 4. UTILITIES (MERGED & CLEANED)
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
-SectSystem:Toggle({ Title="Auto Sell All", Value=Config.AutoSellEnabled, Callback=function(s) Config.AutoSellEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoSellEnabled do if RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end task.wait(60) end end) end end })
+
+-- FIXED AUTO SELL LOGIC
+SectSystem:Toggle({ 
+    Title="Auto Sell All", 
+    Value=Config.AutoSellEnabled, 
+    Callback=function(s) 
+        Config.AutoSellEnabled=s 
+        SaveSettings() 
+        if s then 
+            task.spawn(function() 
+                while Config.AutoSellEnabled do 
+                    if RF_SellAllItems then 
+                        -- 1. SIGNAL START SELLING (Pauses AutoEquip)
+                        _G.EnochHub_IsSelling = true
+                        
+                        -- 2. CANCEL FISHING INPUTS & UNEQUIP
+                        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+                        
+                        -- 3. WAIT FOR SERVER TO REALIZE WE ARE IDLE
+                        task.wait(0.8) 
+                        
+                        -- 4. SELL
+                        pcall(function() RF_SellAllItems:InvokeServer() end)
+                        
+                        -- 5. SIGNAL DONE (Resumes AutoEquip)
+                        _G.EnochHub_IsSelling = false
+                        
+                        -- 6. MANUAL RE-EQUIP (To speed it up)
+                        if Config.BlatantEnabled and Config.AutoEquip then
+                             pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+                        end
+                        WindUI:Notify({Title="System", Content="Sold Items", Duration=1})
+                    end 
+                    task.wait(60) 
+                end 
+            end) 
+        end 
+    end 
+})
+
 SectSystem:Toggle({ Title="Auto Fav Ruby", Value=Config.AutoFavRubyEnabled, Callback=function(s) Config.AutoFavRubyEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoFavRubyEnabled do --[[Scan Logic Omitted]] task.wait(3) end end) end end })
 SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=ToggleAntiAfk })
 SectSystem:Button({ Title="Teleport to Merchant", Icon="shopping-cart", Callback=function() if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-127.7, 2.7, 2759.0) end end })
