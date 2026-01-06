@@ -1,531 +1,406 @@
 --[[
-    ENOCHHUB ULTIMATE - HYPER SPEED EDITION
-    ---------------------------------------
-    [CORE]
-      > Fishing Logic: REPLACED with FishIT Hyper Speed (Spam Logic + Blockers).
-      > Anti-Fail Hook: Active to prevent server cancellation during spam.
-    
-    [EXTRAS]
-      > 9-Totem Formation (Ghost Mode)
-      > Teleports (25+ Locations)
-      > Utilities (Auto Sell, Auto Fav Ruby, Anti-AFK)
-      > Background Secret Fish Monitor
+    SERAPHIN HELPER - WIND UI REMAKE (FINAL)
+    > Hyper Fast Fishing (FishIT Logic)
+    > Full Teleport List (From EnochHub) + Custom Coords
+    > Auto Sell, Auto Favorite Ruby, Extreme Potato
 ]]
 
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+-- [1] Notifikasi Awal
+pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "Raka Ganteng",
+        Text = "Loading Seraphin Helper...",
+        Duration = 2,
+    })
+end)
+
+-- [2] Variable & Services
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage") 
+local VirtualInputManager = game:GetService("VirtualInputManager") 
 local Lighting = game:GetService("Lighting")
-local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
-local VirtualUser = game:GetService("VirtualUser")
-local LocalPlayer = Players.LocalPlayer
 
--- ==========================================================
---  1. CONFIGURATION & SAVE SYSTEM
--- ==========================================================
-local FileName = "EnochHub_HyperSpeed_Final.json"
+local Player = Players.LocalPlayer
+local Char = Player.Character or Player.CharacterAdded:Wait()
+local HRP = Char:WaitForChild("HumanoidRootPart", 10)
+local Hum = Char:WaitForChild("Humanoid", 10)
 
-local DefaultConfig = {
-    -- >> FISHING SETTINGS (Hyper Speed Only)
-    BlatantEnabled = false,
-    ChargeDelay = 0.85, -- Default from FishIT
-    ResetDelay = 0.1,   -- Default from FishIT
+Player.CharacterAdded:Connect(function(newChar)
+    Char = newChar
+    HRP = newChar:WaitForChild("HumanoidRootPart", 10)
+    Hum = newChar:WaitForChild("Humanoid", 10)
+end)
 
-    -- >> GLOBAL / UTILS
-    AutoEquip = true,
-    AutoSellEnabled = false,
-    AutoFavRubyEnabled = false,
-    AntiAfkEnabled = true,
-    
-    -- >> GRAPHICS
-    PotatoModeEnabled = false,
-    PotatoFPS = 60,
+-- // DEFINE REMOTES
+local net = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net")
+local ChargeRod    = net["RF/ChargeFishingRod"]
+local RequestGame  = net["RF/RequestFishingMinigameStarted"]
+local CompleteGame = net["RE/FishingCompleted"]
+local CancelInput  = net["RF/CancelFishingInputs"]
+local SellAll      = net:FindFirstChild("RF/SellAll") or net:FindFirstChild("RF/SellEverything")
+local FavoriteItem = net:FindFirstChild("RE/FavoriteItem") 
+local EquipTool    = net:FindFirstChild("RE/EquipToolFromHotbar")
 
-    -- >> TOTEM
-    TotemType = "Luck Totem"
+-- // KONFIGURASI GLOBAL
+getgenv().fishingStart = false
+getgenv().autoSell = false
+getgenv().autoFavRuby = false
+getgenv().potatoMode = false
+getgenv().autoEquip = false
+
+_G.FishSettings = {
+    DelayCharge = 0.85, 
+    DelayReset = 0.1,   
 }
 
-local Config = {}
-for k,v in pairs(DefaultConfig) do Config[k] = v end
+local fishArgs = { -1.115296493039856, 0, 1763651451.636425 }
 
--- Load Config
-if isfile and isfile(FileName) then
-    pcall(function()
-        local decoded = HttpService:JSONDecode(readfile(FileName))
-        for k, v in pairs(decoded) do Config[k] = v end
-    end)
-end
-
-local function SaveSettings()
-    if writefile then
-        pcall(function() writefile(FileName, HttpService:JSONEncode(Config)) end)
-    end
-end
-
-local function ResetConfig()
-    if delfile and isfile(FileName) then delfile(FileName) end
-    for k,v in pairs(DefaultConfig) do Config[k] = v end
-    SaveSettings()
-end
-
--- ==========================================================
---  2. DATA & REMOTE SETUP
--- ==========================================================
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Packages = ReplicatedStorage:WaitForChild("Packages")
-
--- Modules
-local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
-local TierUtility = require(Shared:WaitForChild("TierUtility"))
-local Replion = require(Packages:WaitForChild("Replion")).Client
-
-local function GetRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = ReplicatedStorage
-    
-    -- Version Check (Some servers use 0.2.1)
-    local p1 = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index")
-    if p1:FindFirstChild("sleitnick_net@0.2.1") then
-        path = {"Packages", "_Index", "sleitnick_net@0.2.1", "net"}
-    end
-    
-    current = ReplicatedStorage
-    for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 2)
-        if not current then return nil end
-    end
-    return current:FindFirstChild(name)
-end
-
--- Fishing Remotes
-local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
-local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
-local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
-local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
-local RF_SellAllItems = GetRemote("RF/SellAllItems") or GetRemote("RF/SellAll") or GetRemote("RF/SellEverything")
-local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
-local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
-
--- Totem & Utility Remotes
-local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
-local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
-local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
-
--- ==========================================================
---  3. ANTI-FAIL BLOCKER (ESSENTIAL FOR HYPER SPEED)
--- ==========================================================
+-- =====================================================
+-- 🛡️ FISHING BLOCKER (ANTI-FAIL SYSTEM)
+-- =====================================================
 local BLOCKED_REMOTES = {
-    [RF_ChargeFishingRod] = true,
-    [RF_RequestFishingMinigameStarted] = true,
-    [RE_FishingCompleted] = true,
-    [RF_CancelFishingInputs] = true,
+    [ChargeRod] = true,
+    [RequestGame] = true,
+    [CompleteGame] = true,
+    [CancelInput] = true,
 }
 
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
-    -- Active if Blatant is Enabled. Blocks "Fail" signals to allow spamming.
-    if Config.BlatantEnabled and BLOCKED_REMOTES[self] and not checkcaller() then
+    if getgenv().fishingStart and BLOCKED_REMOTES[self] and not checkcaller() then
         if method == "InvokeServer" then
-            return task.wait(9e9) -- Infinite Yield (Prevent Return)
+            return task.wait(9e9) 
         elseif method == "FireServer" then
-            return nil -- Drop Packet
+            return nil
         end
     end
     return oldNamecall(self, ...)
 end)
 
--- ==========================================================
---  4. UI INITIALIZATION (WindUI)
--- ==========================================================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+-- =====================================================
+-- 🎣 FUNGSI LOGIC
+-- =====================================================
 
-local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Hyper Speed",
-    Icon = "rbxassetid://130348378128532",
-    Author = "EnochHub",
-    Folder = "EnochHub",
-    Size = UDim2.fromOffset(580, 500),
-    Transparent = true,
-    Theme = "Sky",
-    Resizable = true,
-})
+-- 1. Hyper Loop
+local function startFishingHyperLoop()
+    local agRemote = net:FindFirstChild("RF/UpdateAutoFishingState")
+    if agRemote then pcall(function() agRemote:InvokeServer(true) end) end
 
-local TabFish = Window:Tab({ Title = "Fishing", Icon = "anchor" })
-local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
-local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
-local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
+    pcall(function() CancelInput:InvokeServer() end)
+    task.wait(0.005)
 
--- ==========================================================
---  5. FISHING LOGIC (FISH-IT HYPER SPEED)
--- ==========================================================
-local FishThread = nil
-
--- Standard Fixed Args (Center Cast)
-local fishArgs = { -1.115296493039856, 0, 1763651451.636425 }
-
-local function ToggleBlatant(state)
-    Config.BlatantEnabled = state
-    SaveSettings()
-
-    if state then
-        -- Enable Auto Great on Server
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
+    while getgenv().fishingStart do
+        task.spawn(function() pcall(function() ChargeRod:InvokeServer() end) end)
+        task.spawn(function() pcall(function() RequestGame:InvokeServer(unpack(fishArgs)) end) end)
         
-        -- Clear Inputs
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-        task.wait(0.05)
+        task.wait(_G.FishSettings.DelayCharge)
+        if not getgenv().fishingStart then break end
 
-        FishThread = task.spawn(function()
-            while Config.BlatantEnabled do
-                -- 1. Spawn Charge (No Yield)
-                task.spawn(function() pcall(function() RF_ChargeFishingRod:InvokeServer() end) end)
-                
-                -- 2. Spawn Request (No Yield, Fixed Args)
-                task.spawn(function() pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(fishArgs)) end) end)
-                
-                -- 3. Speed Wait
-                task.wait(Config.ChargeDelay)
-                
-                if not Config.BlatantEnabled then break end
-
-                -- 4. Complete
-                pcall(function() RE_FishingCompleted:FireServer() end)
-                
-                -- 5. Reset
-                task.wait(Config.ResetDelay)
-                pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-            end
-        end)
-        WindUI:Notify({ Title = "Hyper Speed", Content = "Enabled (FishIT Logic)", Icon = "zap" })
-    else
-        if FishThread then task.cancel(FishThread) end
-        -- Force Cleanup
-        pcall(function() RE_FishingCompleted:FireServer() end)
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        WindUI:Notify({ Title = "Hyper Speed", Content = "Disabled", Icon = "x" })
+        pcall(function() CompleteGame:FireServer() end)
+        task.wait(_G.FishSettings.DelayReset)
+        pcall(function() CancelInput:InvokeServer() end)
     end
 end
 
--- Auto Equip (Global)
+-- 2. Extreme Potato Mode
+local function EnablePotato()
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.Brightness = 2
+    settings().Rendering.QualityLevel = "Level01"
+    
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v:IsDescendantOf(Char) then
+            v.Material = Enum.Material.Plastic
+            v.Reflectance = 0
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v.Transparency = 1
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+            v.Enabled = false
+        end
+    end
+    
+    if workspace:FindFirstChild("Terrain") then
+        workspace.Terrain.WaterWaveSize = 0
+        workspace.Terrain.WaterReflectance = 0
+        workspace.Terrain.WaterTransparency = 1
+    end
+end
+
+-- 3. Auto Favorite Ruby
 task.spawn(function()
     while true do
-        if Config.AutoEquip and Config.BlatantEnabled then
-            if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
-        end
-        task.wait(0.5)
-    end
-end)
-
--- ==========================================================
---  6. TOTEM SYSTEM (GHOST MODE)
--- ==========================================================
-local AUTO_9_TOTEM_ACTIVE = false
-local AUTO_9_TOTEM_THREAD = nil
-local TotemToggleUI = nil 
-local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
-local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
-local REF_SPOTS = {
-    Vector3.new(45.0468, 9.516, 2730.190), Vector3.new(145.644, 9.516, 2721.907), Vector3.new(84.640, 10.217, 2636.057),
-    Vector3.new(45.0468, 110.516, 2730.190), Vector3.new(145.644, 110.516, 2721.907), Vector3.new(84.640, 111.217, 2636.057),
-    Vector3.new(45.0468, -92.483, 2730.190), Vector3.new(145.644, -92.483, 2721.907), Vector3.new(84.640, -93.782, 2636.057),
-}
-
-local function GetTotemUUID(name)
-    local r = Replion:WaitReplion("Data", 5)
-    if not r then return nil end
-    local s, data = pcall(function() return r:GetExpect("Inventory") end)
-    if s and data.Totems then 
-        for _, item in ipairs(data.Totems) do 
-            if tonumber(item.Id) == TOTEM_DATA[name].Id and (item.Count or 1) >= 1 then return item.UUID end 
-        end 
-    end
-    return nil
-end
-
-local stateConnection, noclipConnection
-
-local function EnableV3Physics()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root or not hum then return end
-    
-    if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
-    hum.PlatformStand = true 
-    
-    if not stateConnection then
-        stateConnection = RunService.Heartbeat:Connect(function()
-            if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end
-        end)
-    end
-    
-    if not noclipConnection then
-        noclipConnection = RunService.Stepped:Connect(function()
-            if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then
-                for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
-                end
-            end
-        end)
-    end
-    
-    local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root)
-    bg.Name="FlyGuiGyro"; bg.P=9e4; bg.maxTorque=Vector3.new(9e9,9e9,9e9); bg.CFrame=root.CFrame
-    local bv = root:FindFirstChild("FlyGuiVelocity") or Instance.new("BodyVelocity", root)
-    bv.Name="FlyGuiVelocity"; bv.velocity=Vector3.zero; bv.maxForce=Vector3.new(9e9,9e9,9e9)
-end
-
-local function DisableV3Physics()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root then
-        if root:FindFirstChild("FlyGuiGyro") then root.FlyGuiGyro:Destroy() end
-        if root:FindFirstChild("FlyGuiVelocity") then root.FlyGuiVelocity:Destroy() end
-        root.Velocity = Vector3.zero
-    end
-    if hum then hum.PlatformStand = false; hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
-    if stateConnection then stateConnection:Disconnect(); stateConnection = nil end
-    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
-    if char and char:FindFirstChild("Animate") then char.Animate.Disabled = false end
-end
-
-local function FlyPhysicsTo(targetPos)
-    local root = LocalPlayer.Character.HumanoidRootPart
-    local bv = root:FindFirstChild("FlyGuiVelocity")
-    local bg = root:FindFirstChild("FlyGuiGyro")
-    if not bv or not bg then EnableV3Physics(); bv=root.FlyGuiVelocity; bg=root.FlyGuiGyro end
-    while AUTO_9_TOTEM_ACTIVE do
-        local dist = (targetPos - root.Position).Magnitude
-        bg.CFrame = CFrame.lookAt(root.Position, targetPos)
-        if dist < 1.5 then bv.velocity=Vector3.zero; break else bv.velocity=(targetPos - root.Position).Unit * 80 end
-        RunService.Heartbeat:Wait()
-    end
-end
-
-local function Run9TotemLoop()
-    if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end
-    AUTO_9_TOTEM_THREAD = task.spawn(function()
-        local uuid = GetTotemUUID(Config.TotemType)
-        if not uuid then WindUI:Notify({ Title="Error", Content="No stock.", Icon="alert-triangle" }) 
-            if TotemToggleUI then TotemToggleUI:Set(false) end
-            return 
-        end
-        
-        local startPos = LocalPlayer.Character.HumanoidRootPart.Position
-        if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
-        EnableV3Physics()
-        
-        for i, refSpot in ipairs(REF_SPOTS) do
-            if not AUTO_9_TOTEM_ACTIVE then break end
-            FlyPhysicsTo(startPos + (refSpot - REF_CENTER))
-            task.wait(0.6)
-            uuid = GetTotemUUID(Config.TotemType)
-            if uuid then
-                pcall(function() RE_SpawnTotem:FireServer(uuid) end)
-                task.spawn(function() for k=1,5 do RE_EquipToolFromHotbar:FireServer(1) task.wait(0.1) end end)
-                WindUI:Notify({ Title = "Totem", Content = "Placed #"..i, Duration = 1 })
-            else break end
-            task.wait(1.5)
-        end
-        
-        if AUTO_9_TOTEM_ACTIVE then FlyPhysicsTo(startPos) end
-        if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
-        DisableV3Physics()
-        AUTO_9_TOTEM_ACTIVE = false
-        if TotemToggleUI then TotemToggleUI:Set(false) end
-        WindUI:Notify({ Title = "Done", Content = "Sequence Finished", Icon = "check" })
-    end)
-end
-
--- ==========================================================
---  7. TAB CONSTRUCTION
--- ==========================================================
-
--- >> TAB: FISHING (Hyper Speed Only)
-local SectFish = TabFish:Section({ Title = "Controls", TextSize = 16 })
-SectFish:Toggle({ Title = "Enable Hyper Speed", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
-
-local SectSet = TabFish:Section({ Title = "Configuration", TextSize = 16 })
-SectSet:Slider({ Title = "Charge Delay (Def: 0.85)", Min=0.35, Max=1.5, Default=Config.ChargeDelay, Precision=2, Callback=function(v) Config.ChargeDelay=v; SaveSettings() end })
-SectSet:Slider({ Title = "Reset Delay (Def: 0.1)", Min=0.05, Max=1.0, Default=Config.ResetDelay, Precision=2, Callback=function(v) Config.ResetDelay=v; SaveSettings() end })
-SectSet:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
-
--- >> TAB: TOTEM
-local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
-SectTotem:Dropdown({ Title="Type", Values={"Luck Totem", "Mutation Totem", "Shiny Totem"}, Value=Config.TotemType, Callback=function(v) Config.TotemType=v; SaveSettings() end })
-TotemToggleUI = SectTotem:Toggle({ Title = "Start Formation", Callback = function(s) AUTO_9_TOTEM_ACTIVE=s; if s then Run9TotemLoop() else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end DisableV3Physics() end end })
-
--- >> TAB: TELEPORT
-local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
-local Coords = {
-    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
-    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
-    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
-    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
-    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
-    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
-    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
-    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
-    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
-    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
-    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
-    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
-    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
-    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
-    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
-    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},
-    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
-    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
-    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
-    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
-}
-local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
-SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) 
-    local d = Coords[n]
-    if d and LocalPlayer.Character then
-        if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end
-        task.wait(0.3)
-        local look = Vector3.new(d.Look.X, 0, d.Look.Z)
-        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look)
-    end
-end})
-
--- >> TAB: UTILITIES
-local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
-SectSystem:Toggle({ 
-    Title="Auto Sell All", 
-    Value=Config.AutoSellEnabled, 
-    Callback=function(s) 
-        Config.AutoSellEnabled=s; 
-        SaveSettings(); 
-        if s then 
-            task.spawn(function() 
-                while Config.AutoSellEnabled do 
-                    if RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end 
-                    task.wait(60) 
-                end 
-            end) 
-        end 
-    end 
-})
-
-SectSystem:Toggle({ 
-    Title = "Auto Fav Ruby", 
-    Value = Config.AutoFavRubyEnabled, 
-    Callback = function(s) 
-        Config.AutoFavRubyEnabled = s
-        SaveSettings()
-        if s then 
-            task.spawn(function() 
-                while Config.AutoFavRubyEnabled do 
-                    local rubyName = "Ruby"
-                    local inventory = Replion:GetExpect("Inventory")
-                    if inventory then
-                        for _, cat in pairs(inventory) do
-                            for _, item in ipairs(cat) do
-                                if (item.Identifier == rubyName or item.Name == rubyName) and not item.Favorite then
-                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID, true) end)
-                                end
+        task.wait(2)
+        if getgenv().autoFavRuby then
+            local Replion = require(ReplicatedStorage.Packages.Replion).Client
+            local Data = Replion:GetExpect("Inventory")
+            
+            if Data then
+                for _, category in pairs(Data) do
+                    for _, item in pairs(category) do
+                        if (item.Name == "Ruby" or item.Identifier == "Ruby") and not item.Favorite then
+                            if FavoriteItem then
+                                FavoriteItem:FireServer(item.UUID, true)
+                                WindUI:Notify({ Title = "Auto Favorite", Content = "Favorited a Ruby!", Duration = 2 })
                             end
                         end
                     end
-                    task.wait(3) 
-                end 
-            end) 
-        end 
-    end 
-})
-
-SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=function(s) Config.AntiAfkEnabled=s; SaveSettings() end })
-SectSystem:Button({ Title="Teleport to Merchant", Icon="shopping-cart", Callback=function() if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-127.7, 2.7, 2759.0) end end })
-SectSystem:Button({ Title="Reset Config", Icon="trash", Callback=function() ResetConfig(); WindUI:Notify({Title="Reset", Content="Done."}) end })
-
-local SectGfx = TabUtil:Section({ Title = "Graphics", TextSize = 17 })
-SectGfx:Toggle({ Title="Extreme Potato", Value=Config.PotatoModeEnabled, Callback=function(v) Config.PotatoModeEnabled=v; SaveSettings() end })
-SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v; SaveSettings() end })
-
--- ==========================================================
---  8. BACKGROUND TASKS
--- ==========================================================
-
--- Potato Mode Logic
-local function ApplyPotato()
-    Lighting.GlobalShadows = false; Lighting.Brightness = 1; Lighting.FogEnd = 9e9; Lighting.ClockTime = 12
-    local t = Workspace:FindFirstChildOfClass("Terrain")
-    if t then t.WaterWaveSize=0; t.WaterReflectance=0; t.WaterTransparency=1 end
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false
-        elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1
-        elseif v:IsA("BasePart") then v.CastShadow = false; v.Material = Enum.Material.Plastic
-        end
-    end
-    settings().Rendering.QualityLevel = 1
-    if setfpscap then setfpscap(Config.PotatoFPS) end
-end
-
-task.spawn(function()
-    while true do
-        if Config.PotatoModeEnabled then ApplyPotato() end
-        task.wait(8)
-    end
-end)
-
--- Anti-AFK
-local AntiAfkConnection = nil
-task.spawn(function()
-    while true do
-        if Config.AntiAfkEnabled then
-             if not AntiAfkConnection then
-                 AntiAfkConnection = LocalPlayer.Idled:Connect(function()
-                     VirtualUser:CaptureController();
-                     VirtualUser:Button2Down(Vector2.new(0,0),Workspace.CurrentCamera.CFrame); task.wait(1); VirtualUser:Button2Up(Vector2.new(0,0),Workspace.CurrentCamera.CFrame)
-                 end)
-             end
-        else
-             if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
-        end
-        task.wait(5)
-    end
-end)
-
--- Background Secret Fish Monitor
-task.spawn(function()
-    local lp = Players.LocalPlayer
-    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local INTERVAL = 30
-    local function sendToWebhook(playerName, summary)
-        local json = HttpService:JSONEncode(summary)
-        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. HttpService:UrlEncode(json)
-        pcall(function() game:HttpGet(url) end)
-    end
-
-    local data = Replion:WaitReplion("Data")
-    if not data then return end
-    while true do
-        local inventory = data:GetExpect("Inventory")
-        local summary = {}
-        for category, items in pairs(inventory) do
-            for _, item in ipairs(items) do
-                local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-                if rarity == "SECRET" then summary[item.Identifier or "Unknown"] = (summary[item.Identifier or "Unknown"] or 0) + 1 end
+                end
             end
         end
-        sendToWebhook(lp.Name, summary)
-        task.wait(INTERVAL)
     end
 end)
 
--- Restore State
-if Config.BlatantEnabled then ToggleBlatant(true) end
+-- 4. Auto Sell
+task.spawn(function()
+    while true do
+        if getgenv().autoSell then
+            if SellAll then
+                pcall(function() SellAll:InvokeServer() end)
+                WindUI:Notify({ Title = "Auto Sell", Content = "Sold all items.", Duration = 2 })
+            end
+        end
+        task.wait(60)
+    end
+end)
 
-WindUI:Notify({ Title = "EnochHub", Content = "Hyper Speed Edition Loaded", Duration = 4, Icon = "check" })
+-- 5. Auto Equip
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if getgenv().autoEquip then
+            if Char and not Char:FindFirstChildWhichIsA("Tool") and EquipTool then
+                pcall(function() EquipTool:FireServer(1) end)
+            end
+        end
+    end
+end)
+
+-- =====================================================
+-- 🖥️ UI SETUP (WIND UI)
+-- =====================================================
+
+local Window = WindUI:CreateWindow({
+    Title = "Seraphin Helper",
+    Icon = "rbxassetid://10723415903",
+    Author = "Raka Ganteng",
+    Folder = "SeraphinConfig",
+    Size = UDim2.fromOffset(580, 460),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+})
+
+local TabMain = Window:Tab({ Title = "Fishing", Icon = "anchor" })
+local TabTeleport = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
+local TabUtils = Window:Tab({ Title = "Utilities", Icon = "settings" })
+local TabMisc = Window:Tab({ Title = "Misc & Sell", Icon = "shopping-cart" })
+
+-- >> TAB MAIN
+local SectFish = TabMain:Section({ Title = "Hyper Fishing", TextSize = 17 })
+
+SectFish:Toggle({
+    Title = "Enable Hyper Fish",
+    Callback = function(v)
+        getgenv().fishingStart = v
+        if v then
+            startFishingHyperLoop()
+        else
+            pcall(function() CompleteGame:FireServer() end)
+            pcall(function() CancelInput:InvokeServer() end)
+        end
+    end
+})
+
+SectFish:Slider({
+    Title = "Delay Charge",
+    Min = 0.35, Max = 2.0, Default = 0.85, Precision = 2,
+    Callback = function(v) _G.FishSettings.DelayCharge = v end
+})
+
+SectFish:Slider({
+    Title = "Delay Reset",
+    Min = 0.05, Max = 1.0, Default = 0.1, Precision = 2,
+    Callback = function(v) _G.FishSettings.DelayReset = v end
+})
+
+-- >> TAB TELEPORT (FULL LIST FROM SOURCE)
+local SectTp = TabTeleport:Section({ Title = "Locations", TextSize = 17 })
+
+-- Full Coordinate List from EnochHub Source
+local Coords = {
+    ["Iron Cavern"] = Vector3.new(-8792.546, -588.000, 230.642),
+    ["Disco Event"] = Vector3.new(-8641.672, -547.500, 160.322),
+    ["Classic Island"] = Vector3.new(1440.843, 46.062, 2777.175),
+    ["Ancient Jungle"] = Vector3.new(1535.639, 3.159, -193.352),
+    ["Arrow Lever"] = Vector3.new(898.296, 8.449, -361.856),
+    ["Coral Reef"] = Vector3.new(-3207.538, 6.087, 2011.079),
+    ["Crater Island"] = Vector3.new(1058.976, 2.330, 5032.878),
+    ["Cresent Lever"] = Vector3.new(1419.750, 31.199, 78.570),
+    ["Crystalline Passage"] = Vector3.new(6051.567, -538.900, 4370.979),
+    ["Ancient Ruin"] = Vector3.new(6031.981, -585.924, 4713.157),
+    ["Diamond Lever"] = Vector3.new(1818.930, 8.449, -284.110),
+    ["Enchant Room"] = Vector3.new(3255.670, -1301.530, 1371.790),
+    ["Esoteric Island"] = Vector3.new(2164.470, 3.220, 1242.390),
+    ["Fisherman Island"] = Vector3.new(74.030, 9.530, 2705.230),
+    ["Hourglass Diamond Lever"] = Vector3.new(1484.610, 8.450, -861.010),
+    ["Kohana"] = Vector3.new(-668.732, 3.000, 681.580),
+    ["Lost Isle"] = Vector3.new(-3804.105, 2.344, -904.653),
+    ["Sacred Temple"] = Vector3.new(1461.815, -22.125, -670.234),
+    ["Second Enchant Altar"] = Vector3.new(1479.587, 128.295, -604.224),
+    ["Sisyphus Statue"] = Vector3.new(-3743.745, -135.074, -1007.554),
+    ["Treasure Room"] = Vector3.new(-3598.440, -281.274, -1645.855),
+    ["Tropical Island"] = Vector3.new(-2162.920, 2.825, 3638.445),
+    ["Underground Cellar"] = Vector3.new(2118.417, -91.448, -733.800),
+    ["Volcano"] = Vector3.new(-605.121, 19.516, 160.010),
+    ["Weather Machine"] = Vector3.new(-1518.550, 2.875, 1916.148),
+    ["Merchant"] = Vector3.new(-127.7, 2.7, 2759.0),
+}
+
+local AreaList = {} 
+for n in pairs(Coords) do table.insert(AreaList, n) end 
+table.sort(AreaList)
+
+SectTp:Dropdown({
+    Title = "Select Location",
+    Data = AreaList,
+    Callback = function(v)
+        if HRP and Coords[v] then
+            -- Unequip rod first to prevent glitches
+            if EquipTool then pcall(function() EquipTool:FireServer(0) end) end
+            task.wait(0.2)
+            HRP.CFrame = CFrame.new(Coords[v])
+        end
+    end
+})
+
+-- Custom Coordinates
+local CustomX, CustomY, CustomZ = "0", "0", "0"
+
+SectTp:Input({
+    Title = "X Coord",
+    Default = "0",
+    Callback = function(v) CustomX = v end
+})
+SectTp:Input({
+    Title = "Y Coord",
+    Default = "0",
+    Callback = function(v) CustomY = v end
+})
+SectTp:Input({
+    Title = "Z Coord",
+    Default = "0",
+    Callback = function(v) CustomZ = v end
+})
+
+SectTp:Button({
+    Title = "Teleport to Custom Coords",
+    Callback = function()
+        if HRP then
+            HRP.CFrame = CFrame.new(tonumber(CustomX), tonumber(CustomY), tonumber(CustomZ))
+        end
+    end
+})
+
+-- >> TAB UTILITIES
+local SectPlayer = TabUtils:Section({ Title = "Player & Visuals", TextSize = 17 })
+
+SectPlayer:Toggle({
+    Title = "Auto Equip Rod",
+    Callback = function(v) getgenv().autoEquip = v end
+})
+
+SectPlayer:Toggle({
+    Title = "Water Walk",
+    Callback = function(v)
+        if v then
+             local bv = Instance.new("BodyVelocity", HRP)
+             bv.Name = "WaterWalk"
+             bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+             bv.Velocity = Vector3.zero
+             
+             getgenv().wowConn = RunService.RenderStepped:Connect(function()
+                 if HRP and Hum then
+                     local move = Hum.MoveDirection
+                     local speed = Hum.WalkSpeed
+                     bv.Velocity = Vector3.new(move.X * speed, 0, move.Z * speed)
+                 end
+             end)
+        else
+            if HRP:FindFirstChild("WaterWalk") then HRP.WaterWalk:Destroy() end
+            if getgenv().wowConn then getgenv().wowConn:Disconnect() end
+        end
+    end
+})
+
+SectPlayer:Toggle({
+    Title = "Noclip",
+    Callback = function(v)
+        getgenv().noclip = v
+        if v then
+            getgenv().ncLoop = RunService.Stepped:Connect(function()
+                if Player.Character then
+                    for _, part in pairs(Player.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+                    end
+                end
+            end)
+        else
+            if getgenv().ncLoop then getgenv().ncLoop:Disconnect() end
+        end
+    end
+})
+
+SectPlayer:Button({
+    Title = "Extreme Potato Graphic",
+    Callback = function()
+        EnablePotato()
+        WindUI:Notify({ Title = "Graphics", Content = "Extreme FPS Boost Applied!" })
+    end
+})
+
+-- >> TAB MISC & SELL
+local SectAuto = TabMisc:Section({ Title = "Automation", TextSize = 17 })
+
+SectAuto:Toggle({
+    Title = "Auto Sell (Every 1 Min)",
+    Callback = function(v)
+        getgenv().autoSell = v
+        if v then
+             WindUI:Notify({ Title = "Auto Sell", Content = "Started! Selling every 60s." })
+        end
+    end
+})
+
+SectAuto:Toggle({
+    Title = "Auto Favorite Ruby",
+    Callback = function(v)
+        getgenv().autoFavRuby = v
+    end
+})
+
+SectAuto:Button({
+    Title = "Sell Now",
+    Callback = function()
+        if SellAll then 
+            pcall(function() SellAll:InvokeServer() end) 
+            WindUI:Notify({ Title = "Sold", Content = "Manual sell triggered." })
+        end
+    end
+})
+
+SectAuto:Button({
+    Title = "Clean RAM",
+    Callback = function()
+        collectgarbage("collect")
+        WindUI:Notify({ Title = "System", Content = "RAM Cleaned." })
+    end
+})
+
+WindUI:Notify({ Title = "Ready", Content = "Script Loaded Successfully!", Duration = 3 })
