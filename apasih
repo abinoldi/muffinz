@@ -1,14 +1,14 @@
 --[[
-    ENOCHHUB ULTIMATE - DUAL EDITION
-    --------------------------------
-    [TAB 1] BLATANT FISHING
-      > V1 (Original): Stable, Legit-like, Position-based logic.
-      > V2 (Hyper Speed): High-risk, Spam-based, Fixed-args logic.
+    ENOCHHUB ULTIMATE - HYPER SPEED EDITION
+    ---------------------------------------
+    [CORE]
+      > Fishing Logic: REPLACED with FishIT Hyper Speed (Spam Logic + Blockers).
+      > Anti-Fail Hook: Active to prevent server cancellation during spam.
     
-    [TAB 2] EXTRAS
+    [EXTRAS]
       > 9-Totem Formation (Ghost Mode)
       > Teleports (25+ Locations)
-      > Graphics (Extreme Potato)
+      > Utilities (Auto Sell, Auto Fav Ruby, Anti-AFK)
       > Background Secret Fish Monitor
 ]]
 
@@ -24,18 +24,13 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 --  1. CONFIGURATION & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_Dual_Config.json"
+local FileName = "EnochHub_HyperSpeed_Final.json"
 
 local DefaultConfig = {
-    -- >> V1 SETTINGS (Original)
-    FishingV1Enabled = false,
-    V1CatchDelay = 3.055,
-    V1LoopInterval = 1.715,
-    
-    -- >> V2 SETTINGS (Hyper Speed)
-    FishingV2Enabled = false,
-    V2ChargeDelay = 0.85, -- Default Hyper Speed
-    V2ResetDelay = 0.1,   -- Default Reset Speed
+    -- >> FISHING SETTINGS (Hyper Speed Only)
+    BlatantEnabled = false,
+    ChargeDelay = 0.85, -- Default from FishIT
+    ResetDelay = 0.1,   -- Default from FishIT
 
     -- >> GLOBAL / UTILS
     AutoEquip = true,
@@ -80,7 +75,7 @@ end
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = ReplicatedStorage:WaitForChild("Packages")
 
--- Modules (Required for Totem & Webhook)
+-- Modules
 local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
 local TierUtility = require(Shared:WaitForChild("TierUtility"))
 local Replion = require(Packages:WaitForChild("Replion")).Client
@@ -110,6 +105,7 @@ local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
 local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
 local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
 local RF_SellAllItems = GetRemote("RF/SellAllItems") or GetRemote("RF/SellAll") or GetRemote("RF/SellEverything")
+local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 
 -- Totem & Utility Remotes
@@ -118,7 +114,7 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  3. ANTI-FAIL BLOCKER (V2 HYPER SPEED ONLY)
+--  3. ANTI-FAIL BLOCKER (ESSENTIAL FOR HYPER SPEED)
 -- ==========================================================
 local BLOCKED_REMOTES = {
     [RF_ChargeFishingRod] = true,
@@ -130,8 +126,8 @@ local BLOCKED_REMOTES = {
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
-    -- Only active if V2 is Enabled. Blocks "Fail" signals from client-side sanity checks.
-    if Config.FishingV2Enabled and BLOCKED_REMOTES[self] and not checkcaller() then
+    -- Active if Blatant is Enabled. Blocks "Fail" signals to allow spamming.
+    if Config.BlatantEnabled and BLOCKED_REMOTES[self] and not checkcaller() then
         if method == "InvokeServer" then
             return task.wait(9e9) -- Infinite Yield (Prevent Return)
         elseif method == "FireServer" then
@@ -147,122 +143,77 @@ end)
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate",
+    Title = "EnochHub | Hyper Speed",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub",
     Folder = "EnochHub",
-    Size = UDim2.fromOffset(580, 550),
+    Size = UDim2.fromOffset(580, 500),
     Transparent = true,
     Theme = "Sky",
     Resizable = true,
 })
 
-local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
+local TabFish = Window:Tab({ Title = "Fishing", Icon = "anchor" })
 local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
 local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
 
 -- ==========================================================
---  5. FISHING LOGIC (V1 & V2)
+--  5. FISHING LOGIC (FISH-IT HYPER SPEED)
 -- ==========================================================
-local ThreadV1 = nil
-local ThreadV2 = nil
-local EquipThread = nil
+local FishThread = nil
 
--- Standard Fixed Args for V2 (Center Cast)
-local v2FishArgs = { -1.115296493039856, 0, 1763651451.636425 }
+-- Standard Fixed Args (Center Cast)
+local fishArgs = { -1.115296493039856, 0, 1763651451.636425 }
 
--- [LOGIC] V1 (Original EnochHub)
-local function ToggleV1(state)
-    Config.FishingV1Enabled = state
+local function ToggleBlatant(state)
+    Config.BlatantEnabled = state
     SaveSettings()
 
     if state then
-        -- Disable V2 if active
-        if Config.FishingV2Enabled then
-            Config.FishingV2Enabled = false
-            if ThreadV2 then task.cancel(ThreadV2) end
-            WindUI:Notify({ Title = "Mode Switch", Content = "Disabled V2 to run V1", Icon = "info" })
-        end
-        
+        -- Enable Auto Great on Server
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
         
-        ThreadV1 = task.spawn(function()
-            while Config.FishingV1Enabled do
-                local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local start = os.clock()
-                    -- Logic: Time + Position (Source: EnochHub V5)
-                    pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
-                    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
-                    
-                    local w = Config.V1CatchDelay - (os.clock() - start)
-                    if w > 0 then task.wait(w) end
-                    
-                    pcall(function() RE_FishingCompleted:FireServer() end)
-                    task.wait(0.3) -- Fixed Cancel Delay
-                    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-                end
-                task.wait(Config.V1LoopInterval)
-            end
-        end)
-        WindUI:Notify({ Title = "Fishing V1", Content = "Enabled (Legit/Stable)", Icon = "play" })
-    else
-        if ThreadV1 then task.cancel(ThreadV1) end
+        -- Clear Inputs
         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        WindUI:Notify({ Title = "Fishing V1", Content = "Disabled", Icon = "x" })
-    end
-end
+        task.wait(0.05)
 
--- [LOGIC] V2 (Hyper Speed / FishIT)
-local function ToggleV2(state)
-    Config.FishingV2Enabled = state
-    SaveSettings()
-
-    if state then
-        -- Disable V1 if active
-        if Config.FishingV1Enabled then
-            Config.FishingV1Enabled = false
-            if ThreadV1 then task.cancel(ThreadV1) end
-            WindUI:Notify({ Title = "Mode Switch", Content = "Disabled V1 to run V2", Icon = "info" })
-        end
-
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-        task.wait(0.1)
-
-        ThreadV2 = task.spawn(function()
-            while Config.FishingV2Enabled do
-                -- Logic: Async Spam + Fixed Args (Source: FishITNew)
+        FishThread = task.spawn(function()
+            while Config.BlatantEnabled do
+                -- 1. Spawn Charge (No Yield)
                 task.spawn(function() pcall(function() RF_ChargeFishingRod:InvokeServer() end) end)
-                task.spawn(function() pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(v2FishArgs)) end) end)
                 
-                -- Fast Wait
-                task.wait(Config.V2ChargeDelay)
+                -- 2. Spawn Request (No Yield, Fixed Args)
+                task.spawn(function() pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(fishArgs)) end) end)
                 
-                if not Config.FishingV2Enabled then break end
+                -- 3. Speed Wait
+                task.wait(Config.ChargeDelay)
+                
+                if not Config.BlatantEnabled then break end
 
+                -- 4. Complete
                 pcall(function() RE_FishingCompleted:FireServer() end)
-                task.wait(Config.V2ResetDelay)
+                
+                -- 5. Reset
+                task.wait(Config.ResetDelay)
                 pcall(function() RF_CancelFishingInputs:InvokeServer() end)
             end
         end)
-        WindUI:Notify({ Title = "Fishing V2", Content = "Enabled (Hyper Speed)", Icon = "zap" })
+        WindUI:Notify({ Title = "Hyper Speed", Content = "Enabled (FishIT Logic)", Icon = "zap" })
     else
-        if ThreadV2 then task.cancel(ThreadV2) end
+        if FishThread then task.cancel(FishThread) end
         -- Force Cleanup
         pcall(function() RE_FishingCompleted:FireServer() end)
         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        WindUI:Notify({ Title = "Fishing V2", Content = "Disabled", Icon = "x" })
+        WindUI:Notify({ Title = "Hyper Speed", Content = "Disabled", Icon = "x" })
     end
 end
 
 -- Auto Equip (Global)
 task.spawn(function()
     while true do
-        if Config.AutoEquip and (Config.FishingV1Enabled or Config.FishingV2Enabled) then
+        if Config.AutoEquip and Config.BlatantEnabled then
             if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
         end
         task.wait(0.5)
@@ -395,19 +346,14 @@ end
 --  7. TAB CONSTRUCTION
 -- ==========================================================
 
--- >> TAB: BLATANT (Separate Menus V1 & V2)
-local SectV1 = TabFish:Section({ Title = "Fishing V1 (Stable/Legit)", TextSize = 16 })
-SectV1:Toggle({ Title = "Enable V1", Value = Config.FishingV1Enabled, Callback = ToggleV1 })
-SectV1:Slider({ Title = "Catch Delay (Def: 3.055)", Min=0.1, Max=5, Default=Config.V1CatchDelay, Precision=3, Callback=function(v) Config.V1CatchDelay=v; SaveSettings() end })
-SectV1:Slider({ Title = "Loop Interval (Def: 1.715)", Min=0.5, Max=5, Default=Config.V1LoopInterval, Precision=3, Callback=function(v) Config.V1LoopInterval=v; SaveSettings() end })
+-- >> TAB: FISHING (Hyper Speed Only)
+local SectFish = TabFish:Section({ Title = "Controls", TextSize = 16 })
+SectFish:Toggle({ Title = "Enable Hyper Speed", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
 
-local SectV2 = TabFish:Section({ Title = "Fishing V2 (Hyper Speed)", TextSize = 16 })
-SectV2:Toggle({ Title = "Enable V2", Value = Config.FishingV2Enabled, Callback = ToggleV2 })
-SectV2:Slider({ Title = "Charge Delay (Def: 0.85)", Min=0.35, Max=1.5, Default=Config.V2ChargeDelay, Precision=2, Callback=function(v) Config.V2ChargeDelay=v; SaveSettings() end })
-SectV2:Slider({ Title = "Reset Delay (Def: 0.1)", Min=0.05, Max=1.0, Default=Config.V2ResetDelay, Precision=2, Callback=function(v) Config.V2ResetDelay=v; SaveSettings() end })
-
-local SectShared = TabFish:Section({ Title = "Global Settings", TextSize = 16 })
-SectShared:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
+local SectSet = TabFish:Section({ Title = "Configuration", TextSize = 16 })
+SectSet:Slider({ Title = "Charge Delay (Def: 0.85)", Min=0.35, Max=1.5, Default=Config.ChargeDelay, Precision=2, Callback=function(v) Config.ChargeDelay=v; SaveSettings() end })
+SectSet:Slider({ Title = "Reset Delay (Def: 0.1)", Min=0.05, Max=1.0, Default=Config.ResetDelay, Precision=2, Callback=function(v) Config.ResetDelay=v; SaveSettings() end })
+SectSet:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
 
 -- >> TAB: TOTEM
 local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
@@ -456,7 +402,50 @@ end})
 
 -- >> TAB: UTILITIES
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
-SectSystem:Toggle({ Title="Auto Sell All", Value=Config.AutoSellEnabled, Callback=function(s) Config.AutoSellEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoSellEnabled do if RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end task.wait(60) end end) end end })
+SectSystem:Toggle({ 
+    Title="Auto Sell All", 
+    Value=Config.AutoSellEnabled, 
+    Callback=function(s) 
+        Config.AutoSellEnabled=s; 
+        SaveSettings(); 
+        if s then 
+            task.spawn(function() 
+                while Config.AutoSellEnabled do 
+                    if RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end 
+                    task.wait(60) 
+                end 
+            end) 
+        end 
+    end 
+})
+
+SectSystem:Toggle({ 
+    Title = "Auto Fav Ruby", 
+    Value = Config.AutoFavRubyEnabled, 
+    Callback = function(s) 
+        Config.AutoFavRubyEnabled = s
+        SaveSettings()
+        if s then 
+            task.spawn(function() 
+                while Config.AutoFavRubyEnabled do 
+                    local rubyName = "Ruby"
+                    local inventory = Replion:GetExpect("Inventory")
+                    if inventory then
+                        for _, cat in pairs(inventory) do
+                            for _, item in ipairs(cat) do
+                                if (item.Identifier == rubyName or item.Name == rubyName) and not item.Favorite then
+                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID, true) end)
+                                end
+                            end
+                        end
+                    end
+                    task.wait(3) 
+                end 
+            end) 
+        end 
+    end 
+})
+
 SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=function(s) Config.AntiAfkEnabled=s; SaveSettings() end })
 SectSystem:Button({ Title="Teleport to Merchant", Icon="shopping-cart", Callback=function() if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-127.7, 2.7, 2759.0) end end })
 SectSystem:Button({ Title="Reset Config", Icon="trash", Callback=function() ResetConfig(); WindUI:Notify({Title="Reset", Content="Done."}) end })
@@ -470,7 +459,6 @@ SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Preci
 -- ==========================================================
 
 -- Potato Mode Logic
-local PotatoLoop = nil
 local function ApplyPotato()
     Lighting.GlobalShadows = false; Lighting.Brightness = 1; Lighting.FogEnd = 9e9; Lighting.ClockTime = 12
     local t = Workspace:FindFirstChildOfClass("Terrain")
@@ -538,7 +526,6 @@ task.spawn(function()
 end)
 
 -- Restore State
-if Config.FishingV1Enabled then ToggleV1(true) end
-if Config.FishingV2Enabled then ToggleV2(true) end
+if Config.BlatantEnabled then ToggleBlatant(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Dual-Edition Loaded", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Hyper Speed Edition Loaded", Duration = 4, Icon = "check" })
