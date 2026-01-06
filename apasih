@@ -1,9 +1,10 @@
 --[[
-    ENOCHHUB ULTIMATE - COMPLETE EDITION
-    - [NEW] Auto 9 Totem Formation (Physics Fly)
-    - [NEW] Merchant Sniper & Auto Buy
-    - Blatant Fishing V5 + Auto Perfection
-    - Safe Teleports & Graphics
+    ENOCHHUB ULTIMATE - FINAL RELEASE
+    - [NEW] Full Teleport Coordinates List
+    - [NEW] Reset Config Button
+    - Auto 9 Totem & Merchant Sniper
+    - Blatant V5 + Auto Perfection
+    - Webhook (OG Endpoint)
     - Auto Save/Load System
 ]]
 
@@ -19,9 +20,9 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_Full_Config.json"
+local FileName = "EnochHub_Final_Config.json"
 
-local Config = {
+local DefaultConfig = {
     -- Blatant
     BlatantEnabled = false,
     AutoEquip = true,
@@ -43,10 +44,14 @@ local Config = {
     PotatoModeEnabled = false,
     PotatoFPS = 60,
 
-    -- Totem & Merchant (New)
+    -- Totem & Merchant
     TotemType = "Luck Totem",
     MerchantAutoBuy = false
 }
+
+local Config = {} 
+-- Clone default to current config
+for k,v in pairs(DefaultConfig) do Config[k] = v end
 
 -- Load Settings
 if isfile and isfile(FileName) then
@@ -61,6 +66,14 @@ local function SaveSettings()
     if writefile then
         pcall(function() writefile(FileName, HttpService:JSONEncode(Config)) end)
     end
+end
+
+local function ResetConfig()
+    if delfile and isfile(FileName) then
+        delfile(FileName)
+    end
+    for k,v in pairs(DefaultConfig) do Config[k] = v end
+    -- Note: UI won't visually update instantly without refresh, but internal logic resets.
 end
 
 -- ==========================================================
@@ -80,8 +93,8 @@ local Window = WindUI:CreateWindow({
 })
 
 local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
-local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" }) -- NEW
-local TabMerch = Window:Tab({ Title = "Merchant", Icon = "shopping-cart" }) -- NEW
+local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
+local TabMerch = Window:Tab({ Title = "Merchant", Icon = "shopping-cart" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
 local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" })
 local TabWeb = Window:Tab({ Title = "Webhook", Icon = "globe" })
@@ -109,7 +122,6 @@ local function GetRemote(name)
     return current:FindFirstChild(name)
 end
 
--- Fishing Remotes
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
 local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
@@ -119,18 +131,17 @@ local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 
--- Totem/Merchant Remotes
 local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
 local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 
 -- ==========================================================
---  [FEATURE 1] AUTO 9 TOTEM LOGIC
+--  [FEATURE] AUTO 9 TOTEM
 -- ==========================================================
 local AUTO_9_TOTEM_ACTIVE = false
 local AUTO_9_TOTEM_THREAD = nil
-local TotemToggleUI = nil -- Reference to toggle button
+local TotemToggleUI = nil 
 
 local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
 local TOTEM_NAMES = {"Luck Totem", "Mutation Totem", "Shiny Totem"}
@@ -154,7 +165,6 @@ local function GetTotemUUID(name)
     return nil
 end
 
--- V3 Physics (Noclip/Fly)
 local stateConnection = nil
 local function EnableV3Physics()
     local char = LocalPlayer.Character
@@ -164,7 +174,6 @@ local function EnableV3Physics()
 
     if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
     hum.PlatformStand = true 
-    
     hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     if not stateConnection then
@@ -172,12 +181,10 @@ local function EnableV3Physics()
             if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end
         end)
     end
-
     local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root)
     bg.Name = "FlyGuiGyro"; bg.P = 9e4; bg.maxTorque = Vector3.new(9e9, 9e9, 9e9); bg.CFrame = root.CFrame
     local bv = root:FindFirstChild("FlyGuiVelocity") or Instance.new("BodyVelocity", root)
     bv.Name = "FlyGuiVelocity"; bv.velocity = Vector3.zero; bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
-
     task.spawn(function()
         while AUTO_9_TOTEM_ACTIVE and char do
             for _, v in ipairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
@@ -190,7 +197,6 @@ local function DisableV3Physics()
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChild("Humanoid")
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    
     if root then
         if root:FindFirstChild("FlyGuiGyro") then root.FlyGuiGyro:Destroy() end
         if root:FindFirstChild("FlyGuiVelocity") then root.FlyGuiVelocity:Destroy() end
@@ -207,7 +213,6 @@ local function FlyPhysicsTo(targetPos)
     local bv = root:FindFirstChild("FlyGuiVelocity")
     local bg = root:FindFirstChild("FlyGuiGyro")
     if not bv or not bg then EnableV3Physics(); bv = root.FlyGuiVelocity; bg = root.FlyGuiGyro end
-    
     while AUTO_9_TOTEM_ACTIVE do
         local dist = (targetPos - root.Position).Magnitude
         bg.CFrame = CFrame.lookAt(root.Position, targetPos)
@@ -225,19 +230,16 @@ local function Run9TotemLoop()
             if TotemToggleUI then TotemToggleUI:Set(false) end
             return 
         end
-
         local root = LocalPlayer.Character.HumanoidRootPart
         local startPos = root.Position
         if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
         EnableV3Physics()
-
         for i, refSpot in ipairs(REF_SPOTS) do
             if not AUTO_9_TOTEM_ACTIVE then break end
             local targetPos = startPos + (refSpot - REF_CENTER)
             FlyPhysicsTo(targetPos)
             task.wait(0.6)
-            
-            uuid = GetTotemUUID(Config.TotemType) -- Refresh UUID
+            uuid = GetTotemUUID(Config.TotemType)
             if uuid then
                 pcall(function() RE_SpawnTotem:FireServer(uuid) end)
                 task.spawn(function() for k=1,5 do RE_EquipToolFromHotbar:FireServer(1) task.wait(0.1) end end)
@@ -248,7 +250,6 @@ local function Run9TotemLoop()
             end
             task.wait(1.5)
         end
-
         if AUTO_9_TOTEM_ACTIVE then FlyPhysicsTo(startPos) end
         if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
         DisableV3Physics()
@@ -259,18 +260,10 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE 2] MERCHANT LOGIC
+--  [FEATURE] MERCHANT
 -- ==========================================================
-local MerchantReplion = nil
 local MerchUpdateThread = nil
 local AutoBuyMerchThread = nil
-
-local MerchantStaticItems = {
-    {Name = "Fluorescent Rod", ID = 1, Price = 685000}, {Name = "Hazmat Rod", ID = 2, Price = 1380000},
-    {Name = "Singularity Bait", ID = 3, Price = 8200000}, {Name = "Royal Bait", ID = 4, Price = 425000},
-    {Name = "Luck Totem", ID = 5, Price = 650000}, {Name = "Shiny Totem", ID = 7, Price = 400000},
-    {Name = "Mutation Totem", ID = 8, Price = 800000}
-}
 
 local function FormatNumber(n)
     if n >= 1e9 then return string.format("%.1fB", n/1e9) elseif n >= 1e6 then return string.format("%.1fM", n/1e6) elseif n >= 1e3 then return string.format("%.1fK", n/1e3) else return tostring(n) end
@@ -279,10 +272,8 @@ end
 local function GetMerchantDetails()
     local r = Replion:WaitReplion("Merchant", 5)
     if not r then return {} end
-    
     local itemDetails = {}
     local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
-    
     if r.Data and r.Data.Items then
         for _, itemID in ipairs(r.Data.Items) do
             local mData = nil
@@ -312,17 +303,14 @@ local function RunAutoBuyMerch()
     AutoBuyMerchThread = task.spawn(function()
         while Config.MerchantAutoBuy do
             local items = GetMerchantDetails()
-            for _, item in ipairs(items) do
-                BuyMerchantItem(item.ID, item.Name)
-                task.wait(0.5)
-            end
+            for _, item in ipairs(items) do BuyMerchantItem(item.ID, item.Name) task.wait(0.5) end
             task.wait(2)
         end
     end)
 end
 
 -- ==========================================================
---  EXISTING HELPERS (WEBHOOK, BLATANT, ETC)
+--  HELPERS
 -- ==========================================================
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -372,12 +360,8 @@ local function ToggleWebhook(state)
     end
 end
 
--- ==========================================================
---  BLATANT CORE
--- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
-
 local function ToggleBlatant(state)
     _G.EnochHub_BlatantActive = state
     Config.BlatantEnabled = state
@@ -450,7 +434,6 @@ TotemToggleUI = SectTotem:Toggle({
 -- 3. MERCHANT TAB
 local SectMerch = TabMerch:Section({ Title = "Merchant Control", TextSize = 17 })
 local MerchDisplay = SectMerch:Paragraph({ Title = "Status", Desc = "Turn on Sync to see stock." })
-
 SectMerch:Toggle({
     Title = "Sync Stock", Desc = "Updates list below.", Value = false,
     Callback = function(state)
@@ -472,7 +455,6 @@ SectMerch:Toggle({
         end
     end
 })
-
 SectMerch:Toggle({
     Title = "Auto Buy All", Desc = "Buys everything in stock.", Value = Config.MerchantAutoBuy,
     Callback = function(state)
@@ -480,45 +462,40 @@ SectMerch:Toggle({
         if state then RunAutoBuyMerch() else if AutoBuyMerchThread then task.cancel(AutoBuyMerchThread) end end
     end
 })
-
-SectMerch:Button({
-    Title = "Teleport to Merchant",
-    Callback = function()
-        local pos = Vector3.new(-127.7, 2.7, 2759.0)
-        if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos) end
-    end
-})
+SectMerch:Button({ Title = "Teleport to Merchant", Callback = function()
+    local pos = Vector3.new(-127.7, 2.7, 2759.0)
+    if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos) end
+end})
 
 -- 4. TELEPORT TAB
 local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
 local Coords = {
-    ["Ancient Jungle"] = {Pos = Vector3.new(1535.6, 3.2, -193.3), Look = Vector3.new(0.5, 0, 0.8)},
-    ["Ancient Ruin"] = {Pos = Vector3.new(6032.0, -585.9, 4713.1), Look = Vector3.new(0.3, 0, -0.9)},
-    ["Arrow Lever"] = {Pos = Vector3.new(898.3, 8.4, -361.9), Look = Vector3.new(0, 0, 1)},
-    ["Classic Island"] = {Pos = Vector3.new(1440.8, 46.0, 2777.2), Look = Vector3.new(0.9, 0, 0.3)},
-    ["Coral Reef"] = {Pos = Vector3.new(-3207.5, 6.0, 2011.0), Look = Vector3.new(0.9, 0, 0.2)},
-    ["Crater Island"] = {Pos = Vector3.new(1059.0, 2.3, 5032.9), Look = Vector3.new(-0.8, 0, 0.6)},
-    ["Cresent Lever"] = {Pos = Vector3.new(1419.8, 31.2, 78.6), Look = Vector3.new(0, 0, -1)},
-    ["Crystalline Passage"] = {Pos = Vector3.new(6051.6, -538.9, 4371.0), Look = Vector3.new(0.1, 0, 1)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.9, 8.4, -284.1), Look = Vector3.new(0, 0, -1)},
-    ["Disco Event"] = {Pos = Vector3.new(-8641.7, -547.5, 160.3), Look = Vector3.new(0.9, 0, 0.2)},
-    ["Enchant Room"] = {Pos = Vector3.new(3255.7, -1301.5, 1371.8), Look = Vector3.new(0, 0, -1)},
-    ["Esoteric Island"] = {Pos = Vector3.new(2164.5, 3.2, 1242.4), Look = Vector3.new(0, 0, -1)},
-    ["Fisherman Island"] = {Pos = Vector3.new(74.0, 9.5, 2705.2), Look = Vector3.new(0, 0, -1)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.6, 8.5, -861.0), Look = Vector3.new(0, 0, -1)},
-    ["Iron Cavern"] = {Pos = Vector3.new(-8792.5, -588.0, 230.6), Look = Vector3.new(0.7, 0, 0.7)},
-    ["Kohana"] = {Pos = Vector3.new(-668.7, 3.0, 681.6), Look = Vector3.new(0.9, 0, 0.5)},
-    ["Lost Isle"] = {Pos = Vector3.new(-3804.1, 2.3, -904.6), Look = Vector3.new(-0.9, 0, 0.4)},
-    ["Sacred Temple"] = {Pos = Vector3.new(1461.8, -22.1, -670.2), Look = Vector3.new(-1, 0, 0.1)},
-    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.6, 128.3, -604.2), Look = Vector3.new(-0.3, 0, -0.9)},
-    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.7, -135.0, -1007.5), Look = Vector3.new(0.3, 0, 1.0)},
-    ["Treasure Room"] = {Pos = Vector3.new(-3598.4, -281.3, -1645.8), Look = Vector3.new(0, 0, -1)},
-    ["Tropical Island"] = {Pos = Vector3.new(-2162.9, 2.8, 3638.4), Look = Vector3.new(0.4, 0, 0.9)},
-    ["Underground Cellar"] = {Pos = Vector3.new(2118.4, -91.4, -733.8), Look = Vector3.new(0.8, 0, 0.5)},
-    ["Volcano"] = {Pos = Vector3.new(-605.1, 19.5, 160.0), Look = Vector3.new(0.8, 0, 0.5)},
-    ["Weather Machine"] = {Pos = Vector3.new(-1518.5, 2.9, 1916.1), Look = Vector3.new(0, 0, 1)},
+    ["Iron Cavern"] = Vector3.new(-8792.5, -588.0, 230.6),
+    ["Disco Event"] = Vector3.new(-8641.7, -547.5, 160.3),
+    ["Classic Island"] = Vector3.new(1440.8, 46.0, 2777.2),
+    ["Ancient Jungle"] = Vector3.new(1535.6, 3.2, -193.3),
+    ["Arrow Lever"] = Vector3.new(898.3, 8.4, -361.9),
+    ["Coral Reef"] = Vector3.new(-3207.5, 6.0, 2011.0),
+    ["Crater Island"] = Vector3.new(1059.0, 2.3, 5032.9),
+    ["Cresent Lever"] = Vector3.new(1419.8, 31.2, 78.6),
+    ["Crystalline Passage"] = Vector3.new(6051.6, -538.9, 4371.0),
+    ["Ancient Ruin"] = Vector3.new(6032.0, -585.9, 4713.1),
+    ["Diamond Lever"] = Vector3.new(1818.9, 8.4, -284.1),
+    ["Enchant Room"] = Vector3.new(3255.7, -1301.5, 1371.8),
+    ["Esoteric Island"] = Vector3.new(2164.5, 3.2, 1242.4),
+    ["Fisherman Island"] = Vector3.new(74.0, 9.5, 2705.2),
+    ["Hourglass Diamond Lever"] = Vector3.new(1484.6, 8.5, -861.0),
+    ["Kohana"] = Vector3.new(-668.7, 3.0, 681.6),
+    ["Lost Isle"] = Vector3.new(-3804.1, 2.3, -904.6),
+    ["Sacred Temple"] = Vector3.new(1461.8, -22.1, -670.2),
+    ["Second Enchant Altar"] = Vector3.new(1479.6, 128.3, -604.2),
+    ["Sisyphus Statue"] = Vector3.new(-3743.7, -135.0, -1007.5),
+    ["Treasure Room"] = Vector3.new(-3598.4, -281.3, -1645.8),
+    ["Tropical Island"] = Vector3.new(-2162.9, 2.8, 3638.4),
+    ["Underground Cellar"] = Vector3.new(2118.4, -91.4, -733.8),
+    ["Volcano"] = Vector3.new(-605.1, 19.5, 160.0),
+    ["Weather Machine"] = Vector3.new(-1518.5, 2.9, 1916.1)
 }
-
 local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
 
 SectTp:Dropdown({
@@ -541,6 +518,10 @@ SectWeb:Input({ Title = "URL", Default = Config.WebhookUrl, Callback = function(
 local SectUtil = TabUtil:Section({ Title = "Auto", TextSize = 17 })
 SectUtil:Toggle({ Title = "Auto Sell", Value = Config.AutoSellEnabled, Callback = function(v) Config.AutoSellEnabled = v; SaveSettings() end })
 SectUtil:Toggle({ Title = "Anti-AFK", Value = Config.AntiAfkEnabled, Callback = function(v) Config.AntiAfkEnabled = v; SaveSettings() end })
+SectUtil:Button({ Title = "RESET ALL CONFIG", Callback = function() 
+    ResetConfig() 
+    WindUI:Notify({Title = "Reset", Content = "Settings Wiped. Rejoin to apply fully.", Icon = "trash", Duration = 5}) 
+end })
 
 -- Init
 if Config.BlatantEnabled then ToggleBlatant(true) end
