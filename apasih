@@ -343,35 +343,12 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  BLATANT
+--  [FEATURE] BLATANT
 -- ==========================================================
-task.spawn(function()
-    local success, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
-    if success and FishingController then
-        local Old_Charge = FishingController.RequestChargeFishingRod
-        local Old_Cast = FishingController.SendFishingRequestToServer
-        FishingController.RequestChargeFishingRod = function(...) if _G.EnochHub_BlatantActive then return end return Old_Charge(...) end
-        FishingController.SendFishingRequestToServer = function(...) if _G.EnochHub_BlatantActive then return false end return Old_Cast(...) end
-    end
-end)
-
-local mt = getrawmetatable(game)
-local old_namecall = mt.__namecall
-setreadonly(mt, false)
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    if _G.EnochHub_BlatantActive and not checkcaller() then
-        if method == "InvokeServer" and (self.Name == "RequestFishingMinigameStarted" or self.Name == "ChargeFishingRod") then return nil end
-        if method == "FireServer" and self.Name == "FishingCompleted" then return nil end
-    end
-    return old_namecall(self, ...)
-end)
-setreadonly(mt, true)
-
 local BlatantThread = nil
 local EquipThread = nil
 
-function ToggleBlatant(state)
+local function ToggleBlatant(state)
     _G.EnochHub_BlatantActive = state
     Config.BlatantEnabled = state
     SaveSettings()
@@ -381,12 +358,11 @@ function ToggleBlatant(state)
         BlatantThread = task.spawn(function()
             while Config.BlatantEnabled do
                 task.spawn(function()
-                    local char = LocalPlayer.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
+                    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
                         local start = os.clock()
                         pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
-                        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(hrp.Position.X, hrp.Position.Z) end)
+                        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
                         local w = Config.CatchDelay - (os.clock() - start)
                         if w > 0 then task.wait(w) end
                         pcall(function() RE_FishingCompleted:FireServer() end)
@@ -403,13 +379,13 @@ function ToggleBlatant(state)
                 task.wait(0.5)
             end
         end)
-        WindUI:Notify({ Title = "Blatant", Content = "Enabled.", Icon = "check" })
+        WindUI:Notify({ Title = "Blatant", Content = "Enabled", Icon = "zap" })
     else
         if BlatantThread then task.cancel(BlatantThread) end
         if EquipThread then task.cancel(EquipThread) end
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-        WindUI:Notify({ Title = "Blatant", Content = "Disabled.", Icon = "x" })
+        WindUI:Notify({ Title = "Blatant", Content = "Disabled", Icon = "x" })
     end
 end
 
