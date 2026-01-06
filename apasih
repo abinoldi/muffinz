@@ -1,7 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - UPDATED VERSION
-    - Fixed: Auto Sell (Faster & more reliable)
-    - Added: Advanced Graphics (No Anim, No VFX, No Cutscene, Inf Zoom, Black Screen, FPS Boost)
+    ENOCHHUB ULTIMATE - FIX: ENABLE/DISABLE SPAM
+    - [FIX] Forces "Legit Auto Fish" to OFF immediately after every cast to prevent server toggle.
+    - [FIX] Auto Sell logic remains fixed (pauses fishing correctly).
+    - [FULL] Teleport Coordinates & Background Monitor.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,7 +17,7 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_Final_Config_V2.json"
+local FileName = "EnochHub_Final_Config.json"
 
 local DefaultConfig = {
     -- Blatant
@@ -31,15 +32,9 @@ local DefaultConfig = {
     AutoFavRubyEnabled = false,
     AntiAfkEnabled = true,
     
-    -- Graphics / Performance
+    -- Graphics
     PotatoModeEnabled = false,
     PotatoFPS = 60,
-    NoAnimEnabled = false,
-    NoVFXEnabled = false,
-    NoCutsceneEnabled = false,
-    InfZoomEnabled = false,
-    Disable3DEnabled = false,
-    FPSBoostEnabled = false,
 
     -- Totem
     TotemType = "Luck Totem"
@@ -73,7 +68,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate",
+    Title = "EnochHub | Ultimate (Final Fix)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -89,6 +84,7 @@ local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
 local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
 
 _G.EnochHub_BlatantActive = false
+_G.EnochHub_IsSelling = false 
 
 -- ==========================================================
 --  DATA & MODULES
@@ -124,10 +120,8 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  [LOGIC] GRAPHICS & OPTIMIZATION FUNCTIONS
+--  [FEATURE] GRAPHICS (POTATO)
 -- ==========================================================
-
--- 1. POTATO MODE (BASIC)
 local PotatoLoop = nil
 local function ApplyPotato()
     Lighting.GlobalShadows = false; Lighting.Brightness = 1; Lighting.FogEnd = 9e9; Lighting.ClockTime = 12
@@ -152,238 +146,6 @@ local function TogglePotato(state)
     else
         if PotatoLoop then task.cancel(PotatoLoop) end
         if setfpscap then setfpscap(60) end
-    end
-end
-
--- 2. NO ANIMATION
-local originalAnimator = nil
-local originalAnimateScript = nil
-local isNoAnimationActive = false
-
-local function DisableAnimations()
-    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-
-    local animateScript = character:FindFirstChild("Animate")
-    if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then
-        originalAnimateScript = animateScript.Enabled
-        animateScript.Enabled = false
-    end
-
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if animator then
-        originalAnimator = animator 
-        animator:Destroy()
-    end
-end
-
-local function EnableAnimations()
-    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local animateScript = character:FindFirstChild("Animate")
-    if animateScript and originalAnimateScript ~= nil then
-        animateScript.Enabled = originalAnimateScript
-    end
-    
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-
-    local existingAnimator = humanoid:FindFirstChildOfClass("Animator")
-    if not existingAnimator then
-        if originalAnimator and not originalAnimator.Parent then
-            originalAnimator.Parent = humanoid
-        else
-            Instance.new("Animator").Parent = humanoid
-        end
-    end
-    originalAnimator = nil
-end
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    if isNoAnimationActive then
-        task.wait(0.2)
-        DisableAnimations()
-    end
-end)
-
-local function ToggleNoAnim(state)
-    isNoAnimationActive = state
-    Config.NoAnimEnabled = state
-    SaveSettings()
-    if state then DisableAnimations() else EnableAnimations() end
-end
-
--- 3. REMOVE VFX / SKIN EFFECT
-local VFXControllerModule = nil
-local originalVFXHandle = nil
-pcall(function()
-    VFXControllerModule = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("VFXController"))
-    if VFXControllerModule then originalVFXHandle = VFXControllerModule.Handle end
-end)
-
-local function ToggleNoVFX(state)
-    Config.NoVFXEnabled = state
-    SaveSettings()
-    if not VFXControllerModule then return end
-
-    if state then
-        VFXControllerModule.Handle = function(...) end
-        VFXControllerModule.RenderAtPoint = function(...) end
-        VFXControllerModule.RenderInstance = function(...) end
-        local cosmeticFolder = Workspace:FindFirstChild("CosmeticFolder")
-        if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
-    else
-        if originalVFXHandle then VFXControllerModule.Handle = originalVFXHandle end
-    end
-end
-
--- 4. NO CUTSCENE
-local CutsceneController = nil
-local OldPlayCutscene = nil
-pcall(function()
-    CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
-    if CutsceneController and CutsceneController.Play then OldPlayCutscene = CutsceneController.Play end
-end)
-
-local function ToggleNoCutscene(state)
-    Config.NoCutsceneEnabled = state
-    SaveSettings()
-    if not CutsceneController or not OldPlayCutscene then return end
-    
-    CutsceneController.Play = function(self, ...)
-        if Config.NoCutsceneEnabled then return end
-        return OldPlayCutscene(self, ...)
-    end
-end
-
--- 5. INFINITE ZOOM
-local defaultMaxZoom = LocalPlayer.CameraMaxZoomDistance or 128
-local zoomLoopConnection = nil
-local function ToggleInfZoom(state)
-    Config.InfZoomEnabled = state
-    SaveSettings()
-    if state then
-        defaultMaxZoom = LocalPlayer.CameraMaxZoomDistance
-        LocalPlayer.CameraMaxZoomDistance = 100000
-        if zoomLoopConnection then zoomLoopConnection:Disconnect() end
-        zoomLoopConnection = RunService.RenderStepped:Connect(function()
-            LocalPlayer.CameraMaxZoomDistance = 100000
-        end)
-    else
-        if zoomLoopConnection then zoomLoopConnection:Disconnect() end
-        LocalPlayer.CameraMaxZoomDistance = defaultMaxZoom
-    end
-end
-
--- 6. DISABLE 3D RENDERING
-local function ToggleDisable3D(state)
-    Config.Disable3DEnabled = state
-    SaveSettings()
-    local Camera = Workspace.CurrentCamera
-    
-    if state then
-        if not _G.BlackScreenGUI then
-            _G.BlackScreenGUI = Instance.new("ScreenGui")
-            _G.BlackScreenGUI.Name = "SaverMode_Black"
-            _G.BlackScreenGUI.IgnoreGuiInset = true
-            _G.BlackScreenGUI.DisplayOrder = -999 
-            _G.BlackScreenGUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
-            
-            local Frame = Instance.new("Frame", _G.BlackScreenGUI)
-            Frame.Size = UDim2.new(1, 0, 1, 0)
-            Frame.BackgroundColor3 = Color3.new(0, 0, 0)
-            Frame.BorderSizePixel = 0
-            
-            local Label = Instance.new("TextLabel", Frame)
-            Label.Size = UDim2.new(1, 0, 0.1, 0)
-            Label.Position = UDim2.new(0, 0, 0.1, 0)
-            Label.BackgroundTransparency = 1
-            Label.Text = "Saver Mode Active"
-            Label.TextColor3 = Color3.fromRGB(60, 60, 60)
-            Label.TextSize = 16
-            Label.Font = Enum.Font.GothamBold
-        end
-        _G.BlackScreenGUI.Enabled = true
-        _G.OldCamType = Camera.CameraType
-        Camera.CameraType = Enum.CameraType.Scriptable
-        Camera.CFrame = CFrame.new(0, 100000, 0) 
-    else
-        if _G.OldCamType then Camera.CameraType = _G.OldCamType else Camera.CameraType = Enum.CameraType.Custom end
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            Camera.CameraSubject = LocalPlayer.Character.Humanoid
-        end
-        if _G.BlackScreenGUI then _G.BlackScreenGUI.Enabled = false end
-    end
-end
-
--- 7. FPS ULTRA BOOST
-local isBoostActive = false
-local originalLightingValues = {}
-local function ToggleFPSBoost(state)
-    Config.FPSBoostEnabled = state
-    SaveSettings()
-    
-    if state then
-        if not next(originalLightingValues) then
-            originalLightingValues.GlobalShadows = Lighting.GlobalShadows
-            originalLightingValues.FogEnd = Lighting.FogEnd
-            originalLightingValues.Brightness = Lighting.Brightness
-            originalLightingValues.ClockTime = Lighting.ClockTime
-            originalLightingValues.Ambient = Lighting.Ambient
-            originalLightingValues.OutdoorAmbient = Lighting.OutdoorAmbient
-        end
-        
-        pcall(function()
-            for _, v in pairs(Workspace:GetDescendants()) do
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Explosion") then v.Enabled = false
-                elseif v:IsA("Beam") or v:IsA("Light") then v.Enabled = false
-                elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
-            end
-        end)
-        
-        pcall(function()
-            for _, effect in pairs(Lighting:GetChildren()) do if effect:IsA("PostEffect") then effect.Enabled = false end end
-            Lighting.GlobalShadows = false
-            Lighting.FogEnd = 9e9
-            Lighting.Brightness = 0
-            Lighting.ClockTime = 14
-            Lighting.Ambient = Color3.new(0, 0, 0)
-            Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
-        end)
-        
-        local Terrain = Workspace:FindFirstChildOfClass("Terrain")
-        if Terrain then
-            pcall(function()
-                Terrain.WaterWaveSize = 0
-                Terrain.WaterWaveSpeed = 0
-                Terrain.WaterReflectance = 0
-                Terrain.WaterTransparency = 1
-                Terrain.Decoration = false
-            end)
-        end
-        
-        pcall(function()
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-            settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-            settings().Rendering.TextureQuality = Enum.TextureQuality.Low
-        end)
-
-        if setfpscap then pcall(function() setfpscap(100) end) end 
-        if collectgarbage then collectgarbage("collect") end
-    else
-        pcall(function()
-            if originalLightingValues.GlobalShadows ~= nil then
-                Lighting.GlobalShadows = originalLightingValues.GlobalShadows
-                Lighting.FogEnd = originalLightingValues.FogEnd
-                Lighting.Brightness = originalLightingValues.Brightness
-                Lighting.ClockTime = originalLightingValues.ClockTime
-                Lighting.Ambient = originalLightingValues.Ambient
-                Lighting.OutdoorAmbient = originalLightingValues.OutdoorAmbient
-            end
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-            for _, effect in pairs(Lighting:GetChildren()) do if effect:IsA("PostEffect") then effect.Enabled = true end end
-        end)
-        if setfpscap then pcall(function() setfpscap(60) end) end
     end
 end
 
@@ -514,7 +276,7 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT
+--  [FEATURE] BLATANT (FIXED: ANTI-SPAM LOGIC)
 -- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
@@ -525,28 +287,43 @@ local function ToggleBlatant(state)
     SaveSettings()
     
     if state then
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
+        -- Initial disable of legit mode
+        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+        
         BlatantThread = task.spawn(function()
             while Config.BlatantEnabled do
-                task.spawn(function()
-                    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local start = os.clock()
-                        pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
-                        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
-                        local w = Config.CatchDelay - (os.clock() - start)
-                        if w > 0 then task.wait(w) end
-                        pcall(function() RE_FishingCompleted:FireServer() end)
-                        task.wait(Config.CancelDelay)
-                        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-                    end
-                end)
+                if not _G.EnochHub_IsSelling then
+                    task.spawn(function()
+                        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            local start = os.clock()
+                            
+                            -- 1. Charge & Start
+                            pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
+                            pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
+                            
+                            -- 2. FORCE DISABLE LEGIT AUTO (Prevent "Enabled" Notification/Logic)
+                            pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
+
+                            -- 3. Wait Catch Delay
+                            local w = Config.CatchDelay - (os.clock() - start)
+                            if w > 0 then task.wait(w) end
+                            
+                            -- 4. Finish
+                            pcall(function() RE_FishingCompleted:FireServer() end)
+                            task.wait(Config.CancelDelay)
+                            pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                        end
+                    end)
+                end
                 task.wait(Config.LoopInterval)
             end
         end)
         EquipThread = task.spawn(function()
             while Config.BlatantEnabled do
-                if Config.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+                if Config.AutoEquip and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                end
                 task.wait(0.5)
             end
         end)
@@ -576,31 +353,6 @@ local function ToggleAntiAfk(state)
         end
     else
         if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
-    end
-end
-
--- ==========================================================
---  [FEATURE] AUTO SELL (FIXED)
--- ==========================================================
-local AutoSellThread = nil
-local function ToggleAutoSell(state)
-    Config.AutoSellEnabled = state
-    SaveSettings()
-    
-    if AutoSellThread then task.cancel(AutoSellThread) AutoSellThread = nil end
-    
-    if state then
-        AutoSellThread = task.spawn(function()
-            while Config.AutoSellEnabled do
-                if RF_SellAllItems then 
-                    pcall(function() RF_SellAllItems:InvokeServer() end) 
-                end
-                task.wait(5) -- Checked every 5 seconds (Fixed from 60)
-            end
-        end)
-        WindUI:Notify({ Title = "Auto Sell", Content = "Started (Interval: 5s)", Icon = "dollar-sign" })
-    else
-        WindUI:Notify({ Title = "Auto Sell", Content = "Stopped", Icon = "x" })
     end
 end
 
@@ -655,7 +407,6 @@ SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n)
     if d and LocalPlayer.Character then
         if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end
         task.wait(0.3)
-        -- flatten look to avoid tilt
         local look = Vector3.new(d.Look.X, 0, d.Look.Z)
         LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look)
     end
@@ -663,7 +414,35 @@ end})
 
 -- 4. UTILITIES
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
-SectSystem:Toggle({ Title="Auto Sell All", Value=Config.AutoSellEnabled, Callback=ToggleAutoSell })
+
+SectSystem:Toggle({ 
+    Title="Auto Sell All", 
+    Value=Config.AutoSellEnabled, 
+    Callback=function(s) 
+        Config.AutoSellEnabled=s 
+        SaveSettings() 
+        if s then 
+            task.spawn(function() 
+                while Config.AutoSellEnabled do 
+                    if RF_SellAllItems then 
+                        _G.EnochHub_IsSelling = true
+                        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+                        task.wait(0.8) 
+                        pcall(function() RF_SellAllItems:InvokeServer() end)
+                        _G.EnochHub_IsSelling = false
+                        if Config.BlatantEnabled and Config.AutoEquip then
+                             pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+                        end
+                        WindUI:Notify({Title="System", Content="Sold Items", Duration=1})
+                    end 
+                    task.wait(60) 
+                end 
+            end) 
+        end 
+    end 
+})
+
 SectSystem:Toggle({ Title="Auto Fav Ruby", Value=Config.AutoFavRubyEnabled, Callback=function(s) Config.AutoFavRubyEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoFavRubyEnabled do --[[Scan Logic Omitted]] task.wait(3) end end) end end })
 SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=ToggleAntiAfk })
 SectSystem:Button({ Title="Teleport to Merchant", Icon="shopping-cart", Callback=function() if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-127.7, 2.7, 2759.0) end end })
@@ -671,27 +450,13 @@ SectSystem:Button({ Title="Reset Config", Icon="trash", Callback=function() Rese
 
 local SectGfx = TabUtil:Section({ Title = "Graphics", TextSize = 17 })
 SectGfx:Toggle({ Title="Extreme Potato", Value=Config.PotatoModeEnabled, Callback=TogglePotato })
-SectGfx:Toggle({ Title="FPS Ultra Boost", Value=Config.FPSBoostEnabled, Callback=ToggleFPSBoost })
-SectGfx:Toggle({ Title="Disable 3D Rendering", Value=Config.Disable3DEnabled, Callback=ToggleDisable3D })
-SectGfx:Toggle({ Title="No Animation", Value=Config.NoAnimEnabled, Callback=ToggleNoAnim })
-SectGfx:Toggle({ Title="No VFX/Skin", Value=Config.NoVFXEnabled, Callback=ToggleNoVFX })
-SectGfx:Toggle({ Title="No Cutscene", Value=Config.NoCutsceneEnabled, Callback=ToggleNoCutscene })
-SectGfx:Toggle({ Title="Infinite Zoom", Value=Config.InfZoomEnabled, Callback=ToggleInfZoom })
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v; SaveSettings() end })
 
--- Initialize States from Config
 if Config.BlatantEnabled then ToggleBlatant(true) end
 if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
-if Config.AutoSellEnabled then ToggleAutoSell(true) end
-if Config.NoAnimEnabled then ToggleNoAnim(true) end
-if Config.NoVFXEnabled then ToggleNoVFX(true) end
-if Config.NoCutsceneEnabled then ToggleNoCutscene(true) end
-if Config.InfZoomEnabled then ToggleInfZoom(true) end
-if Config.Disable3DEnabled then ToggleDisable3D(true) end
-if Config.FPSBoostEnabled then ToggleFPSBoost(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Loaded (Updated)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Loaded.", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  [BACKGROUND] OG SCRIPT (EXACT COPY)
