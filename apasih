@@ -1,9 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.2 (FULL FIX)
-    - [RESTORED] Teleport & Totem tabs (They are no longer empty!)
-    - [FIX] Manual Save button works properly.
-    - [FIX] Settings load into Input fields correctly.
-    - [FIX] Auto Fav Ruby starts automatically if enabled.
+    ENOCHHUB ULTIMATE - V5.3 (BINARY CONFIG SYSTEM)
+    - [SYSTEM] Converted all Configs to 1 (ON) and 0 (OFF) for stability.
+    - [FIX] All loops now explicitly check (Config == 1) to prevent Lua logic errors.
+    - [UI] Visuals remain standard toggles, but internal data is now strict numbers.
 ]]
 
 local Players = game:GetService("Players")
@@ -17,24 +16,24 @@ local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
---  CONFIG & SAVE SYSTEM
+--  CONFIG & SAVE SYSTEM (BINARY 1/0)
 -- ==========================================================
-local FileName = "EnochHub_V5_Manual_Config.json"
+local FileName = "EnochHub_V5_Binary_Config.json"
 
 local DefaultConfig = {
-    -- Blatant (Kreinxy Settings)
-    BlatantEnabled = false,
-    AutoEquip = true,
+    -- Blatant
+    BlatantEnabled = 0,    -- 0 = OFF, 1 = ON
+    AutoEquip = 1,         -- 0 = OFF, 1 = ON
     CompleteDelay = 0.705, 
     CancelDelay = 0.346,   
     
     -- Utilities
-    AutoSellEnabled = false,
-    AutoFavRubyEnabled = false,
-    AntiAfkEnabled = true,
+    AutoSellEnabled = 0,
+    AutoFavRubyEnabled = 0,
+    AntiAfkEnabled = 1,
     
     -- Graphics
-    PotatoModeEnabled = false,
+    PotatoModeEnabled = 0,
     PotatoFPS = 60,
 
     -- Totem
@@ -44,7 +43,7 @@ local DefaultConfig = {
 local Config = {}
 for k,v in pairs(DefaultConfig) do Config[k] = v end
 
--- AUTO LOAD (On Script Start)
+-- AUTO LOAD
 if isfile and isfile(FileName) then
     pcall(function()
         local decoded = HttpService:JSONDecode(readfile(FileName))
@@ -52,7 +51,7 @@ if isfile and isfile(FileName) then
     end)
 end
 
--- MANUAL SAVE FUNCTION
+-- MANUAL SAVE
 local function SaveSettings()
     if writefile then
         pcall(function() 
@@ -73,7 +72,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.2 (Full Fix)",
+    Title = "EnochHub | V5.3 (Binary System)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -124,7 +123,7 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  [HELPER] GET ITEM NAME
+--  HELPER FUNCTIONS
 -- ==========================================================
 local function GetItemName(item)
     if item.Name then return item.Name end
@@ -138,7 +137,7 @@ local function GetItemName(item)
 end
 
 -- ==========================================================
---  [CORE] LOGIC KILLER & VISUAL SPOOFING
+--  [CORE] LOGIC KILLER
 -- ==========================================================
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(game:GetService("ReplicatedStorage").Controllers.FishingController) end)
@@ -229,8 +228,10 @@ local function ForceStep4()
 end
 
 local function ToggleBlatant(state)
+    -- state is boolean coming from UI. Convert to 1/0 for config if needed, 
+    -- but Config.BlatantEnabled is already handled in the UI callback.
+    
     _G.EnochHub_BlatantActive = state
-    Config.BlatantEnabled = state
     SuppressGameVisuals(state)
 
     if state then
@@ -245,7 +246,8 @@ local function ToggleBlatant(state)
         lastStepTime = os.clock()
 
         BlatantThread = task.spawn(function()
-            while Config.BlatantEnabled do
+            -- CHECK: Use `== 1` because 0 is "true" in Lua
+            while Config.BlatantEnabled == 1 do
                 task.wait(0.01)
                 if _G.EnochHub_IsSelling then
                     phase = "WAIT_STOP"; lastStepTime = os.clock(); task.wait(0.5); continue
@@ -267,8 +269,9 @@ local function ToggleBlatant(state)
         end)
         
         EquipThread = task.spawn(function()
-            while Config.BlatantEnabled do
-                if Config.AutoEquip and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+            -- CHECK: Use `== 1`
+            while Config.BlatantEnabled == 1 do
+                if (Config.AutoEquip == 1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
                     pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
                 end
                 task.wait(0.5)
@@ -287,7 +290,70 @@ local function ToggleBlatant(state)
 end
 
 -- ==========================================================
---  [FEATURE] TOTEM LOGIC
+--  [FEATURE] GRAPHICS
+-- ==========================================================
+local PotatoLoop = nil
+local function ApplyPotato()
+    Lighting.GlobalShadows = false; Lighting.Brightness = 1; Lighting.FogEnd = 9e9; Lighting.ClockTime = 12
+    local t = Workspace:FindFirstChildOfClass("Terrain")
+    if t then t.WaterWaveSize=0; t.WaterReflectance=0; t.WaterTransparency=1 end
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1
+        elseif v:IsA("BasePart") then v.CastShadow = false; v.Material = Enum.Material.Plastic
+        end
+    end
+    settings().Rendering.QualityLevel = 1
+    if setfpscap then setfpscap(Config.PotatoFPS) end
+end
+
+local function TogglePotato(state)
+    -- State is boolean, Config is 1/0
+    if state then
+        ApplyPotato()
+        PotatoLoop = task.spawn(function() while Config.PotatoModeEnabled == 1 do ApplyPotato() task.wait(8) end end)
+    else
+        if PotatoLoop then task.cancel(PotatoLoop) end
+        if setfpscap then setfpscap(60) end
+    end
+end
+
+-- ==========================================================
+--  [FEATURE] AUTO FAVORITE RUBY
+-- ==========================================================
+local function ToggleAutoRuby(state)
+    -- State is boolean. Config is handled in UI.
+    if state then
+        task.spawn(function()
+            -- CHECK: Use `== 1`
+            while Config.AutoFavRubyEnabled == 1 do
+                local r = Replion:WaitReplion("Data", 5)
+                if r then
+                    local success, inventory = pcall(function() return r:GetExpect("Inventory") end)
+                    if success and inventory then
+                        for _, items in pairs(inventory) do
+                            for _, item in ipairs(items) do
+                                local name = GetItemName(item)
+                                if string.find(string.lower(name), "ruby") then
+                                    local isFav = item.Favorited or item.Locked or false
+                                    if not isFav then
+                                        pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                        WindUI:Notify({ Title="Auto Favorite", Content="Favorited: "..name, Icon="star" })
+                                        task.wait(0.2)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                task.wait(3) 
+            end
+        end)
+    end
+end
+
+-- ==========================================================
+--  [FEATURE] 9 TOTEM & TELEPORT
 -- ==========================================================
 local AUTO_9_TOTEM_ACTIVE = false
 local AUTO_9_TOTEM_THREAD = nil
@@ -314,12 +380,9 @@ end
 
 local stateConnection, noclipConnection = nil, nil
 local function EnableV3Physics()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local char = LocalPlayer.Character; local hum = char and char:FindFirstChild("Humanoid"); local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root or not hum then return end
-    if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
-    hum.PlatformStand = true 
+    if char:FindFirstChild("Animate") then char.Animate.Disabled = true end; hum.PlatformStand = true 
     if not stateConnection then stateConnection = RunService.Heartbeat:Connect(function() if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end end) end
     if not noclipConnection then noclipConnection = RunService.Stepped:Connect(function() if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end end end end) end
     local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root); bg.Name="FlyGuiGyro"; bg.P=9e4; bg.maxTorque=Vector3.new(9e9,9e9,9e9); bg.CFrame=root.CFrame
@@ -327,14 +390,8 @@ local function EnableV3Physics()
 end
 
 local function DisableV3Physics()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root then
-        if root:FindFirstChild("FlyGuiGyro") then root.FlyGuiGyro:Destroy() end
-        if root:FindFirstChild("FlyGuiVelocity") then root.FlyGuiVelocity:Destroy() end
-        root.Velocity = Vector3.zero
-    end
+    local char = LocalPlayer.Character; local hum = char and char:FindFirstChild("Humanoid"); local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then if root:FindFirstChild("FlyGuiGyro") then root.FlyGuiGyro:Destroy() end; if root:FindFirstChild("FlyGuiVelocity") then root.FlyGuiVelocity:Destroy() end; root.Velocity = Vector3.zero end
     if hum then hum.PlatformStand = false; hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
     if stateConnection then stateConnection:Disconnect(); stateConnection = nil end
     if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
@@ -342,9 +399,7 @@ local function DisableV3Physics()
 end
 
 local function FlyPhysicsTo(targetPos)
-    local root = LocalPlayer.Character.HumanoidRootPart
-    local bv = root:FindFirstChild("FlyGuiVelocity")
-    local bg = root:FindFirstChild("FlyGuiGyro")
+    local root = LocalPlayer.Character.HumanoidRootPart; local bv = root:FindFirstChild("FlyGuiVelocity"); local bg = root:FindFirstChild("FlyGuiGyro")
     if not bv or not bg then EnableV3Physics(); bv=root.FlyGuiVelocity; bg=root.FlyGuiGyro end
     while AUTO_9_TOTEM_ACTIVE do
         local dist = (targetPos - root.Position).Magnitude
@@ -384,76 +439,26 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] GRAPHICS
--- ==========================================================
-local PotatoLoop = nil
-local function ApplyPotato()
-    Lighting.GlobalShadows = false; Lighting.Brightness = 1; Lighting.FogEnd = 9e9; Lighting.ClockTime = 12
-    local t = Workspace:FindFirstChildOfClass("Terrain")
-    if t then t.WaterWaveSize=0; t.WaterReflectance=0; t.WaterTransparency=1 end
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false
-        elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1
-        elseif v:IsA("BasePart") then v.CastShadow = false; v.Material = Enum.Material.Plastic
-        end
-    end
-    settings().Rendering.QualityLevel = 1
-    if setfpscap then setfpscap(Config.PotatoFPS) end
-end
-
-local function TogglePotato(state)
-    Config.PotatoModeEnabled = state
-    if state then
-        ApplyPotato()
-        PotatoLoop = task.spawn(function() while Config.PotatoModeEnabled do ApplyPotato() task.wait(8) end end)
-    else
-        if PotatoLoop then task.cancel(PotatoLoop) end
-        if setfpscap then setfpscap(60) end
-    end
-end
-
--- ==========================================================
---  [FEATURE] AUTO FAVORITE RUBY
--- ==========================================================
-local function ToggleAutoRuby(state)
-    Config.AutoFavRubyEnabled = state
-    if state then
-        task.spawn(function()
-            while Config.AutoFavRubyEnabled do
-                local r = Replion:WaitReplion("Data", 5)
-                if r then
-                    local success, inventory = pcall(function() return r:GetExpect("Inventory") end)
-                    if success and inventory then
-                        for _, items in pairs(inventory) do
-                            for _, item in ipairs(items) do
-                                local name = GetItemName(item)
-                                if string.find(string.lower(name), "ruby") then
-                                    local isFav = item.Favorited or item.Locked or false
-                                    if not isFav then
-                                        pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
-                                        WindUI:Notify({ Title="Auto Favorite", Content="Favorited: "..name, Icon="star" })
-                                        task.wait(0.2)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                task.wait(3) 
-            end
-        end)
-    end
-end
-
--- ==========================================================
 --  UI BUILDING
 -- ==========================================================
-
--- 1. BLATANT
 local SectFish = TabFish:Section({ Title = "Fishing", TextSize = 17 })
 
-SectFish:Toggle({ Title = "Enable Blatant", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
-SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v end })
+SectFish:Toggle({ 
+    Title = "Enable Blatant", 
+    Value = (Config.BlatantEnabled == 1), 
+    Callback = function(v) 
+        Config.BlatantEnabled = v and 1 or 0 -- Convert Boolean to 1/0
+        ToggleBlatant(v)
+    end 
+})
+
+SectFish:Toggle({ 
+    Title = "Auto Equip", 
+    Value = (Config.AutoEquip == 1), 
+    Callback = function(v) 
+        Config.AutoEquip = v and 1 or 0 
+    end 
+})
 
 SectFish:Input({ 
     Title = "Complete Delay", 
@@ -477,7 +482,7 @@ SectFish:Input({
     end 
 })
 
--- 2. TOTEM (RESTORED)
+-- TOTEM TAB
 local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
 SectTotem:Dropdown({ 
     Title="Type", 
@@ -489,12 +494,11 @@ TotemToggleUI = SectTotem:Toggle({
     Title = "Start Formation", 
     Callback = function(s) 
         AUTO_9_TOTEM_ACTIVE=s
-        if s then Run9TotemLoop() 
-        else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end DisableV3Physics() end 
+        if s then Run9TotemLoop() else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end DisableV3Physics() end 
     end 
 })
 
--- 3. TELEPORT (RESTORED)
+-- TELEPORT TAB
 local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
 local Coords = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
@@ -538,10 +542,9 @@ SectTp:Dropdown({
     end
 })
 
--- 4. UTILITIES
+-- UTILITIES TAB
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
 
--- SAVE CONFIG BUTTON
 SectSystem:Button({ 
     Title = "Save Config", 
     Icon = "save", 
@@ -553,12 +556,13 @@ SectSystem:Button({
 
 SectSystem:Toggle({ 
     Title="Auto Sell All", 
-    Value=Config.AutoSellEnabled, 
+    Value = (Config.AutoSellEnabled == 1), 
     Callback=function(s) 
-        Config.AutoSellEnabled=s 
+        Config.AutoSellEnabled = s and 1 or 0
         if s then 
             task.spawn(function() 
-                while Config.AutoSellEnabled do 
+                -- CHECK: Use `== 1`
+                while Config.AutoSellEnabled == 1 do 
                     if RF_SellAllItems then 
                         _G.EnochHub_IsSelling = true
                         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
@@ -567,7 +571,7 @@ SectSystem:Toggle({
                         pcall(function() RF_SellAllItems:InvokeServer() end)
                         task.wait(0.5)
                         _G.EnochHub_IsSelling = false
-                        if Config.BlatantEnabled and Config.AutoEquip then
+                        if (Config.BlatantEnabled == 1) and (Config.AutoEquip == 1) then
                              pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
                         end
                         WindUI:Notify({Title="System", Content="Sold Items", Duration=1})
@@ -581,14 +585,17 @@ SectSystem:Toggle({
 
 SectSystem:Toggle({ 
     Title = "Auto Fav Ruby", 
-    Value = Config.AutoFavRubyEnabled, 
-    Callback = ToggleAutoRuby 
+    Value = (Config.AutoFavRubyEnabled == 1), 
+    Callback = function(s)
+        Config.AutoFavRubyEnabled = s and 1 or 0
+        ToggleAutoRuby(s)
+    end
 })
 
 -- Anti-AFK
 local AntiAfkConnection = nil
 local function ToggleAntiAfk(state)
-    Config.AntiAfkEnabled = state
+    -- State is boolean. Config is 1/0
     if state then
         if getconnections then for _,v in pairs(getconnections(LocalPlayer.Idled)) do if v.Disable then v:Disable() end end end
         if not AntiAfkConnection then
@@ -600,18 +607,32 @@ local function ToggleAntiAfk(state)
         if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
     end
 end
-SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=ToggleAntiAfk })
+SectSystem:Toggle({ 
+    Title="Anti-AFK", 
+    Value=(Config.AntiAfkEnabled == 1), 
+    Callback = function(s) 
+        Config.AntiAfkEnabled = s and 1 or 0
+        ToggleAntiAfk(s)
+    end 
+})
 
 SectSystem:Button({ Title="Reset Config", Icon="trash", Callback=function() ResetConfig(); WindUI:Notify({Title="Reset", Content="Done."}) end })
 
 local SectGfx = TabUtil:Section({ Title = "Graphics", TextSize = 17 })
-SectGfx:Toggle({ Title="Extreme Potato", Value=Config.PotatoModeEnabled, Callback=TogglePotato })
+SectGfx:Toggle({ 
+    Title="Extreme Potato", 
+    Value=(Config.PotatoModeEnabled == 1), 
+    Callback = function(s)
+        Config.PotatoModeEnabled = s and 1 or 0
+        TogglePotato(s)
+    end
+})
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v end })
 
 -- [INITIALIZATION CHECKS]
-if Config.BlatantEnabled then ToggleBlatant(true) end
-if Config.PotatoModeEnabled then TogglePotato(true) end
-if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
-if Config.AutoFavRubyEnabled then ToggleAutoRuby(true) end
+if Config.BlatantEnabled == 1 then ToggleBlatant(true) end
+if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
+if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
+if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.2", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.3 (Full)", Duration = 4, Icon = "check" })
