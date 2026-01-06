@@ -1,16 +1,11 @@
 --[[
-    ENOCHHUB ULTIMATE - HYPER BLATANT EDITION
+    ENOCHHUB ULTIMATE - HYPER BLATANT (FULL CONTROLS)
     Build: Hook-Based / Anti-Fail / Multi-Instance
     
-    [CORE]
-    - Hyper Blatant (New Hook System + Instant Cast)
-    - Anti-Fail (Blocks Game Scripts from interfering)
-    - Auto Sell (Pauses Hyper Loop -> Sells -> Resumes)
-    
-    [FEATURES]
-    - Ghost Totem (9-Totem Formation)
-    - Stability Mode (CPU Saver, Anti-AFK)
-    - Graphics Suite (No Anim, No Skin, FPS Boost)
+    [CONTROLS RESTORED]
+    - Catch Delay: Time to wait before catching.
+    - Cancel Delay: Time to wait before resetting inputs.
+    - Loop Cooldown: Extra pause between catches (good for stability).
 ]]
 
 local Players = game:GetService("Players")
@@ -25,19 +20,21 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_Hyper_Config.json"
+local FileName = "EnochHub_Hyper_Full_Config.json"
 
--- Global Settings for the new loop
+-- Global Settings for the loop
 getgenv().fishingStart = false
 _G.FishSettings = {
     DelayCharge = 0.85, 
-    DelayReset = 0.1,   
+    DelayCancel = 0.15,
+    DelayLoop   = 0.0
 }
 
 local DefaultConfig = {
     -- Blatant Defaults
     DelayCharge = 0.85,
-    DelayReset = 0.1,
+    DelayCancel = 0.15,
+    DelayLoop   = 0.0,
     AutoEquip = true,
     
     -- Utilities
@@ -69,7 +66,8 @@ if isfile and isfile(FileName) then
     end)
     -- Sync loaded config to global settings
     _G.FishSettings.DelayCharge = Config.DelayCharge
-    _G.FishSettings.DelayReset = Config.DelayReset
+    _G.FishSettings.DelayCancel = Config.DelayCancel
+    _G.FishSettings.DelayLoop   = Config.DelayLoop
 end
 
 local function SaveSettings()
@@ -183,7 +181,7 @@ local function startFishingHyperLoop()
             pcall(function() RequestGame:InvokeServer(unpack(fishArgs)) end) 
         end)
         
-        -- Wait for Charge Time (Slider)
+        -- Wait for Charge Time (Slider 1)
         task.wait(_G.FishSettings.DelayCharge)
         
         if not getgenv().fishingStart then break end
@@ -191,9 +189,13 @@ local function startFishingHyperLoop()
         -- Finish
         pcall(function() CompleteGame:FireServer() end)
         
-        -- Reset Delay (Slider)
-        task.wait(_G.FishSettings.DelayReset)
+        -- Wait for Cancel Delay (Slider 2)
+        if _G.FishSettings.DelayCancel > 0 then task.wait(_G.FishSettings.DelayCancel) end
+        
         pcall(function() CancelInput:InvokeServer() end)
+
+        -- Loop Cooldown (Slider 3)
+        if _G.FishSettings.DelayLoop > 0 then task.wait(_G.FishSettings.DelayLoop) end
     end
 end
 
@@ -463,8 +465,9 @@ end
 local SectFish = TabFish:Section({ Title = "Hyper Blatant (Hook Based)", TextSize = 17 })
 SectFish:Toggle({ Title = "Enable Blatant", Value = getgenv().fishingStart, Callback = ToggleBlatant })
 SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
-SectFish:Slider({ Title = "Catch Delay", Min=0.05, Max=2, Default=Config.DelayCharge, Precision=3, Callback=function(v) Config.DelayCharge=v; _G.FishSettings.DelayCharge=v; SaveSettings() end })
-SectFish:Slider({ Title = "Reset Delay", Min=0.01, Max=1, Default=Config.DelayReset, Precision=3, Callback=function(v) Config.DelayReset=v; _G.FishSettings.DelayReset=v; SaveSettings() end })
+SectFish:Slider({ Title = "Catch Delay (Charge)", Min=0.05, Max=2, Default=Config.DelayCharge, Precision=3, Callback=function(v) Config.DelayCharge=v; _G.FishSettings.DelayCharge=v; SaveSettings() end })
+SectFish:Slider({ Title = "Cancel Delay (Reset)", Min=0.01, Max=1, Default=Config.DelayCancel, Precision=3, Callback=function(v) Config.DelayCancel=v; _G.FishSettings.DelayCancel=v; SaveSettings() end })
+SectFish:Slider({ Title = "Loop Cooldown", Min=0, Max=2, Default=Config.DelayLoop, Precision=3, Callback=function(v) Config.DelayLoop=v; _G.FishSettings.DelayLoop=v; SaveSettings() end })
 
 -- 2. TOTEM TAB
 local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
