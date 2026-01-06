@@ -1,9 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - FINAL COMPLETE (UPDATED)
+    ENOCHHUB ULTIMATE - FINAL COMPLETE
     - [FULL] Teleport Coordinates (25+ Locations)
     - [BACKGROUND] Secret Fish Monitor (OG Script Auto-Run)
     - [FEATURES] Blatant V5, 9-Totem (Ghost), Merchant TP, Graphics, Anti-AFK
-    - [UI UPDATE] Cancel Delay is now an Input Box (No Slider)
     - [SYSTEM] Auto Save/Load
 ]]
 
@@ -83,7 +82,7 @@ local Window = WindUI:CreateWindow({
 local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
 local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
-local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" })
+local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) -- Graphics merged here
 
 _G.EnochHub_BlatantActive = false
 
@@ -350,23 +349,6 @@ end
 local SectFish = TabFish:Section({ Title = "Fishing", TextSize = 17 })
 SectFish:Toggle({ Title = "Enable Blatant", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
 SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
-
--- [MODIFICATION] Input Box for Cancel Delay (No Slider)
-SectFish:Input({ 
-    Title = "Cancel Delay", 
-    Default = tostring(Config.CancelDelay), 
-    Placeholder = "Seconds (e.g. 0.3)", 
-    Numeric = true,
-    Finished = true,
-    Callback = function(text)
-        local n = tonumber(text)
-        if n then
-            Config.CancelDelay = n
-            SaveSettings()
-        end
-    end 
-})
-
 SectFish:Slider({ Title = "Catch Delay", Min=0.05, Max=5, Default=Config.CatchDelay, Precision=3, Callback=function(v) Config.CatchDelay=v; SaveSettings() end })
 SectFish:Slider({ Title = "Loop Interval", Min=1, Max=5, Default=Config.LoopInterval, Precision=3, Callback=function(v) Config.LoopInterval=v; SaveSettings() end })
 
