@@ -1,7 +1,7 @@
 --[[
-    SERAPHIN HELPER - WIND UI REMAKE (FINAL FIXED)
+    SERAPHIN HELPER - WIND UI REMAKE (FINAL REVISION)
     > Hyper Fast Fishing (FishIT Logic)
-    > Full Teleport List (Fixed Dropdown)
+    > Full Teleport List (Fixed Dropdown, No Custom Inputs)
     > Auto Sell, Auto Favorite Ruby, Extreme Potato
 ]]
 
@@ -230,9 +230,10 @@ SectFish:Slider({
     Callback = function(v) _G.FishSettings.DelayReset = v end
 })
 
--- >> TAB TELEPORT (FULL LIST FROM SOURCE)
-local SectTp = TabTeleport:Section({ Title = "Locations", TextSize = 17 })
+-- >> TAB TELEPORT
+local SectTp = TabTeleport:Section({ Title = "Waypoints", TextSize = 17 })
 
+-- Full Coordinate List (Matches your EnochHub Source)
 local Coords = {
     ["Iron Cavern"] = Vector3.new(-8792.546, -588.000, 230.642),
     ["Disco Event"] = Vector3.new(-8641.672, -547.500, 160.322),
@@ -266,16 +267,14 @@ local AreaList = {}
 for n in pairs(Coords) do table.insert(AreaList, n) end 
 table.sort(AreaList)
 
--- Using "Values" as typically used in original Enoch/WindUI implementations
+-- Dropdown using 'Values' (Correct format for WindUI)
 SectTp:Dropdown({
     Title = "Select Location",
     Values = AreaList,
     Multi = false,
     Callback = function(v)
-        -- WindUI might pass the value directly or as a key
         local target = Coords[v]
         if HRP and target then
-            -- Unequip rod first to prevent glitches
             if EquipTool then pcall(function() EquipTool:FireServer(0) end) end
             task.wait(0.2)
             HRP.CFrame = CFrame.new(target)
