@@ -2,6 +2,7 @@
     ENOCHHUB ULTIMATE - OPTIMIZED V5 (Hybrid KREINXY Logic)
     - [CORE] Ported "Phase-Based" Fishing Logic from KREINXY/Blatant.lua
     - [FIX] Auto Sell System (Clean pause/resume)
+    - [FIX] Auto Favorite Ruby (Fully Integrated)
     - [PROT] Logic Killer & Visual Spoofing (Ghost Mode) active
 ]]
 
@@ -68,7 +69,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5 (KREINXY Logic)",
+    Title = "EnochHub | V5 (NEW Logic)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -118,6 +119,20 @@ local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
 local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
+
+-- ==========================================================
+--  [HELPER] GET ITEM NAME (FOR AUTO FAV)
+-- ==========================================================
+local function GetItemName(item)
+    if item.Name then return item.Name end
+    if ItemUtility and item.Id then
+        local success, itemData = pcall(function() return ItemUtility:GetItemData(item.Id) end)
+        if success and itemData and itemData.Data and itemData.Data.Name then 
+            return itemData.Data.Name 
+        end
+    end
+    return item.Identifier or "Unknown"
+end
 
 -- ==========================================================
 --  [CORE] LOGIC KILLER & REMOTE HOOKS
@@ -559,7 +574,44 @@ SectSystem:Toggle({
     end 
 })
 
-SectSystem:Toggle({ Title="Auto Fav Ruby", Value=Config.AutoFavRubyEnabled, Callback=function(s) Config.AutoFavRubyEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoFavRubyEnabled do --[[Scan Logic Omitted]] task.wait(3) end end) end end })
+-- [[ AUTO FAV RUBY INTEGRATED HERE ]]
+SectSystem:Toggle({ 
+    Title = "Auto Fav Ruby", 
+    Value = Config.AutoFavRubyEnabled, 
+    Callback = function(s) 
+        Config.AutoFavRubyEnabled = s
+        SaveSettings()
+        
+        if s then
+            task.spawn(function()
+                while Config.AutoFavRubyEnabled do
+                    local r = Replion:WaitReplion("Data", 5)
+                    if r then
+                        local success, inventory = pcall(function() return r:GetExpect("Inventory") end)
+                        if success and inventory then
+                            -- Iterate all categories (not just one)
+                            for _, items in pairs(inventory) do
+                                for _, item in ipairs(items) do
+                                    local name = GetItemName(item)
+                                    if string.find(string.lower(name), "ruby") then
+                                        local isFav = item.Favorited or item.Locked or false
+                                        if not isFav then
+                                            pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                            WindUI:Notify({ Title="Auto Favorite", Content="Favorited: "..name, Icon="star" })
+                                            task.wait(0.2)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    task.wait(3) 
+                end
+            end)
+        end 
+    end 
+})
+
 SectSystem:Toggle({ Title="Anti-AFK", Value=Config.AntiAfkEnabled, Callback=ToggleAntiAfk })
 SectSystem:Button({ Title="Teleport to Merchant", Icon="shopping-cart", Callback=function() if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-127.7, 2.7, 2759.0) end end })
 SectSystem:Button({ Title="Reset Config", Icon="trash", Callback=function() ResetConfig(); WindUI:Notify({Title="Reset", Content="Done."}) end })
@@ -589,4 +641,4 @@ if Config.BlatantEnabled then ToggleBlatant(true) end
 if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "V5 Optimized (Kreinxy) Loaded.", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "V5 Optimized Loaded.", Duration = 4, Icon = "check" })
