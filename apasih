@@ -1,9 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - FIX: BLATANT INTERFERENCE
-    - [FIX] Removed "Legit Auto Fish" signal. Blatant is now purely script-controlled.
-    - [FIX] Auto Sell Logic (Pause/Resume) included.
-    - [FULL] Teleport Coordinates
-    - [BACKGROUND] Secret Fish Monitor
+    ENOCHHUB ULTIMATE - FIX: ENABLE/DISABLE SPAM
+    - [FIX] Forces "Legit Auto Fish" to OFF immediately after every cast to prevent server toggle.
+    - [FIX] Auto Sell logic remains fixed (pauses fishing correctly).
+    - [FULL] Teleport Coordinates & Background Monitor.
 ]]
 
 local Players = game:GetService("Players")
@@ -69,7 +68,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate (Fix)",
+    Title = "EnochHub | Ultimate (Final Fix)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -277,7 +276,7 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT (FIXED: NO LEGIT INTERFERENCE)
+--  [FEATURE] BLATANT (FIXED: ANTI-SPAM LOGIC)
 -- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
@@ -288,7 +287,7 @@ local function ToggleBlatant(state)
     SaveSettings()
     
     if state then
-        -- FIX: Forces the game's internal auto-fishing to OFF so it doesn't interfere
+        -- Initial disable of legit mode
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         
         BlatantThread = task.spawn(function()
@@ -298,10 +297,19 @@ local function ToggleBlatant(state)
                         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                         if root then
                             local start = os.clock()
+                            
+                            -- 1. Charge & Start
                             pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
                             pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
+                            
+                            -- 2. FORCE DISABLE LEGIT AUTO (Prevent "Enabled" Notification/Logic)
+                            pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
+
+                            -- 3. Wait Catch Delay
                             local w = Config.CatchDelay - (os.clock() - start)
                             if w > 0 then task.wait(w) end
+                            
+                            -- 4. Finish
                             pcall(function() RE_FishingCompleted:FireServer() end)
                             task.wait(Config.CancelDelay)
                             pcall(function() RF_CancelFishingInputs:InvokeServer() end)
