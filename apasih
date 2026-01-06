@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.3 (BINARY CONFIG SYSTEM)
-    - [SYSTEM] Converted all Configs to 1 (ON) and 0 (OFF) for stability.
-    - [FIX] All loops now explicitly check (Config == 1) to prevent Lua logic errors.
-    - [UI] Visuals remain standard toggles, but internal data is now strict numbers.
+    ENOCHHUB ULTIMATE - V5.4 (MANUAL RESET)
+    - [REMOVED] 4-Second Auto-Reset (Prevents loop interruptions).
+    - [NEW] "Force Reset Fishing" Button (Manual fix if stuck).
+    - [SYSTEM] Binary Config (1=ON, 0=OFF) maintained.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,14 +16,14 @@ local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
---  CONFIG & SAVE SYSTEM (BINARY 1/0)
+--  CONFIG & SAVE SYSTEM
 -- ==========================================================
 local FileName = "EnochHub_V5_Binary_Config.json"
 
 local DefaultConfig = {
     -- Blatant
     BlatantEnabled = 0,    -- 0 = OFF, 1 = ON
-    AutoEquip = 1,         -- 0 = OFF, 1 = ON
+    AutoEquip = 1,         
     CompleteDelay = 0.705, 
     CancelDelay = 0.346,   
     
@@ -72,7 +72,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.3 (Binary System)",
+    Title = "EnochHub | V5.4 (Manual Reset)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -228,9 +228,6 @@ local function ForceStep4()
 end
 
 local function ToggleBlatant(state)
-    -- state is boolean coming from UI. Convert to 1/0 for config if needed, 
-    -- but Config.BlatantEnabled is already handled in the UI callback.
-    
     _G.EnochHub_BlatantActive = state
     SuppressGameVisuals(state)
 
@@ -246,7 +243,6 @@ local function ToggleBlatant(state)
         lastStepTime = os.clock()
 
         BlatantThread = task.spawn(function()
-            -- CHECK: Use `== 1` because 0 is "true" in Lua
             while Config.BlatantEnabled == 1 do
                 task.wait(0.01)
                 if _G.EnochHub_IsSelling then
@@ -254,7 +250,9 @@ local function ToggleBlatant(state)
                 end
 
                 local now = os.clock()
-                if (now - lastStepTime) > 4 then phase = "STEP123" end
+                
+                -- [REMOVED] Auto-Reset Logic (as requested)
+                -- The loop will now blindly follow the phase logic without timeout checks.
 
                 if phase == "INIT23" or phase == "STEP123" then
                     lastStepTime = now; ForceStep123(); phase = "WAIT_COMPLETE"
@@ -269,7 +267,6 @@ local function ToggleBlatant(state)
         end)
         
         EquipThread = task.spawn(function()
-            -- CHECK: Use `== 1`
             while Config.BlatantEnabled == 1 do
                 if (Config.AutoEquip == 1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
                     pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
@@ -308,7 +305,6 @@ local function ApplyPotato()
 end
 
 local function TogglePotato(state)
-    -- State is boolean, Config is 1/0
     if state then
         ApplyPotato()
         PotatoLoop = task.spawn(function() while Config.PotatoModeEnabled == 1 do ApplyPotato() task.wait(8) end end)
@@ -322,10 +318,8 @@ end
 --  [FEATURE] AUTO FAVORITE RUBY
 -- ==========================================================
 local function ToggleAutoRuby(state)
-    -- State is boolean. Config is handled in UI.
     if state then
         task.spawn(function()
-            -- CHECK: Use `== 1`
             while Config.AutoFavRubyEnabled == 1 do
                 local r = Replion:WaitReplion("Data", 5)
                 if r then
@@ -447,7 +441,7 @@ SectFish:Toggle({
     Title = "Enable Blatant", 
     Value = (Config.BlatantEnabled == 1), 
     Callback = function(v) 
-        Config.BlatantEnabled = v and 1 or 0 -- Convert Boolean to 1/0
+        Config.BlatantEnabled = v and 1 or 0 
         ToggleBlatant(v)
     end 
 })
@@ -480,6 +474,24 @@ SectFish:Input({
         local n = tonumber(text)
         if n then Config.CancelDelay = n end
     end 
+})
+
+-- [NEW] FORCE RESET BUTTON
+SectFish:Button({
+    Title = "Force Reset Fishing",
+    Icon = "rotate-cw",
+    Callback = function()
+        -- 1. Reset Phase Variables
+        phase = "STEP123"
+        lastStepTime = os.clock()
+        
+        -- 2. Force Server Reset
+        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) -- Unequip
+        
+        -- 3. Notify
+        WindUI:Notify({ Title = "System", Content = "Fishing State Reset!", Icon = "rotate-cw" })
+    end
 })
 
 -- TOTEM TAB
@@ -561,7 +573,6 @@ SectSystem:Toggle({
         Config.AutoSellEnabled = s and 1 or 0
         if s then 
             task.spawn(function() 
-                -- CHECK: Use `== 1`
                 while Config.AutoSellEnabled == 1 do 
                     if RF_SellAllItems then 
                         _G.EnochHub_IsSelling = true
@@ -595,7 +606,6 @@ SectSystem:Toggle({
 -- Anti-AFK
 local AntiAfkConnection = nil
 local function ToggleAntiAfk(state)
-    -- State is boolean. Config is 1/0
     if state then
         if getconnections then for _,v in pairs(getconnections(LocalPlayer.Idled)) do if v.Disable then v:Disable() end end end
         if not AntiAfkConnection then
@@ -635,67 +645,4 @@ if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.3 (Full)", Duration = 4, Icon = "check" })
-
-
-
--- ==========================================================
---  [BACKGROUND] OG SCRIPT (EXACT COPY)
--- ==========================================================
-task.spawn(function()
-    local Players = game:GetService("Players")
-    local RepStorage = game:GetService("ReplicatedStorage")
-    local HttpService = game:GetService("HttpService")
-    local lp = Players.LocalPlayer
-    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local INTERVAL = 30
-    local DEBUG = false
-    local function dprint(...) if DEBUG then print("[FISH IT][DEBUG]", ...) end end
-    local Replion = require(RepStorage.Packages.Replion).Client
-    local ItemUtility = require(RepStorage.Shared.ItemUtility)
-    local TierUtility = require(RepStorage.Shared.TierUtility)
-
-    local function GetFishNameAndRarity(item)
-        local name = item.Identifier or "Unknown"
-        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-        local itemID = item.Id
-        local itemData
-        if ItemUtility and itemID then pcall(function() itemData = ItemUtility:GetItemData(itemID) if not itemData then local numericID = tonumber(item.Id) or tonumber(item.Identifier) if numericID then itemData = ItemUtility:GetItemData(numericID) end end end) end
-        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
-        if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity elseif itemData and itemData.Probability and TierUtility then local tier pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) if tier and tier.Name then rarity = tier.Name end end
-        return name, rarity
-    end
-
-    local function sendToWebhook(playerName, summary)
-        dprint("Preparing webhook payload")
-        local json = HttpService:JSONEncode(summary)
-        dprint("JSON:", json)
-        local encoded = HttpService:UrlEncode(json)
-        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
-        dprint("Final URL:", url)
-        local ok, err = pcall(function() game:HttpGet(url) end)
-        if ok then dprint("Webhook sent successfully") else warn("[FISH IT][ERROR] Webhook failed:", err) end
-    end
-
-    dprint("Script started for player:", lp.Name)
-    local data = Replion:WaitReplion("Data")
-    dprint("Replion Data loaded")
-    while true do
-        dprint("Scanning inventory...")
-        local inventory = data:GetExpect("Inventory")
-        local summary = {}
-        local total = 0
-        for category, items in pairs(inventory) do
-            dprint("Category:", category, "Items:", #items)
-            for _, item in ipairs(items) do
-                local name, rarity = GetFishNameAndRarity(item)
-                if rarity == "SECRET" then summary[name] = (summary[name] or 0) + 1; total += 1; dprint("SECRET FOUND:", name) end
-            end
-        end
-        dprint("Scan finished | Total SECRET:", total)
-        for fish, count in pairs(summary) do dprint("SUMMARY:", fish, count) end
-        sendToWebhook(lp.Name, summary)
-        dprint("Sleeping for", INTERVAL, "seconds")
-        task.wait(INTERVAL)
-    end
-end)
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.4 (Reset)", Duration = 4, Icon = "check" })
