@@ -1,14 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - FINAL RELEASE
-    Build: Stable / Multi-Instance Optimized
-    
-    [FEATURES]
-    - Blatant V5 (Auto Sell Fix + Tool Safety Check)
-    - Ghost Totem (9-Totem Formation)
-    - Full Teleports (25+ Spots)
-    - Stability Mode (CPU Saver, Anti-AFK, Black Screen)
-    - Graphics Suite (No Anim, No Skin, No Cutscene, FPS Boost)
-    - Background Webhook Monitor
+    ENOCHHUB ULTIMATE - BLATANT FIX
+    - [FIX] Blatant now forces rod equip immediately on start.
+    - [FIX] If rod is missing during loop, it auto-equips instead of stopping.
+    - [FIX] Resets internal flags on toggle to prevent getting stuck.
 ]]
 
 local Players = game:GetService("Players")
@@ -80,7 +74,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate",
+    Title = "EnochHub | Ultimate (Fix)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -132,133 +126,7 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  [FEATURE] 9 TOTEM (GHOST MODE)
--- ==========================================================
-local AUTO_9_TOTEM_ACTIVE = false
-local AUTO_9_TOTEM_THREAD = nil
-local TotemToggleUI = nil 
-
-local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
-local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
-local REF_SPOTS = {
-    Vector3.new(45.0468, 9.516, 2730.190), Vector3.new(145.644, 9.516, 2721.907), Vector3.new(84.640, 10.217, 2636.057),
-    Vector3.new(45.0468, 110.516, 2730.190), Vector3.new(145.644, 110.516, 2721.907), Vector3.new(84.640, 111.217, 2636.057),
-    Vector3.new(45.0468, -92.483, 2730.190), Vector3.new(145.644, -92.483, 2721.907), Vector3.new(84.640, -93.782, 2636.057),
-}
-
-local function GetTotemUUID(name)
-    local r = Replion:WaitReplion("Data", 5)
-    if not r then return nil end
-    local s, data = pcall(function() return r:GetExpect("Inventory") end)
-    if s and data.Totems then 
-        for _, item in ipairs(data.Totems) do 
-            if tonumber(item.Id) == TOTEM_DATA[name].Id and (item.Count or 1) >= 1 then return item.UUID end 
-        end 
-    end
-    return nil
-end
-
-local stateConnection = nil
-local noclipConnection = nil 
-
-local function EnableV3Physics()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root or not hum then return end
-    
-    if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
-    hum.PlatformStand = true 
-    
-    if not stateConnection then
-        stateConnection = RunService.Heartbeat:Connect(function()
-            if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end
-        end)
-    end
-    
-    if not noclipConnection then
-        noclipConnection = RunService.Stepped:Connect(function()
-            if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then
-                for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then
-                        v.CanCollide = false
-                    end
-                end
-            end
-        end)
-    end
-    
-    local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root)
-    bg.Name="FlyGuiGyro"; bg.P=9e4; bg.maxTorque=Vector3.new(9e9,9e9,9e9); bg.CFrame=root.CFrame
-    local bv = root:FindFirstChild("FlyGuiVelocity") or Instance.new("BodyVelocity", root)
-    bv.Name="FlyGuiVelocity"; bv.velocity=Vector3.zero; bv.maxForce=Vector3.new(9e9,9e9,9e9)
-end
-
-local function DisableV3Physics()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root then
-        if root:FindFirstChild("FlyGuiGyro") then root.FlyGuiGyro:Destroy() end
-        if root:FindFirstChild("FlyGuiVelocity") then root.FlyGuiVelocity:Destroy() end
-        root.Velocity = Vector3.zero
-    end
-    if hum then hum.PlatformStand = false; hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
-    if stateConnection then stateConnection:Disconnect(); stateConnection = nil end
-    if noclipConnection then noclipConnection:Disconnect(); noclipConnection = nil end
-    if char and char:FindFirstChild("Animate") then char.Animate.Disabled = false end
-end
-
-local function FlyPhysicsTo(targetPos)
-    local root = LocalPlayer.Character.HumanoidRootPart
-    local bv = root:FindFirstChild("FlyGuiVelocity")
-    local bg = root:FindFirstChild("FlyGuiGyro")
-    if not bv or not bg then EnableV3Physics(); bv=root.FlyGuiVelocity; bg=root.FlyGuiGyro end
-    while AUTO_9_TOTEM_ACTIVE do
-        local dist = (targetPos - root.Position).Magnitude
-        bg.CFrame = CFrame.lookAt(root.Position, targetPos)
-        if dist < 1.5 then bv.velocity=Vector3.zero; break else bv.velocity=(targetPos - root.Position).Unit * 80 end
-        RunService.Heartbeat:Wait()
-    end
-end
-
-local function Run9TotemLoop()
-    if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end
-    AUTO_9_TOTEM_THREAD = task.spawn(function()
-        local uuid = GetTotemUUID(Config.TotemType)
-        if not uuid then WindUI:Notify({ Title="Error", Content="No stock.", Icon="alert-triangle" }) 
-            if TotemToggleUI then TotemToggleUI:Set(false) end
-            return 
-        end
-        
-        local startPos = LocalPlayer.Character.HumanoidRootPart.Position
-        if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
-        EnableV3Physics()
-        
-        for i, refSpot in ipairs(REF_SPOTS) do
-            if not AUTO_9_TOTEM_ACTIVE then break end
-            FlyPhysicsTo(startPos + (refSpot - REF_CENTER))
-            task.wait(0.6)
-            uuid = GetTotemUUID(Config.TotemType)
-            if uuid then
-                pcall(function() RE_SpawnTotem:FireServer(uuid) end)
-                task.spawn(function() for k=1,5 do RE_EquipToolFromHotbar:FireServer(1) task.wait(0.1) end end)
-                WindUI:Notify({ Title = "Totem", Content = "Placed #"..i, Duration = 1 })
-            else break end
-            task.wait(1.5)
-        end
-        
-        if AUTO_9_TOTEM_ACTIVE then FlyPhysicsTo(startPos) end
-        if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
-        DisableV3Physics()
-        AUTO_9_TOTEM_ACTIVE = false
-        if TotemToggleUI then TotemToggleUI:Set(false) end
-        WindUI:Notify({ Title = "Done", Content = "Sequence Finished", Icon = "check" })
-    end)
-end
-
--- ==========================================================
---  [FEATURE] BLATANT (STABLE & SAFE)
+--  [FEATURE] BLATANT (FIXED LOGIC)
 -- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
@@ -269,9 +137,17 @@ local function ToggleBlatant(state)
     SaveSettings()
     
     if state then
-        -- Force server auto-fish OFF (Prevents interference)
+        -- 1. RESET FLAGS
+        _G.EnochHub_IsSelling = false
+        
+        -- 2. FORCE EQUIP IMMEDIATELY (Don't wait for loop)
+        if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+        
+        -- 3. DISABLE LEGIT AUTO-FISH (Prevent interference)
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         
+        WindUI:Notify({ Title = "Blatant", Content = "Starting...", Icon = "loader" })
+
         BlatantThread = task.spawn(function()
             while Config.BlatantEnabled do
                 -- Check if Selling is active
@@ -279,24 +155,31 @@ local function ToggleBlatant(state)
                     task.spawn(function()
                         local char = LocalPlayer.Character
                         local root = char and char:FindFirstChild("HumanoidRootPart")
-                        -- CRITICAL: Check if holding tool to avoid firing blanks and getting stuck
                         local hasTool = char and char:FindFirstChildOfClass("Tool")
                         
+                        -- FIX: If no tool, try to equip and SKIP this cast (don't get stuck)
+                        if root and not hasTool then
+                            if RE_EquipToolFromHotbar then 
+                                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                            end
+                            return -- Exit this task, try again next loop
+                        end
+
                         if root and hasTool then
                             local start = os.clock()
                             
-                            -- 1. Charge & Start
+                            -- Charge & Start
                             pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
                             pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
                             
-                            -- 2. SILENT DISABLE LEGIT AUTO (Safety)
+                            -- Silent Disable Legit Mode again (just in case)
                             pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
 
-                            -- 3. Wait Catch Delay
+                            -- Wait Catch Delay
                             local w = Config.CatchDelay - (os.clock() - start)
                             if w > 0 then task.wait(w) end
                             
-                            -- 4. Finish
+                            -- Finish
                             pcall(function() RE_FishingCompleted:FireServer() end)
                             task.wait(Config.CancelDelay)
                             pcall(function() RF_CancelFishingInputs:InvokeServer() end)
@@ -306,14 +189,20 @@ local function ToggleBlatant(state)
                 task.wait(Config.LoopInterval)
             end
         end)
+        
+        -- Backup Equip Thread (Keeps tool equipped if it unequips)
         EquipThread = task.spawn(function()
             while Config.BlatantEnabled do
                 if Config.AutoEquip and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
-                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                    local char = LocalPlayer.Character
+                    if char and not char:FindFirstChildOfClass("Tool") then
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                    end
                 end
-                task.wait(0.5)
+                task.wait(1)
             end
         end)
+        
         WindUI:Notify({ Title = "Blatant", Content = "Enabled", Icon = "zap" })
     else
         if BlatantThread then task.cancel(BlatantThread) end
@@ -485,6 +374,87 @@ local function ToggleNoNotif(state)
     end
 end
 
+-- 9. 9-TOTEM LOGIC
+local function GetTotemUUID(name)
+    local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
+    local r = Replion:WaitReplion("Data", 5)
+    if not r then return nil end
+    local s, data = pcall(function() return r:GetExpect("Inventory") end)
+    if s and data.Totems then 
+        for _, item in ipairs(data.Totems) do 
+            if tonumber(item.Id) == TOTEM_DATA[name].Id and (item.Count or 1) >= 1 then return item.UUID end 
+        end 
+    end
+    return nil
+end
+
+local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
+local REF_SPOTS = {
+    Vector3.new(45.0468, 9.516, 2730.190), Vector3.new(145.644, 9.516, 2721.907), Vector3.new(84.640, 10.217, 2636.057),
+    Vector3.new(45.0468, 110.516, 2730.190), Vector3.new(145.644, 110.516, 2721.907), Vector3.new(84.640, 111.217, 2636.057),
+    Vector3.new(45.0468, -92.483, 2730.190), Vector3.new(145.644, -92.483, 2721.907), Vector3.new(84.640, -93.782, 2636.057),
+}
+
+local function Run9TotemLoop()
+    if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end
+    AUTO_9_TOTEM_THREAD = task.spawn(function()
+        local uuid = GetTotemUUID(Config.TotemType)
+        if not uuid then WindUI:Notify({ Title="Error", Content="No stock.", Icon="alert-triangle" }) 
+            if TotemToggleUI then TotemToggleUI:Set(false) end
+            return 
+        end
+        
+        local startPos = LocalPlayer.Character.HumanoidRootPart.Position
+        if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
+        
+        -- V3 Physics (Simple Float)
+        local root = LocalPlayer.Character.HumanoidRootPart
+        local hum = LocalPlayer.Character.Humanoid
+        hum.PlatformStand = true
+        local bg = Instance.new("BodyGyro", root); bg.P=9e4; bg.maxTorque=Vector3.new(9e9,9e9,9e9); bg.CFrame=root.CFrame
+        local bv = Instance.new("BodyVelocity", root); bv.velocity=Vector3.zero; bv.maxForce=Vector3.new(9e9,9e9,9e9)
+
+        for i, refSpot in ipairs(REF_SPOTS) do
+            if not AUTO_9_TOTEM_ACTIVE then break end
+            
+            -- Move
+            local target = startPos + (refSpot - REF_CENTER)
+            while AUTO_9_TOTEM_ACTIVE and (root.Position - target).Magnitude > 1.5 do
+                bv.velocity = (target - root.Position).Unit * 80
+                bg.CFrame = CFrame.lookAt(root.Position, target)
+                RunService.Heartbeat:Wait()
+            end
+            bv.velocity = Vector3.zero
+            
+            task.wait(0.6)
+            uuid = GetTotemUUID(Config.TotemType)
+            if uuid then
+                pcall(function() RE_SpawnTotem:FireServer(uuid) end)
+                -- Spam equip to cancel animation delay
+                task.spawn(function() for k=1,5 do RE_EquipToolFromHotbar:FireServer(1) task.wait(0.1) end end)
+                WindUI:Notify({ Title = "Totem", Content = "Placed #"..i, Duration = 1 })
+            else break end
+            task.wait(1.5)
+        end
+        
+        -- Return
+        while AUTO_9_TOTEM_ACTIVE and (root.Position - startPos).Magnitude > 1.5 do
+             bv.velocity = (startPos - root.Position).Unit * 80
+             bg.CFrame = CFrame.lookAt(root.Position, startPos)
+             RunService.Heartbeat:Wait()
+        end
+        
+        bg:Destroy(); bv:Destroy()
+        hum.PlatformStand = false
+        if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
+        
+        AUTO_9_TOTEM_ACTIVE = false
+        if TotemToggleUI then TotemToggleUI:Set(false) end
+        WindUI:Notify({ Title = "Done", Content = "Sequence Finished", Icon = "check" })
+    end)
+end
+
+
 -- ==========================================================
 --  UI BUILDING
 -- ==========================================================
@@ -499,7 +469,7 @@ SectFish:Slider({ Title = "Loop Interval", Min=1, Max=5, Default=Config.LoopInte
 -- 2. TOTEM TAB
 local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
 SectTotem:Dropdown({ Title="Type", Values={"Luck Totem", "Mutation Totem", "Shiny Totem"}, Value=Config.TotemType, Callback=function(v) Config.TotemType=v; SaveSettings() end })
-TotemToggleUI = SectTotem:Toggle({ Title = "Start Formation", Callback = function(s) AUTO_9_TOTEM_ACTIVE=s; if s then Run9TotemLoop() else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end DisableV3Physics() end end })
+TotemToggleUI = SectTotem:Toggle({ Title = "Start Formation", Callback = function(s) AUTO_9_TOTEM_ACTIVE=s; if s then Run9TotemLoop() else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end end end })
 
 -- 3. TELEPORT TAB
 local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
