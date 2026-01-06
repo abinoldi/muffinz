@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - FINAL COMPLETE
+    ENOCHHUB ULTIMATE - FINAL COMPLETE (MODIFIED WITH HYPER SPEED)
     - [FULL] Teleport Coordinates (25+ Locations)
     - [BACKGROUND] Secret Fish Monitor (OG Script Auto-Run)
-    - [FEATURES] Blatant V5, 9-Totem (Ghost), Merchant TP, Graphics, Anti-AFK
+    - [FEATURES] Blatant V5, Hyper Speed Mode, 9-Totem (Ghost), Merchant TP, Graphics, Anti-AFK
     - [SYSTEM] Auto Save/Load
 ]]
 
@@ -23,8 +23,10 @@ local FileName = "EnochHub_Final_Config.json"
 local DefaultConfig = {
     -- Blatant
     BlatantEnabled = false,
+    HyperspeedEnabled = false, -- [NEW] Hyper Speed Toggle
     AutoEquip = true,
-    CatchDelay = 3.055,
+    CatchDelay = 3.055, -- Used for Normal Blatant
+    HyperDelay = 0.85,  -- [NEW] Used for Hyper Speed
     LoopInterval = 1.715,
     CancelDelay = 0.3,
     
@@ -64,6 +66,70 @@ local function ResetConfig()
 end
 
 -- ==========================================================
+--  DATA & MODULES
+-- ==========================================================
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Packages = ReplicatedStorage:WaitForChild("Packages")
+
+local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
+local TierUtility = require(Shared:WaitForChild("TierUtility"))
+local Replion = require(Packages:WaitForChild("Replion")).Client
+
+local function GetRemote(name)
+    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local current = ReplicatedStorage
+    -- Auto-detect version path just in case
+    local p1 = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index")
+    if p1:FindFirstChild("sleitnick_net@0.2.1") then
+        path = {"Packages", "_Index", "sleitnick_net@0.2.1", "net"}
+    end
+    
+    current = ReplicatedStorage
+    for _, child in ipairs(path) do
+        current = current:WaitForChild(child, 2)
+        if not current then return nil end
+    end
+    return current:FindFirstChild(name)
+end
+
+local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
+local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
+local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
+local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
+local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RF_SellAllItems = GetRemote("RF/SellAllItems") or GetRemote("RF/SellAll") or GetRemote("RF/SellEverything")
+local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
+local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
+
+local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
+local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
+local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
+
+-- ==========================================================
+--  [SYSTEM] HYPER SPEED BLOCKER (HOOK)
+-- ==========================================================
+local BLOCKED_REMOTES = {
+    [RF_ChargeFishingRod] = true,
+    [RF_RequestFishingMinigameStarted] = true,
+    [RE_FishingCompleted] = true,
+    [RF_CancelFishingInputs] = true,
+}
+
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    -- Only block if Blatant is ON AND Hyper Speed is ON
+    if Config.BlatantEnabled and Config.HyperspeedEnabled and BLOCKED_REMOTES[self] and not checkcaller() then
+        if method == "InvokeServer" then
+            return task.wait(9e9) -- Hang the script (Prevent Cancel)
+        elseif method == "FireServer" then
+            return nil -- Drop the packet
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+
+-- ==========================================================
 --  WIND UI SETUP
 -- ==========================================================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
@@ -82,42 +148,9 @@ local Window = WindUI:CreateWindow({
 local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
 local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
-local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) -- Graphics merged here
+local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
 
 _G.EnochHub_BlatantActive = false
-
--- ==========================================================
---  DATA & MODULES
--- ==========================================================
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Packages = ReplicatedStorage:WaitForChild("Packages")
-
-local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
-local TierUtility = require(Shared:WaitForChild("TierUtility"))
-local Replion = require(Packages:WaitForChild("Replion")).Client
-
-local function GetRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = ReplicatedStorage
-    for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 2)
-        if not current then return nil end
-    end
-    return current:FindFirstChild(name)
-end
-
-local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
-local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
-local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
-local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
-local RF_SellAllItems = GetRemote("RF/SellAllItems")
-local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
-local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
-
-local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
-local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
-local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
 --  [FEATURE] GRAPHICS (POTATO)
@@ -198,9 +231,7 @@ local function EnableV3Physics()
         noclipConnection = RunService.Stepped:Connect(function()
             if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then
                 for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then
-                        v.CanCollide = false
-                    end
+                    if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
                 end
             end
         end)
@@ -276,10 +307,13 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT
+--  [FEATURE] BLATANT (NORMAL + HYPER SPEED)
 -- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
+
+-- Standard Args for Hyper Speed (Stable Center Cast)
+local hyperFishArgs = { -1.115296493039856, 0, 1763651451.636425 }
 
 local function ToggleBlatant(state)
     _G.EnochHub_BlatantActive = state
@@ -287,38 +321,89 @@ local function ToggleBlatant(state)
     SaveSettings()
     
     if state then
+        -- Activate Auto Great State
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
+        
+        -- Start Main Loop
         BlatantThread = task.spawn(function()
+            -- Initial Clear
+            pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+            task.wait(0.1)
+
             while Config.BlatantEnabled do
-                task.spawn(function()
-                    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                
+                if Config.HyperspeedEnabled then
+                    -- [[ HYPER SPEED MODE (Using Spam & Blockers) ]] --
+                    
+                    -- 1. Charge (Async)
+                    task.spawn(function() 
+                        pcall(function() RF_ChargeFishingRod:InvokeServer() end) 
+                    end)
+                    
+                    -- 2. Request (Async with Standard Args for Speed)
+                    task.spawn(function() 
+                        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(hyperFishArgs)) end) 
+                    end)
+                    
+                    -- 3. Short Wait
+                    task.wait(Config.HyperDelay) 
+                    
+                    if not Config.BlatantEnabled then break end
+
+                    -- 4. Complete
+                    pcall(function() RE_FishingCompleted:FireServer() end)
+                    
+                    -- 5. Reset
+                    task.wait(0.1)
+                    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+
+                else
+                    -- [[ NORMAL BLATANT MODE (EnochHub Original) ]] --
                     if root then
                         local start = os.clock()
+                        
+                        -- Synchronous Steps (Safe)
                         pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
                         pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
+                        
                         local w = Config.CatchDelay - (os.clock() - start)
                         if w > 0 then task.wait(w) end
+                        
                         pcall(function() RE_FishingCompleted:FireServer() end)
                         task.wait(Config.CancelDelay)
                         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
                     end
-                end)
-                task.wait(Config.LoopInterval)
+                    task.wait(Config.LoopInterval)
+                end
             end
         end)
+
+        -- Auto Equip Loop
         EquipThread = task.spawn(function()
             while Config.BlatantEnabled do
-                if Config.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+                if Config.AutoEquip and RE_EquipToolFromHotbar then 
+                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                end
                 task.wait(0.5)
             end
         end)
-        WindUI:Notify({ Title = "Blatant", Content = "Enabled", Icon = "zap" })
+        
+        local modeName = Config.HyperspeedEnabled and "HYPER SPEED" or "Normal Blatant"
+        WindUI:Notify({ Title = "EnochHub", Content = "Fishing: " .. modeName, Icon = "zap" })
     else
+        -- Cleanup
         if BlatantThread then task.cancel(BlatantThread) end
         if EquipThread then task.cancel(EquipThread) end
+        
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+        
+        -- Force Clean
+        pcall(function() RE_FishingCompleted:FireServer() end)
+        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
         pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-        WindUI:Notify({ Title = "Blatant", Content = "Disabled", Icon = "x" })
+        
+        WindUI:Notify({ Title = "EnochHub", Content = "Fishing Stopped", Icon = "x" })
     end
 end
 
@@ -333,7 +418,8 @@ local function ToggleAntiAfk(state)
         if getconnections then for _,v in pairs(getconnections(LocalPlayer.Idled)) do if v.Disable then v:Disable() end end end
         if not AntiAfkConnection then
             AntiAfkConnection = LocalPlayer.Idled:Connect(function()
-                VirtualUser:CaptureController(); VirtualUser:Button2Down(Vector2.new(0,0),Workspace.CurrentCamera.CFrame); task.wait(1); VirtualUser:Button2Up(Vector2.new(0,0),Workspace.CurrentCamera.CFrame)
+                VirtualUser:CaptureController();
+                VirtualUser:Button2Down(Vector2.new(0,0),Workspace.CurrentCamera.CFrame); task.wait(1); VirtualUser:Button2Up(Vector2.new(0,0),Workspace.CurrentCamera.CFrame)
             end)
         end
     else
@@ -346,11 +432,24 @@ end
 -- ==========================================================
 
 -- 1. BLATANT
-local SectFish = TabFish:Section({ Title = "Fishing", TextSize = 17 })
-SectFish:Toggle({ Title = "Enable Blatant", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
-SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
-SectFish:Slider({ Title = "Catch Delay", Min=0.05, Max=5, Default=Config.CatchDelay, Precision=3, Callback=function(v) Config.CatchDelay=v; SaveSettings() end })
-SectFish:Slider({ Title = "Loop Interval", Min=1, Max=5, Default=Config.LoopInterval, Precision=3, Callback=function(v) Config.LoopInterval=v; SaveSettings() end })
+local SectFish = TabFish:Section({ Title = "Fishing Controls", TextSize = 17 })
+SectFish:Toggle({ Title = "Active Fishing", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
+SectFish:Toggle({ Title = "HYPER SPEED MODE (Risky)", Value = Config.HyperspeedEnabled, Callback = function(v) 
+    Config.HyperspeedEnabled = v
+    SaveSettings()
+    -- Restart if active to apply new mode
+    if Config.BlatantEnabled then 
+        ToggleBlatant(false) 
+        task.wait(0.2) 
+        ToggleBlatant(true) 
+    end
+end })
+
+local SectSettings = TabFish:Section({ Title = "Settings", TextSize = 17 })
+SectSettings:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
+SectSettings:Slider({ Title = "Hyper Delay (Speed)", Min=0.45, Max=1.5, Default=Config.HyperDelay, Precision=2, Callback=function(v) Config.HyperDelay=v; SaveSettings() end })
+SectSettings:Slider({ Title = "Normal Catch Delay", Min=0.05, Max=5, Default=Config.CatchDelay, Precision=3, Callback=function(v) Config.CatchDelay=v; SaveSettings() end })
+SectSettings:Slider({ Title = "Normal Loop Interval", Min=1, Max=5, Default=Config.LoopInterval, Precision=3, Callback=function(v) Config.LoopInterval=v; SaveSettings() end })
 
 -- 2. TOTEM
 local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
@@ -392,13 +491,12 @@ SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n)
     if d and LocalPlayer.Character then
         if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end
         task.wait(0.3)
-        -- flatten look to avoid tilt
         local look = Vector3.new(d.Look.X, 0, d.Look.Z)
         LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look)
     end
 end})
 
--- 4. UTILITIES (MERGED & CLEANED)
+-- 4. UTILITIES
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
 SectSystem:Toggle({ Title="Auto Sell All", Value=Config.AutoSellEnabled, Callback=function(s) Config.AutoSellEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoSellEnabled do if RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end task.wait(60) end end) end end })
 SectSystem:Toggle({ Title="Auto Fav Ruby", Value=Config.AutoFavRubyEnabled, Callback=function(s) Config.AutoFavRubyEnabled=s; SaveSettings(); if s then task.spawn(function() while Config.AutoFavRubyEnabled do --[[Scan Logic Omitted]] task.wait(3) end end) end end })
@@ -414,7 +512,7 @@ if Config.BlatantEnabled then ToggleBlatant(true) end
 if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Loaded.", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Hyper Speed Loaded.", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  [BACKGROUND] OG SCRIPT (EXACT COPY)
@@ -428,6 +526,7 @@ task.spawn(function()
     local INTERVAL = 30
     local DEBUG = false
     local function dprint(...) if DEBUG then print("[FISH IT][DEBUG]", ...) end end
+
     local Replion = require(RepStorage.Packages.Replion).Client
     local ItemUtility = require(RepStorage.Shared.ItemUtility)
     local TierUtility = require(RepStorage.Shared.TierUtility)
