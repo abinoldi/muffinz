@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.5 (FISHING V2 ADDED)
-    - [NEW] "Fishing V2 (Hyper)" added to Blatant Tab.
-    - [CORE] Integrated FishingBlocker metatable hook from your snippet.
-    - [FIX] V2 Logic uses task.spawn for simultaneous Charge/Request.
+    ENOCHHUB ULTIMATE - V5.6 (FRAME-PERFECT THROW)
+    - [OPTIMIZE] Converted Fishing V1 to Heartbeat Loop (Ultra Fast).
+    - [LOGIC] Reordered Phase checks to eliminate "1-frame lag" between Catch and Throw.
+    - [CONFIG] Reverted default CancelDelay to 0.346 (User preference).
 ]]
 
 local Players = game:GetService("Players")
@@ -25,9 +25,9 @@ local DefaultConfig = {
     BlatantEnabled = 0,
     AutoEquip = 1,
     CompleteDelay = 0.705, 
-    CancelDelay = 0.346,   
+    CancelDelay = 0.346, -- [USER] Keep this for equipment timing
     
-    -- Blatant V2 (New)
+    -- Blatant V2
     FishingV2Enabled = 0,
     V2DelayCharge = 0.85,
     V2DelayReset = 0.1,
@@ -78,11 +78,11 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.5 (Fishing V2)",
+    Title = "EnochHub | V5.6 (Frame Perfect)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
-    Size = UDim2.fromOffset(580, 520), -- Increased height for V2
+    Size = UDim2.fromOffset(580, 520),
     Transparent = true,
     Theme = "Sky",
     Resizable = true,
@@ -93,8 +93,8 @@ local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
 local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
 
-_G.EnochHub_BlatantActive = false -- V1 Active Flag
-_G.EnochHub_FishingV2Active = false -- V2 Active Flag
+_G.EnochHub_BlatantActive = false
+_G.EnochHub_FishingV2Active = false
 _G.EnochHub_IsSelling = false 
 
 -- ==========================================================
@@ -145,7 +145,6 @@ end
 
 -- ==========================================================
 --  [CORE] LOGIC KILLER & METATABLE HOOK
---  (Combined V1 and V2 Protection)
 -- ==========================================================
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(game:GetService("ReplicatedStorage").Controllers.FishingController) end)
@@ -169,19 +168,12 @@ setreadonly(mt, false)
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
     if not checkcaller() then
-        -- Check if ANY Blatant mode is active
         if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active then
-            -- Block Standard Remotes
-            if method == "InvokeServer" and (self.Name == "RequestFishingMinigameStarted" or self.Name == "ChargeFishingRod" or self.Name == "UpdateAutoFishingState") then
-                return task.wait(9e9) -- Infinite wait (Best for anti-cheat)
+            if method == "InvokeServer" and (self.Name == "RequestFishingMinigameStarted" or self.Name == "ChargeFishingRod" or self.Name == "UpdateAutoFishingState" or self.Name == "CancelFishingInputs") then
+                return task.wait(9e9) 
             end
             if method == "FireServer" and self.Name == "FishingCompleted" then
                 return nil
-            end
-            
-            -- V2 Specific: Block CancelInput from Client
-            if method == "InvokeServer" and self.Name == "CancelFishingInputs" then
-                 return task.wait(9e9)
             end
         end
     end
@@ -223,9 +215,9 @@ local function SuppressGameVisuals(active)
 end
 
 -- ==========================================================
---  [FEATURE] FISHING V1 (Phase Logic)
+--  [FEATURE] BLATANT V1 (OPTIMIZED LOOP)
 -- ==========================================================
-local BlatantThread = nil
+local BlatantConnection = nil
 local EquipThread = nil
 local phase = "STEP123"
 local lastStepTime = 0
@@ -259,28 +251,49 @@ local function ToggleBlatant(state)
             pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
         end
 
-        if BlatantThread then task.cancel(BlatantThread) end
+        -- Cleanup old thread/connection
+        if BlatantConnection then BlatantConnection:Disconnect() end
+        
+        -- Start Variables
         phase = "INIT23"
         lastStepTime = os.clock()
 
-        BlatantThread = task.spawn(function()
-            while Config.BlatantEnabled == 1 do
-                task.wait(0.01)
-                if _G.EnochHub_IsSelling then
-                    phase = "WAIT_STOP"; lastStepTime = os.clock(); task.wait(0.5); continue
-                end
+        -- [NEW] Heartbeat Loop (Runs every frame)
+        BlatantConnection = RunService.Heartbeat:Connect(function()
+            if Config.BlatantEnabled ~= 1 then return end
+            
+            -- Auto-Sell Pause
+            if _G.EnochHub_IsSelling then
+                phase = "WAIT_STOP"
+                lastStepTime = os.clock()
+                return
+            end
 
-                local now = os.clock()
+            local now = os.clock()
 
-                if phase == "INIT23" or phase == "STEP123" then
-                    lastStepTime = now; ForceStep123(); phase = "WAIT_COMPLETE"
-                elseif phase == "WAIT_COMPLETE" then
-                    if (now - lastStepTime) >= Config.CompleteDelay then phase = "STEP4" end
-                elseif phase == "STEP4" then
-                    lastStepTime = now; ForceStep4(); phase = "WAIT_STOP"
-                elseif phase == "WAIT_STOP" then
-                    if (now - lastStepTime) >= Config.CancelDelay then phase = "STEP123" end
-                end
+            -- LOGIC FLOW (OPTIMIZED FOR FALLTHROUGH)
+            -- If we are in "Wait Stop" (Cooldown) and time is up, IMMEDIATE switch to "Step 1"
+            if phase == "WAIT_STOP" and (now - lastStepTime) >= Config.CancelDelay then
+                phase = "STEP123"
+            end
+
+            -- Execute Step 1 (Throw)
+            if phase == "INIT23" or phase == "STEP123" then
+                lastStepTime = now
+                ForceStep123()
+                phase = "WAIT_COMPLETE"
+            end
+
+            -- Check if time to Catch
+            if phase == "WAIT_COMPLETE" and (now - lastStepTime) >= Config.CompleteDelay then
+                phase = "STEP4"
+            end
+
+            -- Execute Step 4 (Catch)
+            if phase == "STEP4" then
+                lastStepTime = now
+                ForceStep4()
+                phase = "WAIT_STOP"
             end
         end)
         
@@ -292,9 +305,9 @@ local function ToggleBlatant(state)
                 task.wait(0.5)
             end
         end)
-        WindUI:Notify({ Title = "Blatant V1", Content = "Enabled", Icon = "zap" })
+        WindUI:Notify({ Title = "Blatant V1", Content = "Enabled (Instant)", Icon = "zap" })
     else
-        if BlatantThread then task.cancel(BlatantThread) end
+        if BlatantConnection then BlatantConnection:Disconnect(); BlatantConnection = nil end
         if EquipThread then task.cancel(EquipThread) end
         phase = "STEP123"
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
@@ -304,25 +317,23 @@ local function ToggleBlatant(state)
 end
 
 -- ==========================================================
---  [FEATURE] FISHING V2 (Hyper Fast Loop)
+--  [FEATURE] FISHING V2
 -- ==========================================================
 local V2_Thread = nil
-local V2_FishArgs = { -1.115296493039856, 0, 1763651451.636425 } -- From Snippet
+local V2_FishArgs = { -1.115296493039856, 0, 1763651451.636425 }
 
 local function ToggleFishingV2(state)
     _G.EnochHub_FishingV2Active = state
     SuppressGameVisuals(state or _G.EnochHub_BlatantActive)
 
     if state then
-        -- Disable V1 if active
         if _G.EnochHub_BlatantActive then
             _G.EnochHub_BlatantActive = false
             Config.BlatantEnabled = 0
-            if BlatantThread then task.cancel(BlatantThread) end
+            if BlatantConnection then BlatantConnection:Disconnect() end
             WindUI:Notify({Title="Switching", Content="Swapped V1 to V2", Icon="refresh-cw"})
         end
 
-        -- Auto Great
         if (Config.V2AutoGreat == 1) and RF_UpdateAutoFishingState then
              pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
         end
@@ -332,24 +343,17 @@ local function ToggleFishingV2(state)
 
         V2_Thread = task.spawn(function()
             while Config.FishingV2Enabled == 1 do
-                 -- Check Auto Sell Pause
                 if _G.EnochHub_IsSelling then task.wait(0.5); continue end
-
-                -- Hyper Loop Logic
                 task.spawn(function() pcall(function() RF_ChargeFishingRod:InvokeServer() end) end)
                 task.spawn(function() pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(V2_FishArgs)) end) end)
-                
                 task.wait(Config.V2DelayCharge)
-                
                 if Config.FishingV2Enabled == 0 then break end
-
                 pcall(function() RE_FishingCompleted:FireServer() end)
                 task.wait(Config.V2DelayReset)
                 pcall(function() RF_CancelFishingInputs:InvokeServer() end)
             end
         end)
         
-        -- Reuse Equip Thread if needed
         if not EquipThread or coroutine.status(EquipThread) == "dead" then
             EquipThread = task.spawn(function()
                 while (Config.FishingV2Enabled == 1 or Config.BlatantEnabled == 1) do
@@ -360,7 +364,6 @@ local function ToggleFishingV2(state)
                 end
             end)
         end
-        
         WindUI:Notify({ Title = "Fishing V2", Content = "Hyper Loop Started", Icon = "zap" })
     else
         if V2_Thread then task.cancel(V2_Thread) end
@@ -555,10 +558,7 @@ local ToggleV2 = SectFishV2:Toggle({
     Value = (Config.FishingV2Enabled == 1), 
     Callback = function(v) 
         Config.FishingV2Enabled = v and 1 or 0
-        
-        -- UI Visual Sync
         if v and ToggleV1 then ToggleV1:Set(false) end
-        
         ToggleFishingV2(v)
     end 
 })
@@ -641,4 +641,4 @@ if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.5 (Hyper V2)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.6", Duration = 4, Icon = "check" })
