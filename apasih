@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - OPTIMIZED V5 (Based on SynceHub)
+    ENOCHHUB ULTIMATE - OPTIMIZED V5 (Hybrid KREINXY Logic)
+    - [CORE] Ported "Phase-Based" Fishing Logic from KREINXY/Blatant.lua
     - [FIX] Auto Sell System (Clean pause/resume)
-    - [NEW] Blatant "Perfection" Logic (Remote Hooks + Visual Spoofing)
-    - [UI] Sliders replaced with Input Fields
+    - [PROT] Logic Killer & Visual Spoofing (Ghost Mode) active
 ]]
 
 local Players = game:GetService("Players")
@@ -18,15 +18,14 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM
 -- ==========================================================
-local FileName = "EnochHub_V5_Config.json"
+local FileName = "EnochHub_V5_Kreinxy_Config.json"
 
 local DefaultConfig = {
-    -- Blatant
+    -- Blatant (Kreinxy Settings)
     BlatantEnabled = false,
     AutoEquip = true,
-    CatchDelay = 3.055,
-    LoopInterval = 1.715,
-    CancelDelay = 0.3,
+    CompleteDelay = 0.705, -- Default from Blatant.lua
+    CancelDelay = 0.346,   -- Default from Blatant.lua
     
     -- Utilities
     AutoSellEnabled = false,
@@ -69,7 +68,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | Ultimate V5",
+    Title = "EnochHub | V5 (KREINXY Logic)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -121,7 +120,7 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  [CORE] LOGIC KILLER & REMOTE HOOKS (SYNCEHUB TECH)
+--  [CORE] LOGIC KILLER & REMOTE HOOKS
 -- ==========================================================
 
 -- 1. Disable Client Fishing Controller Logic
@@ -142,14 +141,13 @@ task.spawn(function()
     end
 end)
 
--- 2. Hook Metatable (Block Client -> Server remotes, allow Script -> Server)
+-- 2. Hook Metatable (Block Client -> Server remotes)
 local mt = getrawmetatable(game)
 local old_namecall = mt.__namecall
 setreadonly(mt, false)
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
     if _G.EnochHub_BlatantActive and not checkcaller() then
-        -- Block the game itself from trying to fish while we are exploiting
         if method == "InvokeServer" and (self.Name == "RequestFishingMinigameStarted" or self.Name == "ChargeFishingRod" or self.Name == "UpdateAutoFishingState") then
             return nil 
         end
@@ -161,9 +159,8 @@ mt.__namecall = newcclosure(function(self, ...)
 end)
 setreadonly(mt, true)
 
--- 3. Visual Spoofing (Hide "Enabled" Notification & Force Red Button)
+-- 3. Visual Spoofing
 local function SuppressGameVisuals(active)
-    -- A. Hook Notifications
     local Succ, TextController = pcall(function() return require(game.ReplicatedStorage.Controllers.TextNotificationController) end)
     if Succ and TextController then
         if active then
@@ -180,7 +177,6 @@ local function SuppressGameVisuals(active)
         end
     end
 
-    -- B. Force Button Red (Look Inactive)
     if active then
         task.spawn(function()
             local InactiveColor = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromHex("ff5d60")), ColorSequenceKeypoint.new(1, Color3.fromHex("ff2256"))})
@@ -189,7 +185,6 @@ local function SuppressGameVisuals(active)
                 for _, btn in ipairs(CollectionService:GetTagged("AutoFishingButton")) do table.insert(targets, btn) end
                 local guiBtn = LocalPlayer.PlayerGui:FindFirstChild("Backpack") and LocalPlayer.PlayerGui.Backpack:FindFirstChild("AutoFishingButton")
                 if guiBtn then table.insert(targets, guiBtn) end
-                
                 for _, btn in ipairs(targets) do
                     local grad = btn:FindFirstChild("UIGradient")
                     if grad then grad.Color = InactiveColor end
@@ -201,31 +196,31 @@ local function SuppressGameVisuals(active)
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT MODE
+--  [FEATURE] BLATANT MODE (KREINXY PHASE LOGIC)
 -- ==========================================================
 local BlatantThread = nil
 local EquipThread = nil
 
-local function RunBlatantIteration()
+-- New Phase Variables
+local phase = "STEP123"
+local lastStepTime = 0
+
+local function ForceStep123()
     task.spawn(function()
-        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            local start = os.clock()
-            
-            -- 1. Invoke Server Manually (Bypassing Hook via checkcaller)
-            pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
-            task.wait(0.01)
-            pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
-            
-            -- 2. Wait Catch Delay
-            local w = Config.CatchDelay - (os.clock() - start)
-            if w > 0 then task.wait(w) end
-            
-            -- 3. Finish
-            pcall(function() RE_FishingCompleted:FireServer() end)
-            task.wait(Config.CancelDelay)
-            pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-        end
+        pcall(function()
+            RF_CancelFishingInputs:InvokeServer()
+            RF_ChargeFishingRod:InvokeServer({ [1] = os.clock() })
+            -- Matches uploaded file logic: 1, clock, clock
+            RF_RequestFishingMinigameStarted:InvokeServer(1, os.clock(), os.clock())
+        end)
+    end)
+end
+
+local function ForceStep4()
+    task.spawn(function()
+        pcall(function()
+            RE_FishingCompleted:FireServer()            
+        end)
     end)
 end
 
@@ -237,20 +232,64 @@ local function ToggleBlatant(state)
     SuppressGameVisuals(state)
 
     if state then
-        -- Enable Server-Side "Legit" Auto Fish (But we hide it visually)
-        -- This prevents kicks and keeps the server happy
+        -- Server thinks we are fishing legitimately (Ghost Mode)
         if RF_UpdateAutoFishingState then 
             pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
             task.wait(0.2)
             pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
         end
 
+        if BlatantThread then task.cancel(BlatantThread) end
+
+        -- Initialize Phase
+        phase = "INIT23"
+        lastStepTime = os.clock()
+
         BlatantThread = task.spawn(function()
             while Config.BlatantEnabled do
-                if not _G.EnochHub_IsSelling then
-                    RunBlatantIteration()
+                task.wait(0.01) -- High speed tick
+                
+                -- Check for Auto-Sell Interruption
+                if _G.EnochHub_IsSelling then
+                    -- Reset phase slightly so we don't glitch when resuming
+                    phase = "WAIT_STOP" 
+                    lastStepTime = os.clock()
+                    task.wait(0.5)
+                    continue
                 end
-                task.wait(Config.LoopInterval)
+
+                local now = os.clock()
+
+                -- Safety reset if stuck
+                if (now - lastStepTime) > 4 then
+                    phase = "STEP123"
+                end
+
+                if phase == "INIT23" then
+                    lastStepTime = now
+                    ForceStep123()
+                    phase = "WAIT_COMPLETE"
+
+                elseif phase == "STEP123" then
+                    lastStepTime = now
+                    ForceStep123()
+                    phase = "WAIT_COMPLETE"
+
+                elseif phase == "WAIT_COMPLETE" then
+                    if (now - lastStepTime) >= Config.CompleteDelay then
+                        phase = "STEP4"
+                    end
+
+                elseif phase == "STEP4" then
+                    lastStepTime = now
+                    ForceStep4()
+                    phase = "WAIT_STOP"
+
+                elseif phase == "WAIT_STOP" then
+                    if (now - lastStepTime) >= Config.CancelDelay then
+                        phase = "STEP123"
+                    end
+                end
             end
         end)
         
@@ -262,18 +301,25 @@ local function ToggleBlatant(state)
                 task.wait(0.5)
             end
         end)
-        WindUI:Notify({ Title = "Blatant", Content = "Enabled (Ghost Mode)", Icon = "zap" })
+        WindUI:Notify({ Title = "Blatant", Content = "Enabled (Hybrid Logic)", Icon = "zap" })
     else
         if BlatantThread then task.cancel(BlatantThread) end
         if EquipThread then task.cancel(EquipThread) end
+        
+        -- Reset Phase
+        phase = "STEP123"
+        
+        -- Cancel Server State
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+        pcall(function() RF_CancelFishingInputs:InvokeServer() end) -- Ensure cancelled
+        
         WindUI:Notify({ Title = "Blatant", Content = "Disabled", Icon = "x" })
     end
 end
 
 -- ==========================================================
---  [FEATURE] GRAPHICS (POTATO)
+--  [FEATURE] GRAPHICS & TOTEM & TELEPORTS (UNCHANGED)
 -- ==========================================================
 local PotatoLoop = nil
 local function ApplyPotato()
@@ -302,13 +348,10 @@ local function TogglePotato(state)
     end
 end
 
--- ==========================================================
---  [FEATURE] 9 TOTEM (GHOST MODE)
--- ==========================================================
+-- TOTEM LOGIC
 local AUTO_9_TOTEM_ACTIVE = false
 local AUTO_9_TOTEM_THREAD = nil
 local TotemToggleUI = nil 
-
 local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 local REF_SPOTS = {
@@ -329,40 +372,18 @@ local function GetTotemUUID(name)
     return nil
 end
 
-local stateConnection = nil
-local noclipConnection = nil 
-
+local stateConnection, noclipConnection = nil, nil
 local function EnableV3Physics()
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChild("Humanoid")
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root or not hum then return end
-    
     if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
     hum.PlatformStand = true 
-    
-    if not stateConnection then
-        stateConnection = RunService.Heartbeat:Connect(function()
-            if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end
-        end)
-    end
-    
-    if not noclipConnection then
-        noclipConnection = RunService.Stepped:Connect(function()
-            if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then
-                for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then
-                        v.CanCollide = false
-                    end
-                end
-            end
-        end)
-    end
-    
-    local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root)
-    bg.Name="FlyGuiGyro"; bg.P=9e4; bg.maxTorque=Vector3.new(9e9,9e9,9e9); bg.CFrame=root.CFrame
-    local bv = root:FindFirstChild("FlyGuiVelocity") or Instance.new("BodyVelocity", root)
-    bv.Name="FlyGuiVelocity"; bv.velocity=Vector3.zero; bv.maxForce=Vector3.new(9e9,9e9,9e9)
+    if not stateConnection then stateConnection = RunService.Heartbeat:Connect(function() if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end end) end
+    if not noclipConnection then noclipConnection = RunService.Stepped:Connect(function() if AUTO_9_TOTEM_ACTIVE and LocalPlayer.Character then for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end end end end) end
+    local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root); bg.Name="FlyGuiGyro"; bg.P=9e4; bg.maxTorque=Vector3.new(9e9,9e9,9e9); bg.CFrame=root.CFrame
+    local bv = root:FindFirstChild("FlyGuiVelocity") or Instance.new("BodyVelocity", root); bv.Name="FlyGuiVelocity"; bv.velocity=Vector3.zero; bv.maxForce=Vector3.new(9e9,9e9,9e9)
 end
 
 local function DisableV3Physics()
@@ -397,15 +418,10 @@ local function Run9TotemLoop()
     if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end
     AUTO_9_TOTEM_THREAD = task.spawn(function()
         local uuid = GetTotemUUID(Config.TotemType)
-        if not uuid then WindUI:Notify({ Title="Error", Content="No stock.", Icon="alert-triangle" }) 
-            if TotemToggleUI then TotemToggleUI:Set(false) end
-            return 
-        end
-        
+        if not uuid then WindUI:Notify({ Title="Error", Content="No stock.", Icon="alert-triangle" }); if TotemToggleUI then TotemToggleUI:Set(false) end; return end
         local startPos = LocalPlayer.Character.HumanoidRootPart.Position
         if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
         EnableV3Physics()
-        
         for i, refSpot in ipairs(REF_SPOTS) do
             if not AUTO_9_TOTEM_ACTIVE then break end
             FlyPhysicsTo(startPos + (refSpot - REF_CENTER))
@@ -418,7 +434,6 @@ local function Run9TotemLoop()
             else break end
             task.wait(1.5)
         end
-        
         if AUTO_9_TOTEM_ACTIVE then FlyPhysicsTo(startPos) end
         if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
         DisableV3Physics()
@@ -429,60 +444,30 @@ local function Run9TotemLoop()
 end
 
 -- ==========================================================
---  [FEATURE] ANTI-AFK (ROBUST)
--- ==========================================================
-local AntiAfkConnection = nil
-local function ToggleAntiAfk(state)
-    Config.AntiAfkEnabled = state
-    SaveSettings()
-    if state then
-        if getconnections then for _,v in pairs(getconnections(LocalPlayer.Idled)) do if v.Disable then v:Disable() end end end
-        if not AntiAfkConnection then
-            AntiAfkConnection = LocalPlayer.Idled:Connect(function()
-                VirtualUser:CaptureController(); VirtualUser:Button2Down(Vector2.new(0,0),Workspace.CurrentCamera.CFrame); task.wait(1); VirtualUser:Button2Up(Vector2.new(0,0),Workspace.CurrentCamera.CFrame)
-            end)
-        end
-    else
-        if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
-    end
-end
-
--- ==========================================================
 --  UI BUILDING
 -- ==========================================================
 
--- 1. BLATANT (UPDATED TO INPUTS)
-local SectFish = TabFish:Section({ Title = "Fishing", TextSize = 17 })
+-- 1. BLATANT (Updated for Phase Logic)
+local SectFish = TabFish:Section({ Title = "Fishing (Phase Logic)", TextSize = 17 })
 
 SectFish:Toggle({ Title = "Enable Blatant", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
 SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip=v; SaveSettings() end })
 
 SectFish:Input({ 
-    Title = "Catch Delay", 
-    Default = tostring(Config.CatchDelay), 
-    Placeholder = "3.055", 
+    Title = "Complete Delay", 
+    Default = tostring(Config.CompleteDelay), 
+    Placeholder = "0.705", 
     Numeric = true,
     Callback = function(text) 
         local n = tonumber(text)
-        if n then Config.CatchDelay = n; SaveSettings() end
-    end 
-})
-
-SectFish:Input({ 
-    Title = "Loop Interval", 
-    Default = tostring(Config.LoopInterval), 
-    Placeholder = "1.715", 
-    Numeric = true,
-    Callback = function(text) 
-        local n = tonumber(text)
-        if n then Config.LoopInterval = n; SaveSettings() end
+        if n then Config.CompleteDelay = n; SaveSettings() end
     end 
 })
 
 SectFish:Input({ 
     Title = "Cancel Delay", 
     Default = tostring(Config.CancelDelay), 
-    Placeholder = "0.3", 
+    Placeholder = "0.346", 
     Numeric = true,
     Callback = function(text) 
         local n = tonumber(text)
@@ -495,7 +480,7 @@ local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
 SectTotem:Dropdown({ Title="Type", Values={"Luck Totem", "Mutation Totem", "Shiny Totem"}, Value=Config.TotemType, Callback=function(v) Config.TotemType=v; SaveSettings() end })
 TotemToggleUI = SectTotem:Toggle({ Title = "Start Formation", Callback = function(s) AUTO_9_TOTEM_ACTIVE=s; if s then Run9TotemLoop() else if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end DisableV3Physics() end end })
 
--- 3. TELEPORT (FULL COORDS)
+-- 3. TELEPORT
 local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
 local Coords = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
@@ -583,8 +568,25 @@ local SectGfx = TabUtil:Section({ Title = "Graphics", TextSize = 17 })
 SectGfx:Toggle({ Title="Extreme Potato", Value=Config.PotatoModeEnabled, Callback=TogglePotato })
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v; SaveSettings() end })
 
+-- Anti-AFK
+local AntiAfkConnection = nil
+local function ToggleAntiAfk(state)
+    Config.AntiAfkEnabled = state
+    SaveSettings()
+    if state then
+        if getconnections then for _,v in pairs(getconnections(LocalPlayer.Idled)) do if v.Disable then v:Disable() end end end
+        if not AntiAfkConnection then
+            AntiAfkConnection = LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController(); VirtualUser:Button2Down(Vector2.new(0,0),Workspace.CurrentCamera.CFrame); task.wait(1); VirtualUser:Button2Up(Vector2.new(0,0),Workspace.CurrentCamera.CFrame)
+            end)
+        end
+    else
+        if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
+    end
+end
+
 if Config.BlatantEnabled then ToggleBlatant(true) end
 if Config.PotatoModeEnabled then TogglePotato(true) end
 if Config.AntiAfkEnabled then ToggleAntiAfk(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "V5 Optimized Loaded.", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "V5 Optimized (Kreinxy) Loaded.", Duration = 4, Icon = "check" })
