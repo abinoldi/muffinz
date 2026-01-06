@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.6 (FRAME-PERFECT THROW)
-    - [OPTIMIZE] Converted Fishing V1 to Heartbeat Loop (Ultra Fast).
-    - [LOGIC] Reordered Phase checks to eliminate "1-frame lag" between Catch and Throw.
-    - [CONFIG] Reverted default CancelDelay to 0.346 (User preference).
+    ENOCHHUB ULTIMATE - V5.7 (CLEAN LOOP)
+    - [REMOVED] Absolutely NO "Auto Reset" or 4s timeout logic.
+    - [FIX] Loop is now strictly linear: Throw -> Wait -> Catch -> Wait -> Throw.
+    - [SPEED] Uses Heartbeat with Fallthrough to eliminate frame delays.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,7 +16,7 @@ local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
---  CONFIG & SAVE SYSTEM
+--  CONFIG & SAVE SYSTEM (BINARY)
 -- ==========================================================
 local FileName = "EnochHub_V5_Binary_Config.json"
 
@@ -25,7 +25,7 @@ local DefaultConfig = {
     BlatantEnabled = 0,
     AutoEquip = 1,
     CompleteDelay = 0.705, 
-    CancelDelay = 0.346, -- [USER] Keep this for equipment timing
+    CancelDelay = 0.346, -- [USER] Preserved setting
     
     -- Blatant V2
     FishingV2Enabled = 0,
@@ -78,7 +78,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.6 (Frame Perfect)",
+    Title = "EnochHub | V5.7 (Clean Loop)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -215,7 +215,7 @@ local function SuppressGameVisuals(active)
 end
 
 -- ==========================================================
---  [FEATURE] BLATANT V1 (OPTIMIZED LOOP)
+--  [FEATURE] BLATANT V1 (NO AUTO RESET)
 -- ==========================================================
 local BlatantConnection = nil
 local EquipThread = nil
@@ -223,6 +223,7 @@ local phase = "STEP123"
 local lastStepTime = 0
 
 local function ForceStep123()
+    -- Run in new thread so InvokeServer doesn't block the loop
     task.spawn(function()
         pcall(function()
             RF_CancelFishingInputs:InvokeServer()
@@ -251,18 +252,17 @@ local function ToggleBlatant(state)
             pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
         end
 
-        -- Cleanup old thread/connection
         if BlatantConnection then BlatantConnection:Disconnect() end
         
-        -- Start Variables
+        -- Force Start
         phase = "INIT23"
         lastStepTime = os.clock()
 
-        -- [NEW] Heartbeat Loop (Runs every frame)
+        -- FRAME-PERFECT LOOP
         BlatantConnection = RunService.Heartbeat:Connect(function()
             if Config.BlatantEnabled ~= 1 then return end
             
-            -- Auto-Sell Pause
+            -- Auto-Sell Pause Logic
             if _G.EnochHub_IsSelling then
                 phase = "WAIT_STOP"
                 lastStepTime = os.clock()
@@ -271,30 +271,34 @@ local function ToggleBlatant(state)
 
             local now = os.clock()
 
-            -- LOGIC FLOW (OPTIMIZED FOR FALLTHROUGH)
-            -- If we are in "Wait Stop" (Cooldown) and time is up, IMMEDIATE switch to "Step 1"
+            -- LOGIC: Fall-through check. 
+            -- If Condition Met -> Change Phase -> Immediately check Next Phase in SAME FRAME.
+
+            -- 1. Cooldown Finished? -> Ready to Cast
             if phase == "WAIT_STOP" and (now - lastStepTime) >= Config.CancelDelay then
                 phase = "STEP123"
             end
 
-            -- Execute Step 1 (Throw)
+            -- 2. Cast Phase
             if phase == "INIT23" or phase == "STEP123" then
                 lastStepTime = now
                 ForceStep123()
                 phase = "WAIT_COMPLETE"
             end
 
-            -- Check if time to Catch
+            -- 3. Waiting for Fish?
             if phase == "WAIT_COMPLETE" and (now - lastStepTime) >= Config.CompleteDelay then
                 phase = "STEP4"
             end
 
-            -- Execute Step 4 (Catch)
+            -- 4. Catch Fish
             if phase == "STEP4" then
                 lastStepTime = now
                 ForceStep4()
                 phase = "WAIT_STOP"
             end
+            
+            -- NOTE: No "else if > 4 reset" logic here. It is gone.
         end)
         
         EquipThread = task.spawn(function()
@@ -305,7 +309,7 @@ local function ToggleBlatant(state)
                 task.wait(0.5)
             end
         end)
-        WindUI:Notify({ Title = "Blatant V1", Content = "Enabled (Instant)", Icon = "zap" })
+        WindUI:Notify({ Title = "Blatant V1", Content = "Enabled (Clean)", Icon = "zap" })
     else
         if BlatantConnection then BlatantConnection:Disconnect(); BlatantConnection = nil end
         if EquipThread then task.cancel(EquipThread) end
@@ -313,6 +317,7 @@ local function ToggleBlatant(state)
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+        WindUI:Notify({ Title = "Blatant", Content = "Disabled", Icon = "x" })
     end
 end
 
@@ -641,4 +646,4 @@ if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.6", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7", Duration = 4, Icon = "check" })
