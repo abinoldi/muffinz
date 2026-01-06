@@ -1,7 +1,7 @@
 --[[
-    SERAPHIN HELPER - WIND UI REMAKE (FINAL)
+    SERAPHIN HELPER - WIND UI REMAKE (FINAL FIXED)
     > Hyper Fast Fishing (FishIT Logic)
-    > Full Teleport List (From EnochHub) + Custom Coords
+    > Full Teleport List (Fixed Dropdown)
     > Auto Sell, Auto Favorite Ruby, Extreme Potato
 ]]
 
@@ -233,7 +233,6 @@ SectFish:Slider({
 -- >> TAB TELEPORT (FULL LIST FROM SOURCE)
 local SectTp = TabTeleport:Section({ Title = "Locations", TextSize = 17 })
 
--- Full Coordinate List from EnochHub Source
 local Coords = {
     ["Iron Cavern"] = Vector3.new(-8792.546, -588.000, 230.642),
     ["Disco Event"] = Vector3.new(-8641.672, -547.500, 160.322),
@@ -267,43 +266,19 @@ local AreaList = {}
 for n in pairs(Coords) do table.insert(AreaList, n) end 
 table.sort(AreaList)
 
+-- Using "Values" as typically used in original Enoch/WindUI implementations
 SectTp:Dropdown({
     Title = "Select Location",
-    Data = AreaList,
+    Values = AreaList,
+    Multi = false,
     Callback = function(v)
-        if HRP and Coords[v] then
+        -- WindUI might pass the value directly or as a key
+        local target = Coords[v]
+        if HRP and target then
             -- Unequip rod first to prevent glitches
             if EquipTool then pcall(function() EquipTool:FireServer(0) end) end
             task.wait(0.2)
-            HRP.CFrame = CFrame.new(Coords[v])
-        end
-    end
-})
-
--- Custom Coordinates
-local CustomX, CustomY, CustomZ = "0", "0", "0"
-
-SectTp:Input({
-    Title = "X Coord",
-    Default = "0",
-    Callback = function(v) CustomX = v end
-})
-SectTp:Input({
-    Title = "Y Coord",
-    Default = "0",
-    Callback = function(v) CustomY = v end
-})
-SectTp:Input({
-    Title = "Z Coord",
-    Default = "0",
-    Callback = function(v) CustomZ = v end
-})
-
-SectTp:Button({
-    Title = "Teleport to Custom Coords",
-    Callback = function()
-        if HRP then
-            HRP.CFrame = CFrame.new(tonumber(CustomX), tonumber(CustomY), tonumber(CustomZ))
+            HRP.CFrame = CFrame.new(target)
         end
     end
 })
