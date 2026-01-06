@@ -567,7 +567,7 @@ SectSystem:Toggle({
                         end
                         WindUI:Notify({Title="System", Content="Sold Items", Duration=1})
                     end 
-                    task.wait(60) 
+                    task.wait(300) 
                 end 
             end) 
         end 
