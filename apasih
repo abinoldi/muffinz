@@ -649,7 +649,7 @@ if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7", Duration = 4, Icon = "check" })
 
 -- ==========================================================
---  FISH IT MONITOR | SECRET + RUBY (LOOPING 15s)
+--  FISH IT MONITOR | SECRET + GEMSTONE RUBY (LOOP 15s)
 -- ==========================================================
 task.spawn(function()
     local Players = game:GetService("Players")
@@ -660,22 +660,19 @@ task.spawn(function()
     -- ================= CONFIG =================
     local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
     local DEBUG = false
-    local LOOP_DELAY = 15 -- Waktu delay dalam detik
+    local LOOP_DELAY = 15 -- Loop per 15 detik
 
     local function dprint(...)
-        if DEBUG then
-            print("[FISH IT][DEBUG]", ...)
-        end
+        if DEBUG then print("[FISH IT][DEBUG]", ...) end
     end
 
     -- ================= MODULES =================
-    -- Load module hanya sekali di luar loop untuk efisiensi
     local Replion = require(RepStorage.Packages.Replion).Client
     local ItemUtility = require(RepStorage.Shared.ItemUtility)
     local TierUtility = require(RepStorage.Shared.TierUtility)
 
     -- ======================================================
-    -- GET FISH NAME & RARITY (SAFE OG METHOD)
+    -- GET FISH NAME & RARITY (OG METHOD)
     -- ======================================================
     local function GetFishNameAndRarity(item)
         local name = item.Identifier or "Unknown"
@@ -715,13 +712,12 @@ task.spawn(function()
     end
 
     -- ======================================================
-    -- GET MUTATION
+    -- GET MUTATION (CHECK GEMSTONE)
     -- ======================================================
     local function GetMutation(item)
-        if not item.Metadata then
-            return "None"
-        end
-
+        if not item.Metadata then return "None" end
+        
+        -- Cek VariantId (Gemstone ada di sini)
         if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then
             return item.Metadata.VariantId
         end
@@ -729,7 +725,6 @@ task.spawn(function()
         if item.Metadata.Shiny == true then
             return "Shiny"
         end
-
         return "None"
     end
 
@@ -739,32 +734,20 @@ task.spawn(function()
     local function sendToWebhook(playerName, summary)
         local json = HttpService:JSONEncode(summary)
         local encoded = HttpService:UrlEncode(json)
-
-        local url =
-            WEBHOOK_BASE ..
-            "?player=" .. HttpService:UrlEncode(playerName) ..
-            "&data=" .. encoded
-
-        pcall(function()
-            game:HttpGet(url)
-        end)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        
+        pcall(function() game:HttpGet(url) end)
     end
 
     -- ======================================================
-    -- LOOPING SCAN
+    -- MAIN LOOP
     -- ======================================================
-    dprint("Starting Looping Monitor (Every " .. LOOP_DELAY .. "s)...")
-    
-    -- Ambil referensi Replion Data sekali saja
+    dprint("Starting Monitor (Secret + Gemstone Ruby Only)...")
     local dataReplica = Replion:WaitReplion("Data")
 
     while true do
         dprint("Scanning inventory...")
-        
-        -- Ambil data inventory terbaru setiap kali loop berjalan
         local inventory = dataReplica:GetExpect("Inventory")
-
-        -- Reset summary setiap loop agar tidak menumpuk
         local summary = {}
         local shouldSend = false
 
@@ -773,34 +756,39 @@ task.spawn(function()
                 local name, rarity = GetFishNameAndRarity(item)
                 local mutation = GetMutation(item)
 
-                local isRuby = (name == "Ruby")
+                -- LOGIKA FILTER:
+                -- 1. Ambil SEMUA Rarity Secret
+                -- 2. Ambil Ruby HANYA JIKA Mutation == Gemstone
+                
                 local isSecret = (rarity == "SECRET")
+                local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
 
-                -- 🔒 FINAL SAFE FILTER
-                if isRuby or isSecret then
+                if isSecret or isGemstoneRuby then
                     local displayName = name
-
-                    -- Show mutation ONLY if exists
-                    if mutation ~= "None" then
+                    
+                    -- Beri penanda khusus untuk Gemstone Ruby agar jelas di table
+                    if isGemstoneRuby then
+                        displayName = "[Gemstone] Ruby"
+                    elseif mutation ~= "None" then
+                        -- Jika Secret punya mutasi (misal Shiny Secret), tampilkan juga
                         displayName = "[" .. mutation .. "] " .. name
                     end
 
                     summary[displayName] = (summary[displayName] or 0) + 1
                     shouldSend = true
-
-                    dprint("FOUND:", displayName, "| Rarity:", rarity)
+                    dprint("FOUND:", displayName)
                 end
             end
         end
 
+        -- Hanya kirim webhook jika ada Secret ATAU Gemstone Ruby
         if shouldSend then
             sendToWebhook(lp.Name, summary)
             dprint("Webhook sent.")
         else
-            dprint("No Ruby or Secret found. Webhook skipped.")
+            dprint("Nothing found. Webhook skipped.")
         end
 
-        -- Tunggu sebelum scan berikutnya
         task.wait(LOOP_DELAY)
     end
 end)
