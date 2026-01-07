@@ -16,8 +16,71 @@ repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
 local lp = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
+
+-- ======================================================
+-- [NEW] CPU OPTIMIZER & ANIMATION REMOVER
+-- ======================================================
+
+local function OptimizeGraphics()
+    -- 1. Global Rendering
+    settings().Rendering.QualityLevel = "Level01"
+    
+    -- 2. Lighting (Disable Shadows/Fog)
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.Brightness = 0
+    
+    -- 3. Map Cleanup (Textures, Decals, Particles)
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v:IsA("Terrain") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v:Destroy() -- Remove images
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") then
+            v.Enabled = false -- Stop particles
+        end
+    end
+end
+
+local function DisableAnimations()
+    local character = lp.Character or lp.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    if not humanoid then return end
+
+    -- 1. Block 'Animate' script
+    local animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then
+        animateScript.Enabled = false
+    end
+
+    -- 2. Destroy Animator (Hard Stop)
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if animator then
+        animator:Destroy()
+    end
+    
+    -- 3. Stop running tracks
+    for _, track in pairs(humanoid:GetPlayingAnimationTracks()) do
+        track:Stop()
+    end
+end
+
+-- EXECUTE OPTIMIZATIONS
+task.spawn(OptimizeGraphics)
+task.spawn(DisableAnimations)
+
+-- Ensure animations stay off if you respawn/teleport resets character
+lp.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    DisableAnimations()
+end)
 
 -- ===============================
 -- REMOTES & CONTROLLERS
