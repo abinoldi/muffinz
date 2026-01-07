@@ -647,3 +647,160 @@ if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7", Duration = 4, Icon = "check" })
+
+-- ==========================================================
+--  FISH IT MONITOR | SECRET + RUBY (LOOPING 15s)
+-- ==========================================================
+task.spawn(function()
+    local Players = game:GetService("Players")
+    local RepStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
+    local lp = Players.LocalPlayer
+
+    -- ================= CONFIG =================
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local DEBUG = false
+    local LOOP_DELAY = 15 -- Waktu delay dalam detik
+
+    local function dprint(...)
+        if DEBUG then
+            print("[FISH IT][DEBUG]", ...)
+        end
+    end
+
+    -- ================= MODULES =================
+    -- Load module hanya sekali di luar loop untuk efisiensi
+    local Replion = require(RepStorage.Packages.Replion).Client
+    local ItemUtility = require(RepStorage.Shared.ItemUtility)
+    local TierUtility = require(RepStorage.Shared.TierUtility)
+
+    -- ======================================================
+    -- GET FISH NAME & RARITY (SAFE OG METHOD)
+    -- ======================================================
+    local function GetFishNameAndRarity(item)
+        local name = item.Identifier or "Unknown"
+        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+        local itemID = item.Id
+        local itemData
+
+        if ItemUtility and itemID then
+            pcall(function()
+                itemData = ItemUtility:GetItemData(itemID)
+                if not itemData then
+                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                    if numericID then
+                        itemData = ItemUtility:GetItemData(numericID)
+                    end
+                end
+            end)
+        end
+
+        if itemData and itemData.Data and itemData.Data.Name then
+            name = itemData.Data.Name
+        end
+
+        if item.Metadata and item.Metadata.Rarity then
+            rarity = item.Metadata.Rarity
+        elseif itemData and itemData.Probability and TierUtility then
+            local tier
+            pcall(function()
+                tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance)
+            end)
+            if tier and tier.Name then
+                rarity = tier.Name
+            end
+        end
+
+        return name, rarity
+    end
+
+    -- ======================================================
+    -- GET MUTATION
+    -- ======================================================
+    local function GetMutation(item)
+        if not item.Metadata then
+            return "None"
+        end
+
+        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then
+            return item.Metadata.VariantId
+        end
+
+        if item.Metadata.Shiny == true then
+            return "Shiny"
+        end
+
+        return "None"
+    end
+
+    -- ======================================================
+    -- WEBHOOK
+    -- ======================================================
+    local function sendToWebhook(playerName, summary)
+        local json = HttpService:JSONEncode(summary)
+        local encoded = HttpService:UrlEncode(json)
+
+        local url =
+            WEBHOOK_BASE ..
+            "?player=" .. HttpService:UrlEncode(playerName) ..
+            "&data=" .. encoded
+
+        pcall(function()
+            game:HttpGet(url)
+        end)
+    end
+
+    -- ======================================================
+    -- LOOPING SCAN
+    -- ======================================================
+    dprint("Starting Looping Monitor (Every " .. LOOP_DELAY .. "s)...")
+    
+    -- Ambil referensi Replion Data sekali saja
+    local dataReplica = Replion:WaitReplion("Data")
+
+    while true do
+        dprint("Scanning inventory...")
+        
+        -- Ambil data inventory terbaru setiap kali loop berjalan
+        local inventory = dataReplica:GetExpect("Inventory")
+
+        -- Reset summary setiap loop agar tidak menumpuk
+        local summary = {}
+        local shouldSend = false
+
+        for _, items in pairs(inventory) do
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+
+                local isRuby = (name == "Ruby")
+                local isSecret = (rarity == "SECRET")
+
+                -- 🔒 FINAL SAFE FILTER
+                if isRuby or isSecret then
+                    local displayName = name
+
+                    -- Show mutation ONLY if exists
+                    if mutation ~= "None" then
+                        displayName = "[" .. mutation .. "] " .. name
+                    end
+
+                    summary[displayName] = (summary[displayName] or 0) + 1
+                    shouldSend = true
+
+                    dprint("FOUND:", displayName, "| Rarity:", rarity)
+                end
+            end
+        end
+
+        if shouldSend then
+            sendToWebhook(lp.Name, summary)
+            dprint("Webhook sent.")
+        else
+            dprint("No Ruby or Secret found. Webhook skipped.")
+        end
+
+        -- Tunggu sebelum scan berikutnya
+        task.wait(LOOP_DELAY)
+    end
+end)
