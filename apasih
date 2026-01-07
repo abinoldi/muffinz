@@ -618,7 +618,14 @@ SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) lo
 -- [TAB] UTILITIES
 local SectSystem = TabUtil:Section({ Title = "System", TextSize = 17 })
 SectSystem:Button({ Title = "Save Config", Icon = "save", Callback = function() SaveSettings(); WindUI:Notify({Title="Config", Content="Settings Saved!", Icon="save"}) end })
-SectSystem:Toggle({ Title="Auto Sell All", Value = (Config.AutoSellEnabled == 1), Callback=function(s) Config.AutoSellEnabled = s and 1 or 0; if s then task.spawn(function() while Config.AutoSellEnabled == 1 do if RF_SellAllItems then _G.EnochHub_IsSelling = true; pcall(function() RF_CancelFishingInputs:InvokeServer() end); pcall(function() RE_EquipToolFromHotbar:FireServer(0) end); task.wait(1.0); pcall(function() RF_SellAllItems:InvokeServer() end); task.wait(0.5); _G.EnochHub_IsSelling = false; if (Config.BlatantEnabled == 1 or Config.FishingV2Enabled == 1) and (Config.AutoEquip == 1) then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end; WindUI:Notify({Title="System", Content="Sold Items", Duration=1}) end; task.wait(300) end end) end end })
+SectSystem:Toggle({ 
+    Title = "Auto Sell All", 
+    Value = (Config.AutoSellEnabled == 1), 
+    Callback = function(s) 
+        Config.AutoSellEnabled = s and 1 or 0
+        ToggleAutoSell(s) 
+    end 
+})
 SectSystem:Toggle({ Title = "Auto Fav Ruby", Value = (Config.AutoFavRubyEnabled == 1), Callback = function(s) Config.AutoFavRubyEnabled = s and 1 or 0; ToggleAutoRuby(s) end })
 
 local AntiAfkConnection = nil
@@ -630,6 +637,46 @@ local function ToggleAntiAfk(state)
         end
     else
         if AntiAfkConnection then AntiAfkConnection:Disconnect(); AntiAfkConnection = nil end
+    end
+end
+-- ==========================================================
+--  [FIX] AUTO SELL FUNCTION (NEW)
+-- ==========================================================
+local AutoSellLoop = nil
+
+local function ToggleAutoSell(state)
+    if state then
+        if AutoSellLoop then task.cancel(AutoSellLoop) end -- Prevent duplicates
+        AutoSellLoop = task.spawn(function()
+            while Config.AutoSellEnabled == 1 do
+                if RF_SellAllItems then 
+                    _G.EnochHub_IsSelling = true
+                    
+                    -- Stop Fishing Temporarily
+                    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                    pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+                    
+                    task.wait(1.0)
+                    
+                    -- Sell
+                    pcall(function() RF_SellAllItems:InvokeServer() end)
+                    
+                    task.wait(0.5)
+                    _G.EnochHub_IsSelling = false
+                    
+                    -- Re-equip if fishing was active
+                    if (Config.BlatantEnabled == 1 or Config.FishingV2Enabled == 1) and (Config.AutoEquip == 1) then 
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                    end
+                    
+                    WindUI:Notify({Title="System", Content="Sold Items", Duration=1}) 
+                end
+                task.wait(300) -- Wait 5 minutes
+            end
+        end)
+    else
+        if AutoSellLoop then task.cancel(AutoSellLoop) end
+        AutoSellLoop = nil
     end
 end
 SectSystem:Toggle({ Title="Anti-AFK", Value=(Config.AntiAfkEnabled == 1), Callback = function(s) Config.AntiAfkEnabled = s and 1 or 0; ToggleAntiAfk(s) end })
@@ -646,7 +693,10 @@ if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7", Duration = 4, Icon = "check" })
+-- [FIX] TRIGGER AUTO SELL SAAT SCRIPT START
+if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
+
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  FISH IT MONITOR | SECRET + GEMSTONE RUBY (ALWAYS SEND MODE)
