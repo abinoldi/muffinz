@@ -9,7 +9,7 @@ pcall(function()
 end)
 
 -- ======================================================
--- ENOCHHUB | ULTIMATE FARM (OPTIMIZED + VFX KILLER)
+-- ENOCHHUB | ULTIMATE FARM (OPTIMIZED + GHOSTFIN SKIP)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -25,39 +25,30 @@ local lp = Players.LocalPlayer
 -- [1] VFX / SKIN EFFECT REMOVER (AUTO ON)
 -- ======================================================
 local function DisableVFX()
-    -- Attempt to find the VFX Controller
     local success, VFXController = pcall(function()
         return require(ReplicatedStorage.Controllers.VFXController)
     end)
 
     if success and VFXController then
         print("✅ VFX Controller Found. Disabling Skin Effects...")
-        
-        -- Overwrite the rendering functions to do nothing
         VFXController.Handle = function(...) end
         VFXController.RenderAtPoint = function(...) end
         VFXController.RenderInstance = function(...) end
         
-        -- Clear existing effects in workspace
         local cosmeticFolder = Workspace:FindFirstChild("CosmeticFolder")
         if cosmeticFolder then
             pcall(function() cosmeticFolder:ClearAllChildren() end)
-            
-            -- Keep it clear if new stuff gets added
             cosmeticFolder.ChildAdded:Connect(function(child)
                 task.wait()
                 child:Destroy()
             end)
         end
-    else
-        warn("⚠️ Could not find VFXController to disable skins.")
     end
 end
 
 -- ======================================================
 -- [2] AGGRESSIVE ANIMATION REMOVER & CPU SAVER
 -- ======================================================
-
 local function OptimizeGraphics()
     settings().Rendering.QualityLevel = "Level01"
     Lighting.GlobalShadows = false
@@ -82,43 +73,31 @@ local function KillAnimations(char)
     local hum = char:WaitForChild("Humanoid", 5)
     if not hum then return end
 
-    -- A. Disable the default 'Animate' script
     local animScript = char:FindFirstChild("Animate")
     if animScript and animScript:IsA("LocalScript") then
         animScript.Enabled = false
     end
 
-    -- B. Stop currently playing tracks
     for _, track in pairs(hum:GetPlayingAnimationTracks()) do
         track:Stop()
     end
 
-    -- C. Aggressively stop any NEW animation that tries to play
     hum.AnimationPlayed:Connect(function(track)
         track:Stop()
     end)
-    
-    -- D. Nuke the Animator (Optional: Some games break if you do this, but it's the most effective)
-    local animator = hum:FindFirstChildOfClass("Animator")
-    if animator then
-        -- We just disable the parent script usually, but if you want them GONE:
-        -- animator:Destroy() 
-    end
 end
 
--- Run Optimization Immediately
 task.spawn(DisableVFX)
 task.spawn(OptimizeGraphics)
 task.spawn(function() KillAnimations(lp.Character) end)
 
--- Ensure it runs on Respawn
 lp.CharacterAdded:Connect(function(char)
     task.wait(0.5)
     KillAnimations(char)
 end)
 
 -- ===============================
--- REMOTES & CONTROLLERS (AUTO FARM LOGIC)
+-- REMOTES & CONTROLLERS
 -- ===============================
 local FishingController = require(ReplicatedStorage.Controllers.FishingController)
 local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
@@ -238,6 +217,8 @@ local function ManageGear()
     local rodsList = GetOwnedItems(inv, "Fishing Rods")
     
     STATE.HasAstralRod = false
+    STATE.HasGhostfinRod = false
+    
     for _, r in ipairs(rodsList) do 
         table.insert(ownedRodIDs, r.ID) 
         table.insert(allRods, r)
@@ -312,12 +293,31 @@ local function ManageGear()
 end
 
 -- ===============================
--- LOGIC
+-- STATUS & LOGIC (MODIFIED)
 -- ===============================
 local function CheckDeepSeaStatus()
     local r = GetPlayerDataReplion()
     if not r then return {Done=false} end
     local data = r:Get()
+
+    -- [NEW] CHECK FOR GHOSTFIN ROD (ID 169) TO SKIP QUEST
+    local inv = data.Inventory or {}
+    local rods = inv["Fishing Rods"] or {}
+    local hasGhostfin = false
+    -- Handle inconsistent data types (Table vs Dictionary)
+    if type(rods) == "table" then
+        for _, v in pairs(rods) do
+            local id = tonumber(v.Id) or tonumber(v.ItemId) or tonumber(v.id)
+            if id == 169 then hasGhostfin = true; break end
+        end
+    end
+
+    if hasGhostfin then
+        STATE.HasGhostfinRod = true
+        return {Done=true} -- Skip quest if rod is owned
+    end
+
+    -- Regular Quest Logic
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
     if not quest then return {Done=false, Obj=1} end
     if quest.completed then return {Done=true} end
