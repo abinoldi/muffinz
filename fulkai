@@ -9,7 +9,7 @@ pcall(function()
 end)
 
 -- ======================================================
--- ENOCHHUB | ULTIMATE FARM (ASTRAL SAVER EDITION)
+-- ENOCHHUB | ULTIMATE FARM (OPTIMIZED + VFX KILLER)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -18,72 +18,107 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
-local TweenService = game:GetService("TweenService")
 
 -- ======================================================
--- [NEW] CPU OPTIMIZER & ANIMATION REMOVER
+-- [1] VFX / SKIN EFFECT REMOVER (AUTO ON)
+-- ======================================================
+local function DisableVFX()
+    -- Attempt to find the VFX Controller
+    local success, VFXController = pcall(function()
+        return require(ReplicatedStorage.Controllers.VFXController)
+    end)
+
+    if success and VFXController then
+        print("✅ VFX Controller Found. Disabling Skin Effects...")
+        
+        -- Overwrite the rendering functions to do nothing
+        VFXController.Handle = function(...) end
+        VFXController.RenderAtPoint = function(...) end
+        VFXController.RenderInstance = function(...) end
+        
+        -- Clear existing effects in workspace
+        local cosmeticFolder = Workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then
+            pcall(function() cosmeticFolder:ClearAllChildren() end)
+            
+            -- Keep it clear if new stuff gets added
+            cosmeticFolder.ChildAdded:Connect(function(child)
+                task.wait()
+                child:Destroy()
+            end)
+        end
+    else
+        warn("⚠️ Could not find VFXController to disable skins.")
+    end
+end
+
+-- ======================================================
+-- [2] AGGRESSIVE ANIMATION REMOVER & CPU SAVER
 -- ======================================================
 
 local function OptimizeGraphics()
-    -- 1. Global Rendering
     settings().Rendering.QualityLevel = "Level01"
-    
-    -- 2. Lighting (Disable Shadows/Fog)
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
     Lighting.Brightness = 0
     
-    -- 3. Map Cleanup (Textures, Decals, Particles)
     for _, v in pairs(Workspace:GetDescendants()) do
         if v:IsA("BasePart") and not v:IsA("Terrain") then
             v.Material = Enum.Material.SmoothPlastic
             v.Reflectance = 0
             v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") then
-            v:Destroy() -- Remove images
+            v:Destroy()
         elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") then
-            v.Enabled = false -- Stop particles
+            v.Enabled = false
         end
     end
 end
 
-local function DisableAnimations()
-    local character = lp.Character or lp.CharacterAdded:Wait()
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    
-    if not humanoid then return end
+local function KillAnimations(char)
+    if not char then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
 
-    -- 1. Block 'Animate' script
-    local animateScript = character:FindFirstChild("Animate")
-    if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then
-        animateScript.Enabled = false
+    -- A. Disable the default 'Animate' script
+    local animScript = char:FindFirstChild("Animate")
+    if animScript and animScript:IsA("LocalScript") then
+        animScript.Enabled = false
     end
 
-    -- 2. Destroy Animator (Hard Stop)
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if animator then
-        animator:Destroy()
-    end
-    
-    -- 3. Stop running tracks
-    for _, track in pairs(humanoid:GetPlayingAnimationTracks()) do
+    -- B. Stop currently playing tracks
+    for _, track in pairs(hum:GetPlayingAnimationTracks()) do
         track:Stop()
+    end
+
+    -- C. Aggressively stop any NEW animation that tries to play
+    hum.AnimationPlayed:Connect(function(track)
+        track:Stop()
+    end)
+    
+    -- D. Nuke the Animator (Optional: Some games break if you do this, but it's the most effective)
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if animator then
+        -- We just disable the parent script usually, but if you want them GONE:
+        -- animator:Destroy() 
     end
 end
 
--- EXECUTE OPTIMIZATIONS
+-- Run Optimization Immediately
+task.spawn(DisableVFX)
 task.spawn(OptimizeGraphics)
-task.spawn(DisableAnimations)
+task.spawn(function() KillAnimations(lp.Character) end)
 
--- Ensure animations stay off if you respawn/teleport resets character
-lp.CharacterAdded:Connect(function()
+-- Ensure it runs on Respawn
+lp.CharacterAdded:Connect(function(char)
     task.wait(0.5)
-    DisableAnimations()
+    KillAnimations(char)
 end)
 
 -- ===============================
--- REMOTES & CONTROLLERS
+-- REMOTES & CONTROLLERS (AUTO FARM LOGIC)
 -- ===============================
 local FishingController = require(ReplicatedStorage.Controllers.FishingController)
 local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
@@ -119,7 +154,6 @@ local Locations = {
     ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.7, -135.0, -1007.5), Look = Vector3.new(0.31, 0, 0.95)},
     ["Ancient Jungle"] = {Pos = Vector3.new(1535.6, 3.1, -193.3), Look = Vector3.new(0.50, 0, 0.86)},
     ["Sacred Temple"] = {Pos = Vector3.new(1461.8, -22.1, -670.2), Look = Vector3.new(-0.99, 0, 0.14)},
-    -- Levers
     ["Arrow Lever"] = {Pos = Vector3.new(898.2, 8.4, -361.8), Look = Vector3.new(0.02, 0, 1)},
     ["Cresent Lever"] = {Pos = Vector3.new(1419.7, 31.1, 78.5), Look = Vector3.new(0, 0, -1)},
     ["Diamond Lever"] = {Pos = Vector3.new(1818.9, 8.4, -284.1), Look = Vector3.new(0, 0, -1)},
@@ -145,13 +179,6 @@ local ArtifactData = {
 }
 local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
 
-local ElementQuestData = {
-    ["1"] = {Name = "Own Ghostfin Rod", Required = 1},
-    ["2"] = {Name = "Catch Secret Fish (Ancient Jungle)", Required = 1},
-    ["3"] = {Name = "Catch Secret Fish (Sacred Temple)", Required = 1},
-    ["4"] = {Name = "Create 3 Transcended Stones", Required = 3}
-}
-
 -- ===============================
 -- GLOBAL STATE
 -- ===============================
@@ -164,8 +191,6 @@ local STATE = {
     TotalCoins = 0,
     IsFishing = false,
     Teleporting = false,
-    
-    -- Flags
     HasAstralRod = false,
     HasGhostfinRod = false,
     GhostfinRodData = nil
@@ -199,7 +224,7 @@ local function GetOwnedItems(inv, category)
 end
 
 -- ===============================
--- SMART GEAR MANAGER (FIXED LOGIC)
+-- SMART GEAR MANAGER
 -- ===============================
 local function ManageGear()
     local r = GetPlayerDataReplion()
@@ -208,12 +233,11 @@ local function ManageGear()
     local inv = data.Inventory or {}
     local coins = data.Coins or 0
     
-    -- Parse Owned
     local ownedRodIDs = {}
     local allRods = {}
     local rodsList = GetOwnedItems(inv, "Fishing Rods")
     
-    STATE.HasAstralRod = false -- Reset check
+    STATE.HasAstralRod = false
     for _, r in ipairs(rodsList) do 
         table.insert(ownedRodIDs, r.ID) 
         table.insert(allRods, r)
@@ -225,32 +249,23 @@ local function ManageGear()
     end
     
     local ownedBaitIDs = {}
-    local allBaits = {}
     local baitsList = GetOwnedItems(inv, "Baits")
-    for _, b in ipairs(baitsList) do 
-        table.insert(ownedBaitIDs, b.ID)
-        table.insert(allBaits, {ID = b.ID}) 
-    end
+    for _, b in ipairs(baitsList) do table.insert(ownedBaitIDs, b.ID) end
 
-    -- 1. AUTO BUY RODS (Prioritize this!)
+    -- 1. AUTO BUY RODS
     for _, s in ipairs(ShopRods) do
         if not table.find(ownedRodIDs, s.ID) and coins >= s.Price then
-            print("💰 Buying Rod:", s.Name)
             RF_PurchaseFishingRod:InvokeServer(s.ID)
             task.wait(0.5)
             return
         end
     end
 
-    -- 2. AUTO BUY BAIT (Smart Mode)
+    -- 2. AUTO BUY BAIT
     for _, s in ipairs(ShopBaits) do
         if not table.find(ownedBaitIDs, s.ID) and coins >= s.Price then
-            -- ONLY BUY EXPENSIVE BAIT IF WE HAVE ASTRAL ROD
-            -- OR if bait is very cheap (< 20k)
             local isCheap = s.Price < 20000
-            
             if STATE.HasAstralRod or isCheap then
-                print("💰 Buying Bait:", s.Name)
                 RF_PurchaseBait:InvokeServer(s.ID)
                 task.wait(0.5)
                 return
@@ -263,12 +278,10 @@ local function ManageGear()
     local targetBaitID = nil
     local bestPrice = -1
     
-    -- Phase 3 (Element) Force Ghostfin
     if STATE.CurrentPhase == "PHASE 3: ELEMENT" and STATE.HasGhostfinRod then
         targetRodUUID = STATE.GhostfinRodData.UUID
         STATE.CurrentRod = "Ghostfin Rod (Required)"
     else
-        -- Otherwise Best Rod (Highest Price in Shop)
         for _, r in ipairs(allRods) do
             for _, s in ipairs(ShopRods) do
                 if s.ID == r.ID and s.Price > bestPrice then
@@ -280,7 +293,6 @@ local function ManageGear()
         end
     end
     
-    -- Best Bait
     bestPrice = -1
     for _, b in ipairs(baitsList) do
         for _, s in ipairs(ShopBaits) do
@@ -300,7 +312,7 @@ local function ManageGear()
 end
 
 -- ===============================
--- PHASE CHECKS
+-- LOGIC
 -- ===============================
 local function CheckDeepSeaStatus()
     local r = GetPlayerDataReplion()
@@ -354,9 +366,6 @@ local function CheckElementStatus()
     return {Done=true}
 end
 
--- ===============================
--- ACTION FUNCTIONS
--- ===============================
 local function Teleport(pos, look)
     if STATE.Teleporting then return end
     STATE.Teleporting = true
@@ -382,7 +391,7 @@ local function ToggleFishing(on)
     end
 end
 
--- Hooks
+-- HOOKS
 local AutoFish = {Active = false, Minigame = false}
 local clickThread
 local function ClickLoop()
@@ -426,15 +435,12 @@ local function Main()
         local leversDone, missingLever = CheckLeverStatus()
         local elStatus = CheckElementStatus()
         
-        -- === PHASE 1: FARM ASTRAL ROD OR DEEP SEA QUEST ===
+        -- === PHASE 1 ===
         if not dsStatus.Done then
             STATE.CurrentPhase = "PHASE 1: FARMING"
-            
-            -- PRIORITY 1: Get Astral Rod (Stay at Treasure Room)
             if not STATE.HasAstralRod then
                 STATE.CurrentAction = "Farming at Treasure Room (Need Astral)"
                 local loc = Locations["Treasure Room"]
-                
                 local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and (hrp.Position - loc.Pos).Magnitude > 10 then
                     ToggleFishing(false)
@@ -443,15 +449,10 @@ local function Main()
                 else
                     if not STATE.IsFishing then ToggleFishing(true) end
                 end
-                
-            -- PRIORITY 2: Have Astral Rod? Do Deep Sea Quest Objectives
             else
                 local obj = dsStatus.Obj
-                local targetLoc = "Sisyphus Statue" -- Default
-                if obj == 1 then targetLoc = "Treasure Room" end
-                
-                STATE.CurrentAction = "Deep Sea Obj " .. obj .. ": Farming at " .. targetLoc
-                
+                local targetLoc = (obj == 1) and "Treasure Room" or "Sisyphus Statue"
+                STATE.CurrentAction = "Deep Sea Obj " .. obj .. ": Farming"
                 local loc = Locations[targetLoc]
                 local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and (hrp.Position - loc.Pos).Magnitude > 10 then
@@ -463,13 +464,11 @@ local function Main()
                 end
             end
             
-        -- === PHASE 2: LEVERS ===
+        -- === PHASE 2 ===
         elseif not leversDone then
             STATE.CurrentPhase = "PHASE 2: LEVERS"
-            
             local artifactData = ArtifactData[missingLever]
             local hasIt = false
-            -- Quick inventory check for lever item
             local r = GetPlayerDataReplion(); local d = r and r:Get();
             if d then
                 local inv = {d.Inventory["Lever Items"] or {}, d.Inventory.Items or {}}
@@ -502,10 +501,9 @@ local function Main()
                 end
             end
             
-        -- === PHASE 3: ELEMENT QUEST ===
+        -- === PHASE 3 ===
         elseif not elStatus.Done then
             STATE.CurrentPhase = "PHASE 3: ELEMENT"
-            
             if not STATE.HasGhostfinRod then
                 STATE.CurrentAction = "Need Ghostfin! Farming Money..."
                 local loc = Locations["Sisyphus Statue"]
@@ -515,7 +513,6 @@ local function Main()
                 local obj = elStatus.Obj
                 local targetLoc = (obj == 1 or obj == 2) and "Ancient Jungle" or "Sacred Temple"
                 STATE.CurrentAction = "Obj " .. obj .. ": Fishing at " .. targetLoc
-                
                 local loc = Locations[targetLoc]
                 local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and (hrp.Position - loc.Pos).Magnitude > 10 then
@@ -535,7 +532,6 @@ local function Main()
             Teleport(loc.Pos, loc.Look)
             if not STATE.IsFishing then ToggleFishing(true) end
         end
-        
         task.wait(1)
     end
 end
