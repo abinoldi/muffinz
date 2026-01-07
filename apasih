@@ -649,7 +649,7 @@ if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7", Duration = 4, Icon = "check" })
 
 -- ==========================================================
---  FISH IT MONITOR | SECRET + GEMSTONE RUBY (LOOP 15s)
+--  FISH IT MONITOR | SECRET + GEMSTONE RUBY (ORIGINAL HTTPGET)
 -- ==========================================================
 task.spawn(function()
     local Players = game:GetService("Players")
@@ -712,37 +712,40 @@ task.spawn(function()
     end
 
     -- ======================================================
-    -- GET MUTATION (CHECK GEMSTONE)
+    -- GET MUTATION
     -- ======================================================
     local function GetMutation(item)
         if not item.Metadata then return "None" end
-        
-        -- Cek VariantId (Gemstone ada di sini)
-        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then
-            return item.Metadata.VariantId
-        end
-
-        if item.Metadata.Shiny == true then
-            return "Shiny"
-        end
+        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+        if item.Metadata.Shiny == true then return "Shiny" end
         return "None"
     end
 
     -- ======================================================
-    -- WEBHOOK
+    -- WEBHOOK (PERSIS SEPERTI REQUEST ANDA)
     -- ======================================================
     local function sendToWebhook(playerName, summary)
+        dprint("Preparing webhook payload")
         local json = HttpService:JSONEncode(summary)
+        dprint("JSON:", json)
         local encoded = HttpService:UrlEncode(json)
         local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        dprint("Final URL:", url)
         
-        pcall(function() game:HttpGet(url) end)
+        -- Menggunakan game:HttpGet sesuai permintaan
+        local ok, err = pcall(function() game:HttpGet(url) end)
+        
+        if ok then 
+            dprint("Webhook sent successfully") 
+        else 
+            warn("[FISH IT][ERROR] Webhook failed:", err) 
+        end
     end
 
     -- ======================================================
-    -- MAIN LOOP
+    -- MAIN LOOP (SECRET + GEMSTONE RUBY ONLY)
     -- ======================================================
-    dprint("Starting Monitor (Secret + Gemstone Ruby Only)...")
+    dprint("Starting Monitor (Secret + Gemstone Ruby)...")
     local dataReplica = Replion:WaitReplion("Data")
 
     while true do
@@ -756,21 +759,16 @@ task.spawn(function()
                 local name, rarity = GetFishNameAndRarity(item)
                 local mutation = GetMutation(item)
 
-                -- LOGIKA FILTER:
-                -- 1. Ambil SEMUA Rarity Secret
-                -- 2. Ambil Ruby HANYA JIKA Mutation == Gemstone
-                
+                -- FILTER LOGIC:
                 local isSecret = (rarity == "SECRET")
                 local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
 
                 if isSecret or isGemstoneRuby then
                     local displayName = name
                     
-                    -- Beri penanda khusus untuk Gemstone Ruby agar jelas di table
                     if isGemstoneRuby then
                         displayName = "[Gemstone] Ruby"
                     elseif mutation ~= "None" then
-                        -- Jika Secret punya mutasi (misal Shiny Secret), tampilkan juga
                         displayName = "[" .. mutation .. "] " .. name
                     end
 
@@ -781,12 +779,10 @@ task.spawn(function()
             end
         end
 
-        -- Hanya kirim webhook jika ada Secret ATAU Gemstone Ruby
         if shouldSend then
             sendToWebhook(lp.Name, summary)
-            dprint("Webhook sent.")
         else
-            dprint("Nothing found. Webhook skipped.")
+            dprint("Nothing new.")
         end
 
         task.wait(LOOP_DELAY)
