@@ -380,28 +380,208 @@ end
 -- ==========================================================
 --  [FEATURE] GRAPHICS & OTHER
 -- ==========================================================
+-- ==========================================================
+--  [FEATURE] GRAPHICS & OTHER
+-- ==========================================================
 local PotatoLoop = nil
+local originalVFXHandle = nil
+local originalRenderAtPoint = nil
+local originalRenderInstance = nil
+local isVFXDisabled = false
+
 local function ApplyPotato()
-    Lighting.GlobalShadows = false; Lighting.Brightness = 1; Lighting.FogEnd = 9e9; Lighting.ClockTime = 12
-    local t = Workspace:FindFirstChildOfClass("Terrain")
-    if t then t.WaterWaveSize=0; t.WaterReflectance=0; t.WaterTransparency=1 end
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false
-        elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1
-        elseif v:IsA("BasePart") then v.CastShadow = false; v.Material = Enum.Material.Plastic
+    -- Block VFX if module exists
+    if VFXControllerModule then
+        if not originalVFXHandle then
+            originalVFXHandle = VFXControllerModule.Handle
+            originalRenderAtPoint = VFXControllerModule.RenderAtPoint
+            originalRenderInstance = VFXControllerModule.RenderInstance
+        end
+        
+        -- Block all VFX functions
+        VFXControllerModule.Handle = function(...) 
+            -- Prevent all VFX code from running
+            return nil
+        end
+        
+        VFXControllerModule.RenderAtPoint = function(...) 
+            return nil
+        end
+        
+        VFXControllerModule.RenderInstance = function(...) 
+            return nil
+        end
+        
+        isVFXDisabled = true
+        
+        -- Clean up existing cosmetic effects
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then
+            pcall(function() 
+                for _, child in ipairs(cosmeticFolder:GetChildren()) do
+                    child:Destroy()
+                end
+            end)
         end
     end
+    
+    -- Extreme lighting settings
+    Lighting.GlobalShadows = false
+    Lighting.Brightness = 1
+    Lighting.FogEnd = 9e9
+    Lighting.FogStart = 9e9
+    Lighting.ClockTime = 12
+    Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.ShadowSoftness = 0
+    
+    -- Remove all lighting effects
+    for _, effect in ipairs(Lighting:GetChildren()) do
+        if effect:IsA("BlurEffect") or 
+           effect:IsA("BloomEffect") or 
+           effect:IsA("ColorCorrectionEffect") or 
+           effect:IsA("SunRaysEffect") or 
+           effect:IsA("DepthOfFieldEffect") or
+           effect:IsA("Atmosphere") or
+           effect:IsA("Sky") then
+            pcall(function() effect:Destroy() end)
+        end
+    end
+    
+    -- Extreme terrain settings
+    local t = Workspace:FindFirstChildOfClass("Terrain")
+    if t then 
+        t.WaterWaveSize = 0
+        t.WaterReflectance = 0
+        t.WaterTransparency = 1
+        t.WaterWaveSpeed = 0
+        t.WaterWaveHeight = 0
+    end
+    
+    -- Remove ALL visual effects and disable animations
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        -- Destroy ALL particle and visual effects
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or 
+           v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+            pcall(function() v:Destroy() end)  -- Destroy instead of disable
+        
+        -- Make ALL textures and decals invisible
+        elseif v:IsA("Decal") or v:IsA("Texture") then 
+            pcall(function() 
+                v.Transparency = 1
+                if v:IsA("Decal") then
+                    v:Destroy()  -- Destroy decals completely
+                end
+            end)
+        
+        -- Extreme part optimization
+        elseif v:IsA("BasePart") then 
+            pcall(function() 
+                v.CastShadow = false
+                v.Material = Enum.Material.Plastic
+                v.Reflectance = 0
+            end)
+            
+            -- Remove any attached effects from parts
+            for _, child in ipairs(v:GetChildren()) do
+                if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
+                   child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") or
+                   child:IsA("Sound") then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        
+        -- Disable AnimationControllers
+        elseif v:IsA("AnimationController") or v:IsA("Animator") then
+            pcall(function() v:Destroy() end)
+        
+        -- Destroy any scripted animations
+        elseif v:IsA("Script") and (v.Name:find("Animation") or v.Name:find("Animate")) then
+            pcall(function() v:Destroy() end)
+        
+        -- Remove sounds
+        elseif v:IsA("Sound") then
+            pcall(function() v:Destroy() end)
+        end
+    end
+    
+    -- Clean up cosmetic folder (additional check)
+    local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+    if cosmeticFolder then
+        pcall(function() 
+            for _, child in ipairs(cosmeticFolder:GetChildren()) do
+                if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
+                   child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") then
+                    child:Destroy()
+                end
+            end
+        end)
+    end
+    
+    -- Stop character animations
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                -- Stop all playing animations
+                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                    pcall(function() track:Stop() end)
+                end
+                
+                -- Remove animator
+                local animator = humanoid:FindFirstChildOfClass("Animator")
+                if animator then
+                    pcall(function() animator:Destroy() end)
+                end
+            end
+            
+            -- Clean character cosmetic effects
+            for _, part in ipairs(player.Character:GetDescendants()) do
+                if part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Beam") or 
+                   part:IsA("Fire") or part:IsA("Smoke") or part:IsA("Sparkles") or
+                   part:IsA("Sound") then
+                    pcall(function() part:Destroy() end)
+                end
+            end
+        end
+    end
+    
+    -- Extreme rendering settings
     settings().Rendering.QualityLevel = 1
-    if setfpscap then setfpscap(Config.PotatoFPS) end
+    if setfpscap then 
+        setfpscap(Config.PotatoFPS or 30)  -- Use config value or default to 30
+    end
 end
 
 local function TogglePotato(state)
     if state then
         ApplyPotato()
-        PotatoLoop = task.spawn(function() while Config.PotatoModeEnabled == 1 do ApplyPotato() task.wait(8) end end)
+        PotatoLoop = task.spawn(function() 
+            while Config.PotatoModeEnabled == 1 do 
+                ApplyPotato() 
+                task.wait(8) 
+            end 
+        end)
     else
-        if PotatoLoop then task.cancel(PotatoLoop) end
-        if setfpscap then setfpscap(60) end
+        if PotatoLoop then 
+            task.cancel(PotatoLoop) 
+        end
+        
+        -- Restore VFX functions if they were blocked
+        if VFXControllerModule and originalVFXHandle then
+            VFXControllerModule.Handle = originalVFXHandle
+            if originalRenderAtPoint then
+                VFXControllerModule.RenderAtPoint = originalRenderAtPoint
+            end
+            if originalRenderInstance then
+                VFXControllerModule.RenderInstance = originalRenderInstance
+            end
+            isVFXDisabled = false
+        end
+        
+        if setfpscap then 
+            setfpscap(60) 
+        end
     end
 end
 
