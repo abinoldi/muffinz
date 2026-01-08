@@ -1,5 +1,5 @@
 -- ======================================================
--- TREASURE ROOM INSTANT FISHER
+-- WEATHER MACHINE INSTANT FISHER
 -- ======================================================
 
 -- ===============================
@@ -290,10 +290,10 @@ local InstantFishConfig = {
 }
 
 -- ===============================
--- LOCATIONS
+-- LOCATIONS - CHANGED TO WEATHER MACHINE
 -- ===============================
 local Locations = {
-    ["Treasure Room"] = {
+    ["Weather Machine"] = {
         Pos = Vector3.new(-1518.550, 2.875, 1916.148), 
         Look = Vector3.new(0.042, 0.000, 0.999)
     }
@@ -309,7 +309,7 @@ local STATE = {
     SessionEarnings = 0,
     Teleporting = false,
     IsFishing = false,
-    GraphicsMode = "ULTRA EXTREME LOW ⚡", -- NEW: Track graphics mode
+    GraphicsMode = "ULTRA EXTREME LOW ⚡",
 }
 
 -- ===============================
@@ -322,7 +322,7 @@ local GUI = {
     EarningsValue = nil,
     StatusText = nil,
     FishingModeText = nil,
-    GraphicsModeText = nil, -- NEW: Graphics mode display
+    GraphicsModeText = nil,
 }
 
 -- ===============================
@@ -705,20 +705,20 @@ local function StartAutoFavorite()
 end
 
 -- ===============================
--- CREATE TRANSPARENT GUI (UPDATED)
+-- CREATE TRANSPARENT GUI (UPDATED FOR WEATHER MACHINE)
 -- ===============================
 local function CreateGUI()
-    print("[GUI] Creating Treasure Room Instant Fisher GUI...")
+    print("[GUI] Creating Weather Machine Instant Fisher GUI...")
     
     local gui = Instance.new("ScreenGui")
-    gui.Name = "TreasureRoomInstantFisherGUI"
+    gui.Name = "WeatherMachineInstantFisherGUI"
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     gui.ResetOnSpawn = false
     gui.Parent = game.CoreGui
 
     -- Main frame with transparency
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.fromOffset(350, 300) -- Increased height for graphics mode
+    frame.Size = UDim2.fromOffset(350, 300)
     frame.Position = UDim2.fromScale(0.5, 0.5)
     frame.AnchorPoint = Vector2.new(0.5, 0.5)
     frame.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
@@ -747,7 +747,7 @@ local function CreateGUI()
     title.Size = UDim2.new(1, -20, 0, 40)
     title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "💰 TREASURE ROOM INSTANT FISHER ⚡"
+    title.Text = "🌩️ WEATHER MACHINE INSTANT FISHER ⚡"
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 18
     title.TextColor3 = Color3.fromRGB(100, 200, 255)
@@ -757,7 +757,7 @@ local function CreateGUI()
 
     -- Status Panel with transparency
     local statusPanel = Instance.new("Frame")
-    statusPanel.Size = UDim2.new(0.9, 0, 0, 200) -- Increased height
+    statusPanel.Size = UDim2.new(0.9, 0, 0, 200)
     statusPanel.Position = UDim2.fromScale(0.05, 0.20)
     statusPanel.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
     statusPanel.BackgroundTransparency = 0.6
@@ -820,7 +820,7 @@ local function CreateGUI()
     GUI.CoinValue = CreateStatusRow(0.05, "💰", "Coins:", "0")
     GUI.LocationValue = CreateStatusRow(0.17, "📍", "Location:", "Initializing...")
     GUI.FishingModeText = CreateStatusRow(0.29, "⚡", "Fishing Mode:", "INSTANT")
-    GUI.GraphicsModeText = CreateStatusRow(0.41, "🎮", "Graphics Mode:", STATE.GraphicsMode) -- NEW
+    GUI.GraphicsModeText = CreateStatusRow(0.41, "🎮", "Graphics Mode:", STATE.GraphicsMode)
     GUI.EarningsValue = CreateStatusRow(0.53, "💸", "Session Earnings:", "0")
 
     -- Status Display
@@ -878,7 +878,7 @@ local function CreateGUI()
         STATE.ScriptRunning = false
         StopInstantFishing()
         gui:Destroy()
-        print("[GUI] Treasure Room Instant Fisher stopped")
+        print("[GUI] Weather Machine Instant Fisher stopped")
     end)
 
     -- Add subtle border to main frame
@@ -903,7 +903,7 @@ local function CreateGUI()
         BackgroundTransparency = 0.3
     }):Play()
 
-    print("[GUI] Treasure Room Instant Fisher GUI created successfully")
+    print("[GUI] Weather Machine Instant Fisher GUI created successfully")
     
     return gui
 end
@@ -925,12 +925,12 @@ local function UpdateGUILoop()
             GUI.GraphicsModeText.Text = STATE.GraphicsMode
             
             -- Update status text
-            if STATE.CurrentLocation == "Treasure Room" then
+            if STATE.CurrentLocation == "Weather Machine" then
                 if STATE.IsFishing then
                     GUI.StatusText.Text = "STATUS: Instant Fishing ⚡"
                     GUI.StatusText.TextColor3 = Color3.fromRGB(100, 255, 100)
                 else
-                    GUI.StatusText.Text = "STATUS: Ready at Treasure Room"
+                    GUI.StatusText.Text = "STATUS: Ready at Weather Machine"
                     GUI.StatusText.TextColor3 = Color3.fromRGB(100, 200, 255)
                 end
             elseif STATE.Teleporting then
@@ -945,11 +945,11 @@ local function UpdateGUILoop()
 end
 
 -- ===============================
--- MAIN TREASURE ROOM INSTANT FISHING LOOP
+-- MAIN WEATHER MACHINE INSTANT FISHING LOOP
 -- ===============================
-local function StartTreasureRoomFishing()
+local function StartWeatherMachineFishing()
     print("=========================================")
-    print("💰 TREASURE ROOM INSTANT FISHER")
+    print("🌩️ WEATHER MACHINE INSTANT FISHER")
     print("=========================================")
     print("⚡ INSTANT FISHING FEATURES:")
     print("   - Ultra-fast catch rate")
@@ -962,19 +962,19 @@ local function StartTreasureRoomFishing()
     print("\n⏳ Waiting for graphics optimization to complete...")
     task.wait(3)
     
-    -- Teleport to Treasure Room
-    print("\n📍 TELEPORTING TO TREASURE ROOM...")
-    STATE.CurrentLocation = "Teleporting to Treasure Room..."
+    -- Teleport to Weather Machine
+    print("\n📍 TELEPORTING TO WEATHER MACHINE...")
+    STATE.CurrentLocation = "Teleporting to Weather Machine..."
     
-    local success = TeleportToLocation("Treasure Room")
+    local success = TeleportToLocation("Weather Machine")
     
     if not success then
-        print("❌ Failed to teleport to Treasure Room!")
+        print("❌ Failed to teleport to Weather Machine!")
         STATE.CurrentLocation = "❌ Teleport Failed"
         return
     end
     
-    print("✅ Successfully teleported to Treasure Room!")
+    print("✅ Successfully teleported to Weather Machine!")
     
     -- Start all systems
     print("\n⚡ STARTING SYSTEMS...")
@@ -988,7 +988,7 @@ local function StartTreasureRoomFishing()
     -- Start auto favorite for Ruby
     StartAutoFavorite()
     
-    STATE.CurrentLocation = "Treasure Room"
+    STATE.CurrentLocation = "Weather Machine"
     print("\n✅ ALL SYSTEMS RUNNING!")
     print("   - Instant Fishing: ACTIVE ⚡")
     print("   - Graphics Mode: ULTRA EXTREME LOW ⚡")
@@ -1001,7 +1001,7 @@ local function StartTreasureRoomFishing()
         task.wait(5)
     end
     
-    print("[TREASURE ROOM] Script stopped")
+    print("[WEATHER MACHINE] Script stopped")
     StopInstantFishing()
 end
 
@@ -1010,7 +1010,7 @@ end
 -- ===============================
 local function Initialize()
     print("=========================================")
-    print("💰 TREASURE ROOM INSTANT FISHER INITIALIZING")
+    print("🌩️ WEATHER MACHINE INSTANT FISHER INITIALIZING")
     print("=========================================")
     print("⚡ ULTRA EXTREME LOW GRAPHICS: ENABLED")
     print("⚡ MAXIMUM FPS OPTIMIZATION: ENABLED")
@@ -1026,11 +1026,11 @@ local function Initialize()
     task.wait(2)
     
     -- Start the main fishing loop
-    task.spawn(StartTreasureRoomFishing)
+    task.spawn(StartWeatherMachineFishing)
     
-    print("✅ Treasure Room Instant Fisher LOADED")
+    print("✅ Weather Machine Instant Fisher LOADED")
     print("🎯 Features:")
-    print("   - Auto teleport to Treasure Room")
+    print("   - Auto teleport to Weather Machine")
     print("   - INSTANT FISHING ⚡ (no minigame)")
     print("   - ULTRA EXTREME LOW GRAPHICS ⚡")
     print("   - Auto sell every 1 minute")
