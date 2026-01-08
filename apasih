@@ -443,21 +443,35 @@ local TotemToggleUI = nil
 local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 
+-- Fungsi untuk tarik lebih dekat ke center
+local function scaleTowardsCenter(pos, scaleFactor)
+    local dx = pos.X - REF_CENTER.X
+    local dy = pos.Y - REF_CENTER.Y
+    local dz = pos.Z - REF_CENTER.Z
+    
+    return Vector3.new(
+        REF_CENTER.X + (dx * scaleFactor),
+        REF_CENTER.Y + (dy * scaleFactor),
+        REF_CENTER.Z + (dz * scaleFactor)
+    )
+end
+
+-- Atau hitung manual untuk semua posisi
 local REF_SPOTS = {
-    -- Layer 1: Ground Level (tetap)
-    Vector3.new(45.0468, 9.516, 2730.190),     -- T1
-    Vector3.new(160.644, 9.516, 2716.907),     -- T2
-    Vector3.new(84.640, 10.217, 2636.057),     -- T3
+    -- Layer 1: 15% lebih dekat ke center
+    Vector3.new(52.110, 9.532, 2723.225),     -- T1: dari (45.0468, 9.516, 2730.190)
+    Vector3.new(150.556, 9.532, 2710.523),    -- T2: dari (160.644, 9.516, 2716.907)
+    Vector3.new(87.838, 10.225, 2638.121),    -- T3: dari (84.640, 10.217, 2636.057)
     
-    -- Layer 2: Middle Level - 106.66 unit DI ATAS center
-    Vector3.new(45.0468, 116.192, 2730.190),   -- T4: Y = 9.532 + 106.66
-    Vector3.new(160.644, 116.192, 2716.907),   -- T5
-    Vector3.new(84.640, 116.893, 2636.057),    -- T6: Y = 10.217 + 106.676
+    -- Layer 2: 15% lebih dekat (Y juga lebih dekat ke center Y)
+    Vector3.new(52.110, 107.849, 2723.225),   -- T4: Y dari 114.548 → 107.849
+    Vector3.new(150.556, 107.849, 2710.523),  -- T5
+    Vector3.new(87.838, 108.542, 2638.121),   -- T6
     
-    -- Layer 3: Lower Level - 106.66 unit DI BAWAH center
-    Vector3.new(45.0468, -97.128, 2730.190),   -- T7: Y = 9.532 - 106.66
-    Vector3.new(160.644, -97.128, 2716.907),   -- T8
-    Vector3.new(84.640, -98.427, 2636.057),    -- T9: Y = 10.217 - 106.66
+    -- Layer 3: 15% lebih dekat (Y juga lebih dekat ke center Y)
+    Vector3.new(52.110, -80.943, 2723.225),   -- T7: Y dari -95.468 → -80.943
+    Vector3.new(150.556, -80.943, 2710.523),  -- T8
+    Vector3.new(87.838, -82.207, 2638.121),   -- T9
 }
 
 local function GetTotemUUID(name)
