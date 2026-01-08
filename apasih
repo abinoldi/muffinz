@@ -391,6 +391,8 @@ local PotatoLoop = nil
 local isVFXDisabled = false
 local originalRenderAtPoint = nil
 local originalRenderInstance = nil
+local isBoostActive = false
+local originalLightingValues = {}
 
 local function ApplyPotato()
     -- Block VFX functions
@@ -441,100 +443,113 @@ local function ApplyPotato()
         end
     end
     
-    -- Extreme lighting settings
-    Lighting.GlobalShadows = false
-    Lighting.Brightness = 1
-    Lighting.FogEnd = 9e9
-    Lighting.FogStart = 9e9
-    Lighting.ClockTime = 12
-    Lighting.Ambient = Color3.fromRGB(128, 128, 128)
-    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-    Lighting.ShadowSoftness = 0
+    -- FPS Ultra Boost Optimizations
+    local Terrain = workspace:FindFirstChildOfClass("Terrain")
     
-    -- Remove all lighting effects
-    for _, effect in ipairs(Lighting:GetChildren()) do
-        if effect:IsA("BlurEffect") or 
-           effect:IsA("BloomEffect") or 
-           effect:IsA("ColorCorrectionEffect") or 
-           effect:IsA("SunRaysEffect") or 
-           effect:IsA("DepthOfFieldEffect") or
-           effect:IsA("Atmosphere") or
-           effect:IsA("Sky") then
-            pcall(function() effect:Destroy() end)
-        end
-    end
-    
-    -- Extreme terrain settings
-    local t = Workspace:FindFirstChildOfClass("Terrain")
-    if t then 
-        t.WaterWaveSize = 0
-        t.WaterReflectance = 0
-        t.WaterTransparency = 1
-        t.WaterWaveSpeed = 0
-        t.WaterWaveHeight = 0
-    end
-    
-    -- Remove ALL visual effects and disable animations
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        -- Destroy ALL particle and visual effects
-        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or 
-           v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-            pcall(function() v:Destroy() end)  -- Destroy instead of disable
-        
-        -- Make ALL textures and decals invisible
-        elseif v:IsA("Decal") or v:IsA("Texture") then 
-            pcall(function() 
-                v.Transparency = 1
-                if v:IsA("Decal") then
-                    v:Destroy()  -- Destroy decals completely
-                end
-            end)
-        
-        -- Extreme part optimization
-        elseif v:IsA("BasePart") then 
-            pcall(function() 
-                v.CastShadow = false
-                v.Material = Enum.Material.Plastic
-                v.Reflectance = 0
-            end)
-            
-            -- Remove any attached effects from parts
-            for _, child in ipairs(v:GetChildren()) do
-                if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
-                   child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") or
-                   child:IsA("Sound") then
-                    pcall(function() child:Destroy() end)
-                end
-            end
-        
-        -- Disable AnimationControllers
-        elseif v:IsA("AnimationController") or v:IsA("Animator") then
-            pcall(function() v:Destroy() end)
-        
-        -- Destroy any scripted animations
-        elseif v:IsA("Script") and (v.Name:find("Animation") or v.Name:find("Animate")) then
-            pcall(function() v:Destroy() end)
-        
-        -- Remove sounds
-        elseif v:IsA("Sound") then
-            pcall(function() v:Destroy() end)
-        end
-    end
-    
-    -- Clean up cosmetic folder (additional check)
-    local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
-    if cosmeticFolder then
-        pcall(function() 
-            for _, child in ipairs(cosmeticFolder:GetChildren()) do
-                if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
-                   child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") then
-                    child:Destroy()
-                end
-            end
+    -- Save original lighting values once
+    if not next(originalLightingValues) then
+        pcall(function()
+            originalLightingValues.GlobalShadows = Lighting.GlobalShadows
+            originalLightingValues.FogEnd = Lighting.FogEnd
+            originalLightingValues.Brightness = Lighting.Brightness
+            originalLightingValues.ClockTime = Lighting.ClockTime
+            originalLightingValues.Ambient = Lighting.Ambient
+            originalLightingValues.OutdoorAmbient = Lighting.OutdoorAmbient
+            originalLightingValues.ShadowSoftness = Lighting.ShadowSoftness
         end)
     end
     
-    -- Stop character animations
+    -- 1. VISUAL & EFFECTS (Ultimate optimization)
+    pcall(function()
+        for _, v in ipairs(workspace:GetDescendants()) do
+            -- Disable all visual effects
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or 
+               v:IsA("Fire") or v:IsA("Explosion") or v:IsA("Beam") or v:IsA("Light") then
+                v.Enabled = false
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or 
+                   v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+                    pcall(function() v:Destroy() end)  -- Destroy for extra performance
+                end
+            -- Hide all textures
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                v.Transparency = 1
+                if v:IsA("Decal") then
+                    pcall(function() v:Destroy() end)  -- Destroy decals completely
+                end
+            -- Extreme part optimization
+            elseif v:IsA("BasePart") then
+                v.CastShadow = false
+                v.Material = Enum.Material.Plastic
+                v.Reflectance = 0
+                
+                -- Remove any attached effects
+                for _, child in ipairs(v:GetChildren()) do
+                    if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
+                       child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") or
+                       child:IsA("Sound") or child:IsA("Light") then
+                        pcall(function() child:Destroy() end)
+                    end
+                end
+            -- Disable animations
+            elseif v:IsA("AnimationController") or v:IsA("Animator") then
+                pcall(function() v:Destroy() end)
+            -- Remove sounds
+            elseif v:IsA("Sound") then
+                pcall(function() v:Destroy() end)
+            end
+        end
+    end)
+    
+    -- 2. LIGHTING & ENVIRONMENT (Minimalist settings)
+    pcall(function()
+        -- Disable all post-processing effects
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then 
+                effect.Enabled = false
+            end
+            if effect:IsA("BlurEffect") or effect:IsA("BloomEffect") or 
+               effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or 
+               effect:IsA("DepthOfFieldEffect") or effect:IsA("Atmosphere") or 
+               effect:IsA("Sky") then
+                pcall(function() effect:Destroy() end)
+            end
+        end
+        
+        -- Ultra low lighting settings
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.FogStart = 9e9
+        Lighting.Brightness = 0  -- Darker for contrast and efficiency
+        Lighting.ClockTime = 14  -- Noon without shadows
+        Lighting.Ambient = Color3.new(0, 0, 0)
+        Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
+        Lighting.ShadowSoftness = 0
+        Lighting.GeographicLatitude = 0
+        Lighting.ExposureCompensation = 0
+    end)
+    
+    -- 3. TERRAIN & WATER (Complete optimization)
+    if Terrain then
+        pcall(function()
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterWaveSpeed = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 1
+            Terrain.Decoration = false
+            Terrain.WaterWaveHeight = 0
+        end)
+    end
+    
+    -- 4. QUALITY & RENDERING SETTINGS (Maximum performance)
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+        settings().Rendering.TextureQuality = Enum.TextureQuality.Low
+        settings().Rendering.EagerBulkExecution = true
+        settings().Rendering.RenderCSGTrianglesDebug = false
+    end)
+    
+    -- 5. CHARACTER OPTIMIZATION
     for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
         if player.Character then
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
@@ -551,22 +566,40 @@ local function ApplyPotato()
                 end
             end
             
-            -- Clean character cosmetic effects
+            -- Clean character effects
             for _, part in ipairs(player.Character:GetDescendants()) do
                 if part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Beam") or 
                    part:IsA("Fire") or part:IsA("Smoke") or part:IsA("Sparkles") or
-                   part:IsA("Sound") then
+                   part:IsA("Sound") or part:IsA("Light") then
                     pcall(function() part:Destroy() end)
                 end
             end
         end
     end
     
-    -- Extreme rendering settings
-    settings().Rendering.QualityLevel = 1
+    -- 6. EXTRA PERFORMANCE BOOSTS
     if setfpscap then 
-        setfpscap(Config.PotatoFPS or 30)  -- Use config value or default to 30
+        pcall(function() 
+            setfpscap(Config.PotatoFPS or 100)  -- Use config value or default to 100 for FPS Boost
+        end) 
     end
+    if type(collectgarbage) == "function" then 
+        pcall(function() collectgarbage("collect") end) 
+    end
+    
+    -- Send notification if WindUI exists
+    if WindUI and WindUI.Notify then
+        pcall(function()
+            WindUI:Notify({ 
+                Title = "FPS Ultra Boost", 
+                Content = "Maximum FPS mode enabled (Minimal Graphics).", 
+                Duration = 3, 
+                Icon = "zap" 
+            })
+        end)
+    end
+    
+    isBoostActive = true
 end
 
 local function TogglePotato(state)
@@ -598,9 +631,49 @@ local function TogglePotato(state)
             isVFXDisabled = false
         end
         
+        -- RESET LIGHTING & SETTINGS
+        pcall(function()
+            if next(originalLightingValues) then
+                Lighting.GlobalShadows = originalLightingValues.GlobalShadows or false
+                Lighting.FogEnd = originalLightingValues.FogEnd or 100000
+                Lighting.Brightness = originalLightingValues.Brightness or 1
+                Lighting.ClockTime = originalLightingValues.ClockTime or 14
+                Lighting.Ambient = originalLightingValues.Ambient or Color3.new(0.5, 0.5, 0.5)
+                Lighting.OutdoorAmbient = originalLightingValues.OutdoorAmbient or Color3.new(0.5, 0.5, 0.5)
+                Lighting.ShadowSoftness = originalLightingValues.ShadowSoftness or 0.5
+            end
+            
+            -- Restore post-processing effects
+            for _, effect in ipairs(Lighting:GetChildren()) do
+                if effect:IsA("PostEffect") then 
+                    effect.Enabled = true 
+                end
+            end
+            
+            -- Reset rendering settings
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+            settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Automatic
+            settings().Rendering.TextureQuality = Enum.TextureQuality.Automatic
+        end)
+        
+        -- Reset FPS cap
         if setfpscap then 
-            setfpscap(60) 
+            pcall(function() setfpscap(60) end) 
         end
+        
+        -- Send reset notification
+        if WindUI and WindUI.Notify then
+            pcall(function()
+                WindUI:Notify({ 
+                    Title = "FPS Boost", 
+                    Content = "Graphics reset to default/automatic.", 
+                    Duration = 3, 
+                    Icon = "rotate-ccw" 
+                })
+            end)
+        end
+        
+        isBoostActive = false
     end
 end
 
