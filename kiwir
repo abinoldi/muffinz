@@ -284,7 +284,7 @@ local Workspace = game:GetService("Workspace")
 -- ===============================
 local InstantFishConfig = {
     Enabled = false,          -- Will be enabled when we start fishing
-    CatchDelay = 1.5,        -- Delay between casting and catching (Lower = Faster, but riskier)
+    CatchDelay = 1.25,        -- Delay between casting and catching (Lower = Faster, but riskier)
     AutoEquip = true,        -- Automatically equips rod (Slot 1) to prevent stopping
     SpamEquipDelay = 0.5,    -- How often to force equip the rod
 }
