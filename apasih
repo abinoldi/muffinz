@@ -443,9 +443,20 @@ local TotemToggleUI = nil
 local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 local REF_SPOTS = {
-    Vector3.new(45.0468, 9.516, 2730.190), Vector3.new(145.644, 9.516, 2721.907), Vector3.new(84.640, 10.217, 2636.057),
-    Vector3.new(45.0468, 110.516, 2730.190), Vector3.new(145.644, 110.516, 2721.907), Vector3.new(84.640, 111.217, 2636.057),
-    Vector3.new(45.0468, -92.483, 2730.190), Vector3.new(145.644, -92.483, 2721.907), Vector3.new(84.640, -93.782, 2636.057),
+    -- Layer 1: Ground level
+    Vector3.new(45.0468, 9.516, 2730.190),   -- Totem 1
+    Vector3.new(145.644, 9.516, 2721.907),   -- Totem 2
+    Vector3.new(84.640, 10.217, 2636.057),   -- Totem 3
+    
+    -- Layer 2: Middle level - TINGKATKAN Y dari ~110 ke ~160 (tambah ~50 unit)
+    Vector3.new(45.0468, 160.516, 2730.190),   -- Totem 4 (Y: 110.516 → 160.516)
+    Vector3.new(145.644, 160.516, 2721.907),   -- Totem 5 (Y: 110.516 → 160.516)
+    Vector3.new(84.640, 161.217, 2636.057),    -- Totem 6 (Y: 111.217 → 161.217)
+    
+    -- Layer 3: Lower level
+    Vector3.new(45.0468, -92.483, 2730.190),   -- Totem 7
+    Vector3.new(145.644, -92.483, 2721.907),   -- Totem 8
+    Vector3.new(84.640, -93.782, 2636.057),    -- Totem 9
 }
 
 local function GetTotemUUID(name)
