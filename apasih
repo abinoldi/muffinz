@@ -449,10 +449,10 @@ local REF_SPOTS = {
     Vector3.new(160.644, 9.516, 2716.907),     -- T2: SUCCESS offset
     Vector3.new(84.640, 10.217, 2636.057),     -- T3
     
-    -- Layer 2: OTOTMATIS dari Layer 1 (tambah Y +101)
-    Vector3.new(45.0468, 110.516, 2730.190),   -- T4 = T1 + (0, 101, 0)
-    Vector3.new(160.644, 110.516, 2716.907),   -- T5 = T2 + (0, 101, 0)
-    Vector3.new(84.640, 111.217, 2636.057),    -- T6 = T3 + (0, 101, 0)
+    -- Layer 2: COPY PASTE SOLUSI LAYER 1 (tambah Y +101)
+    Vector3.new(45.0468, 110.516, 2730.190),   -- T4 = T1
+    Vector3.new(160.644, 110.516, 2716.907),   -- T5 = T2 solution
+    Vector3.new(84.640, 111.217, 2636.057),    -- T6 = T3
     
     -- Layer 3: OTOTMATIS dari Layer 1 (kurang Y -101.999)
     Vector3.new(45.0468, -92.483, 2730.190),   -- T7 = T1 + (0, -101.999, 0)
