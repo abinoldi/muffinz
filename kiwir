@@ -284,7 +284,7 @@ local Workspace = game:GetService("Workspace")
 -- ===============================
 local InstantFishConfig = {
     Enabled = false,          -- Will be enabled when we start fishing
-    CatchDelay = 1.3,        -- Delay between casting and catching (Lower = Faster, but riskier)
+    CatchDelay = 1.5,        -- Delay between casting and catching (Lower = Faster, but riskier)
     AutoEquip = true,        -- Automatically equips rod (Slot 1) to prevent stopping
     SpamEquipDelay = 0.5,    -- How often to force equip the rod
 }
@@ -293,7 +293,9 @@ local InstantFishConfig = {
 -- LOCATIONS
 -- ===============================
 local Locations = {
-    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)
+    ["Treasure Room"] = {
+        Pos = Vector3.new(-1518.550, 2.875, 1916.148), 
+        Look = Vector3.new(0.042, 0.000, 0.999)
     }
 }
 
