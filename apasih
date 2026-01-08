@@ -444,20 +444,20 @@ local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, [
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 
 local REF_SPOTS = {
-    -- Layer 1: Ground level - SCALE 1.3x (+30%)
-    Vector3.new(30.381, 9.516, 2744.007),    -- T1
-    Vector3.new(161.158, 9.516, 2733.239),   -- T2
-    Vector3.new(81.852, 10.217, 2621.634),   -- T3
+    -- Layer 1: +6 unit semua
+    Vector3.new(39.0468, 9.516, 2736.190),   -- T1: -6 X, +6 Z
+    Vector3.new(151.644, 9.516, 2715.907),   -- T2: +6 X, -6 Z
+    Vector3.new(78.640, 10.217, 2642.057),   -- T3: -6 X, +6 Z
     
-    -- Layer 2: Middle level - SCALE 1.3x
-    Vector3.new(30.381, 110.516, 2744.007),  -- T4
-    Vector3.new(161.158, 110.516, 2733.239), -- T5
-    Vector3.new(81.852, 111.217, 2621.634),  -- T6
+    -- Layer 2: +6 unit semua
+    Vector3.new(39.0468, 110.516, 2736.190), -- T4
+    Vector3.new(151.644, 110.516, 2715.907), -- T5
+    Vector3.new(78.640, 111.217, 2642.057),  -- T6
     
-    -- Layer 3: Lower level - SCALE 1.3x
-    Vector3.new(30.381, -92.483, 2744.007),  -- T7
-    Vector3.new(161.158, -92.483, 2733.239), -- T8
-    Vector3.new(81.852, -93.782, 2621.634),  -- T9
+    -- Layer 3: +6 unit semua
+    Vector3.new(39.0468, -92.483, 2736.190), -- T7
+    Vector3.new(151.644, -92.483, 2715.907), -- T8
+    Vector3.new(78.640, -93.782, 2642.057),  -- T9
 }
 
 local function GetTotemUUID(name)
