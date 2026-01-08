@@ -1,0 +1,1044 @@
+-- ======================================================
+-- TREASURE ROOM INSTANT FISHER
+-- ======================================================
+
+-- ===============================
+-- ANTI-AFK SYSTEM
+-- ===============================
+pcall(function()
+    local player = game:GetService("Players").LocalPlayer
+    
+    -- Disable all idle connections to prevent AFK kick
+    for i, v in pairs(getconnections(player.Idled)) do
+        if v.Disable then
+            v:Disable()
+            print("[Anti-AFK] Enabled")
+        end
+    end
+end)
+
+-- ======================================================
+-- ULTRA EXTREME LOW GRAPHICS OPTIMIZER
+-- ======================================================
+task.spawn(function()
+    print("=========================================")
+    print("⚡ ULTRA EXTREME LOW GRAPHICS ACTIVATING")
+    print("=========================================")
+    
+    local RunService = game:GetService("RunService")
+    local Lighting = game:GetService("Lighting")
+    local Terrain = workspace:FindFirstChildOfClass("Terrain")
+    local Workspace = game:GetService("Workspace")
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local UserSettings = UserSettings()
+    local Settings = UserSettings:GetService("UserGameSettings")
+    
+    -- EXTREME FPS BOOST SETTINGS
+    print("[GRAPHICS] Activating ULTRA EXTREME low graphics...")
+    
+    -- 1. KILL ALL VISUAL EFFECTS PERMANENTLY
+    pcall(function()
+        print("[GRAPHICS] Removing all visual effects...")
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or 
+               obj:IsA("Trail") or 
+               obj:IsA("Smoke") or 
+               obj:IsA("Fire") or 
+               obj:IsA("Explosion") or
+               obj:IsA("Sparkles") or
+               obj:IsA("Beam") or
+               obj:IsA("Light") or
+               obj:IsA("SurfaceLight") or
+               obj:IsA("PointLight") or
+               obj:IsA("SpotLight") then
+                obj.Enabled = false
+            end
+        end
+    end)
+    
+    -- 2. DESTROY ALL DECALS/TEXTURES
+    pcall(function()
+        print("[GRAPHICS] Destroying all decals/textures...")
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                obj:Destroy()
+            end
+        end
+    end)
+    
+    -- 3. EXTREME LIGHTING OPTIMIZATION
+    pcall(function()
+        print("[GRAPHICS] Applying extreme lighting optimizations...")
+        
+        -- Remove all lighting effects
+        for _, effect in pairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") or 
+               effect:IsA("Sky") or 
+               effect:IsA("Atmosphere") or
+               effect:IsA("BloomEffect") or
+               effect:IsA("BlurEffect") or
+               effect:IsA("ColorCorrectionEffect") or
+               effect:IsA("SunRaysEffect") or
+               effect:IsA("DepthOfFieldEffect") then
+                effect:Destroy()
+            end
+        end
+        
+        -- Minimal lighting settings
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.FogStart = 9e9
+        Lighting.Brightness = 0
+        Lighting.ClockTime = 12
+        Lighting.GeographicLatitude = 0
+        Lighting.Ambient = Color3.new(0, 0, 0)
+        Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
+        Lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
+        Lighting.ColorShift_Top = Color3.new(0, 0, 0)
+        Lighting.ExposureCompensation = -1
+        
+        -- Destroy environmental effects
+        Lighting.Blur = 0
+        Lighting.BlurSize = 0
+        
+        -- Clear sky
+        Lighting.Sky = nil
+    end)
+    
+    -- 4. KILL TERRAIN AND WATER COMPLETELY
+    if Terrain then
+        pcall(function()
+            print("[GRAPHICS] Disabling terrain and water...")
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterWaveSpeed = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 1
+            Terrain.WaterColor = Color3.new(0, 0, 0)
+            Terrain.Decoration = false
+            Terrain.MaxExtents = Vector3.new(0, 0, 0)
+        end)
+    end
+    
+    -- 5. EXTREME RENDER QUALITY REDUCTION
+    pcall(function()
+        print("[GRAPHICS] Setting extreme low render quality...")
+        
+        -- Absolute minimum quality settings
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+        settings().Rendering.TextureQuality = Enum.TextureQuality.Low
+        settings().Rendering.EagerBulkExecution = true
+        
+        -- Disable all graphics features
+        settings().Rendering.EnableFRM = false
+        settings().Rendering.RenderCSGTrianglesDebug = false
+        settings().Rendering.ShowBoundingBoxes = false
+    end)
+    
+    -- 6. DISABLE ALL SOUNDS
+    pcall(function()
+        print("[GRAPHICS] Disabling all sounds...")
+        for _, sound in pairs(workspace:GetDescendants()) do
+            if sound:IsA("Sound") then
+                sound:Stop()
+                sound.Volume = 0
+            end
+        end
+    end)
+    
+    -- 7. REMOVE UNNECESSARY UI ELEMENTS
+    pcall(function()
+        print("[GRAPHICS] Cleaning up UI elements...")
+        local CoreGui = game:GetService("CoreGui")
+        
+        -- Remove Roblox default GUIs
+        for _, gui in pairs(CoreGui:GetChildren()) do
+            if gui.Name == "RobloxGui" or gui.Name == "PlayerList" or gui.Name == "Chat" then
+                gui.Enabled = false
+            end
+        end
+    end)
+    
+    -- 8. OPTIMIZE PLAYER CHARACTERS
+    pcall(function()
+        print("[GRAPHICS] Optimizing player characters...")
+        
+        local function OptimizeCharacter(character)
+            if character then
+                for _, part in pairs(character:GetDescendants()) do
+                    -- Remove unnecessary parts
+                    if part:IsA("ShirtGraphic") or part:IsA("Shirt") or part:IsA("Pants") then
+                        part:Destroy()
+                    end
+                    
+                    -- Remove accessories
+                    if part:IsA("Accessory") then
+                        part:Destroy()
+                    end
+                    
+                    -- Simplify parts
+                    if part:IsA("BasePart") then
+                        part.Material = Enum.Material.Plastic
+                        part.Reflectance = 0
+                        part.Transparency = 0
+                    end
+                end
+            end
+        end
+        
+        -- Optimize all players
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
+                OptimizeCharacter(player.Character)
+            end
+            player.CharacterAdded:Connect(OptimizeCharacter)
+        end
+    end)
+    
+    -- 9. REMOVE PHYSICS PARTICLES
+    pcall(function()
+        print("[GRAPHICS] Removing physics particles...")
+        workspace.Gravity = 0
+        
+        -- Remove physics controllers
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("BodyVelocity") or 
+               obj:IsA("BodyForce") or 
+               obj:IsA("BodyThrust") or 
+               obj:IsA("BodyAngularVelocity") or
+               obj:IsA("RocketPropulsion") then
+                obj:Destroy()
+            end
+        end
+    end)
+    
+    -- 10. MINIMAL FPS SETTINGS
+    pcall(function()
+        print("[GRAPHICS] Setting FPS limits...")
+        if setfpscap then 
+            setfpscap(30) -- Ultra low FPS for maximum performance
+        end
+        
+        -- Force low quality
+        if Settings then
+            Settings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+            Settings.MasterVolume = 0
+        end
+    end)
+    
+    -- 11. AGGRESSIVE GARBAGE COLLECTION
+    pcall(function()
+        print("[GRAPHICS] Running aggressive garbage collection...")
+        for i = 1, 5 do
+            if collectgarbage then
+                collectgarbage("collect")
+                task.wait(0.1)
+            end
+        end
+    end)
+    
+    -- 12. CONTINUOUS OPTIMIZATION LOOP
+    task.spawn(function()
+        while task.wait(5) do
+            -- Keep removing new particles/effects
+            pcall(function()
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") then
+                        obj.Enabled = false
+                    end
+                end
+            end)
+            
+            -- Continuous garbage collection
+            if collectgarbage then
+                collectgarbage("step", 100)
+            end
+        end
+    end)
+    
+    print("=========================================")
+    print("✅ ULTRA EXTREME LOW GRAPHICS ACTIVATED")
+    print("✅ FPS: MAXIMUM PERFORMANCE MODE")
+    print("✅ VRAM USAGE: MINIMAL")
+    print("✅ CPU USAGE: OPTIMIZED")
+    print("=========================================")
+end)
+
+-- ===============================
+-- WAIT FOR GAME TO LOAD
+-- ===============================
+repeat task.wait() until game:IsLoaded()
+
+-- ===============================
+-- SERVICES
+-- ===============================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local lp = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+-- ===============================
+-- INSTANT FISH CONFIGURATION
+-- ===============================
+local InstantFishConfig = {
+    Enabled = false,          -- Will be enabled when we start fishing
+    CatchDelay = 1.3,        -- Delay between casting and catching (Lower = Faster, but riskier)
+    AutoEquip = true,        -- Automatically equips rod (Slot 1) to prevent stopping
+    SpamEquipDelay = 0.5,    -- How often to force equip the rod
+}
+
+-- ===============================
+-- LOCATIONS
+-- ===============================
+local Locations = {
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)
+    }
+}
+
+-- ===============================
+-- GLOBAL STATE
+-- ===============================
+local STATE = {
+    ScriptRunning = true,
+    CurrentLocation = "Initializing...",
+    TotalCoins = 0,
+    SessionEarnings = 0,
+    Teleporting = false,
+    IsFishing = false,
+    GraphicsMode = "ULTRA EXTREME LOW ⚡", -- NEW: Track graphics mode
+}
+
+-- ===============================
+-- GUI ELEMENTS STORAGE
+-- ===============================
+local GUI = {
+    Frame = nil,
+    CoinValue = nil,
+    LocationValue = nil,
+    EarningsValue = nil,
+    StatusText = nil,
+    FishingModeText = nil,
+    GraphicsModeText = nil, -- NEW: Graphics mode display
+}
+
+-- ===============================
+-- HELPER FUNCTIONS
+-- ===============================
+local function GetCoins()
+    local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
+    local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
+    return PlayerDataReplion and (PlayerDataReplion:Get("Coins") or 0) or 0
+end
+
+local function FormatNumber(num)
+    if num >= 1000000 then
+        return string.format("%.1fM", num/1000000)
+    elseif num >= 1000 then
+        return string.format("%.1fK", num/1000)
+    else
+        return tostring(num)
+    end
+end
+
+-- ===============================
+-- INSTANT FISHING REMOTES
+-- ===============================
+local function GetInstantRemote(name)
+    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local current = ReplicatedStorage
+    for _, child in ipairs(path) do
+        current = current:WaitForChild(child, 2)
+        if not current then return nil end
+    end
+    return current:FindFirstChild(name)
+end
+
+-- Define Instant Fishing Remotes
+local RE_EquipToolFromHotbar
+local RF_ChargeFishingRod
+local RF_RequestFishingMinigameStarted
+local RE_FishingCompleted
+local RF_CancelFishingInputs
+
+local function LoadInstantFishingRemotes()
+    RE_EquipToolFromHotbar = GetInstantRemote("RE/EquipToolFromHotbar")
+    RF_ChargeFishingRod = GetInstantRemote("RF/ChargeFishingRod")
+    RF_RequestFishingMinigameStarted = GetInstantRemote("RF/RequestFishingMinigameStarted")
+    RE_FishingCompleted = GetInstantRemote("RE/FishingCompleted")
+    RF_CancelFishingInputs = GetInstantRemote("RF/CancelFishingInputs")
+    
+    print("[INSTANT FISH] Remotes loaded:")
+    print("  - RE_EquipToolFromHotbar:", RE_EquipToolFromHotbar and "✓" or "✗")
+    print("  - RF_ChargeFishingRod:", RF_ChargeFishingRod and "✓" or "✗")
+    print("  - RF_RequestFishingMinigameStarted:", RF_RequestFishingMinigameStarted and "✓" or "✗")
+    print("  - RE_FishingCompleted:", RE_FishingCompleted and "✓" or "✗")
+    print("  - RF_CancelFishingInputs:", RF_CancelFishingInputs and "✓" or "✗")
+end
+
+-- ===============================
+-- INSTANT FISHING FUNCTIONS
+-- ===============================
+local instantFishThreads = {}
+
+local function StartInstantFishing()
+    print("[INSTANT FISH] Starting instant fishing...")
+    
+    if STATE.IsFishing then
+        print("[INSTANT FISH] Already fishing!")
+        return
+    end
+    
+    -- Load remotes if not loaded
+    LoadInstantFishingRemotes()
+    
+    STATE.IsFishing = true
+    InstantFishConfig.Enabled = true
+    
+    -- Thread for Auto Equip (Prevents character from un-equipping rod)
+    local equipThread = task.spawn(function()
+        while InstantFishConfig.Enabled and InstantFishConfig.AutoEquip and STATE.ScriptRunning do
+            if RE_EquipToolFromHotbar then
+                pcall(function() 
+                    RE_EquipToolFromHotbar:FireServer(1) 
+                end)
+            end
+            task.wait(InstantFishConfig.SpamEquipDelay)
+        end
+    end)
+    
+    table.insert(instantFishThreads, equipThread)
+
+    -- Main Instant Fishing Loop
+    local fishingThread = task.spawn(function()
+        print("[Instant Fish] Instant fishing loop started.")
+        
+        while InstantFishConfig.Enabled and STATE.ScriptRunning do
+            if not (RF_ChargeFishingRod and RF_RequestFishingMinigameStarted and RE_FishingCompleted) then
+                warn("[Instant Fish] Remotes not found! Stopping instant fishing.")
+                InstantFishConfig.Enabled = false
+                break
+            end
+
+            -- 1. Charge Rod
+            local timestamp = os.time() + os.clock() 
+            pcall(function() 
+                RF_ChargeFishingRod:InvokeServer(timestamp) 
+            end)
+
+            -- 2. Request Minigame Start with instant coordinates
+            pcall(function() 
+                RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) 
+            end)
+            
+            -- 3. Wait for the catch
+            task.wait(InstantFishConfig.CatchDelay)
+            
+            -- 4. Complete Fishing
+            pcall(function() 
+                RE_FishingCompleted:FireServer() 
+            end)
+            
+            -- 5. Cleanup Inputs
+            task.wait(0.3)
+            pcall(function() 
+                if RF_CancelFishingInputs then
+                    RF_CancelFishingInputs:InvokeServer() 
+                end
+            end)
+            
+            -- Loop Delay
+            task.wait(0.1)
+        end
+        
+        print("[Instant Fish] Instant fishing stopped.")
+        STATE.IsFishing = false
+    end)
+    
+    table.insert(instantFishThreads, fishingThread)
+end
+
+local function StopInstantFishing()
+    print("[INSTANT FISH] Stopping instant fishing...")
+    
+    InstantFishConfig.Enabled = false
+    STATE.IsFishing = false
+    
+    -- Cleanup when disabled
+    if RE_EquipToolFromHotbar then
+        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) -- Unequip
+    end
+    
+    -- Cancel all instant fish threads
+    for _, thread in ipairs(instantFishThreads) do
+        task.cancel(thread)
+    end
+    
+    instantFishThreads = {}
+end
+
+-- ===============================
+-- TELEPORT FUNCTIONS
+-- ===============================
+local function CreateCFrame(position, lookVector)
+    local lookAt = position + lookVector
+    return CFrame.new(position, lookAt)
+end
+
+local function TeleportToLocation(name)
+    if STATE.Teleporting then 
+        print("Already teleporting, please wait...")
+        return false 
+    end
+    
+    STATE.Teleporting = true
+    STATE.CurrentLocation = "Teleporting to " .. name
+    
+    local locationData = Locations[name]
+    if not locationData then
+        warn("[TELEPORT] No data found for location:", name)
+        STATE.Teleporting = false
+        STATE.CurrentLocation = "Error: Location not found"
+        return false
+    end
+    
+    local cframe = CreateCFrame(locationData.Pos, locationData.Look)
+    
+    print("[TELEPORT] Going to:", name)
+    
+    local success, errorMsg = pcall(function()
+        local character = lp.Character
+        if not character then
+            character = lp.CharacterAdded:Wait()
+        end
+        
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
+        if not humanoidRootPart then
+            error("HumanoidRootPart not found")
+        end
+        
+        humanoidRootPart.CFrame = cframe
+        task.wait(0.5)
+        
+        local currentPos = humanoidRootPart.Position
+        local targetPos = locationData.Pos
+        local distance = (currentPos - targetPos).Magnitude
+        
+        print("[TELEPORT] Success! Distance:", math.floor(distance * 100) / 100, "studs")
+        
+        if distance > 10 then
+            print("[TELEPORT] Correcting position...")
+            humanoidRootPart.CFrame = cframe
+            task.wait(0.2)
+        end
+        
+        return true
+    end)
+    
+    if not success then
+        warn("[TELEPORT] Failed:", errorMsg)
+    end
+    
+    task.wait(0.5)
+    STATE.Teleporting = false
+    STATE.CurrentLocation = name
+    
+    return success
+end
+
+-- ===============================
+-- AUTO SELL FUNCTION
+-- ===============================
+local function StartAutoSell()
+    print("[AUTO SELL] Starting auto-sell every 1 minute...")
+    
+    -- Get sell remote
+    local function GetRemote(name)
+        local path = {"Packages","_Index","sleitnick_net@0.2.0","net"}
+        local cur = ReplicatedStorage
+        for _, p in ipairs(path) do
+            cur = cur:WaitForChild(p)
+        end
+        return cur:FindFirstChild(name)
+    end
+    
+    local RF_SellAllItems = GetRemote("RF/SellAllItems")
+    
+    task.spawn(function()
+        while STATE.ScriptRunning do
+            local beforeSell = GetCoins()
+            pcall(function() 
+                if RF_SellAllItems then
+                    RF_SellAllItems:InvokeServer() 
+                end
+            end)
+            task.wait(1)
+            
+            local afterSell = GetCoins()
+            local profit = afterSell - beforeSell
+            if profit > 0 then
+                STATE.SessionEarnings = STATE.SessionEarnings + profit
+                print("[AUTO SELL] Sold items for: " .. FormatNumber(profit) .. " coins")
+            end
+            
+            task.wait(59) -- Wait 1 minute total
+        end
+    end)
+end
+
+-- ===============================
+-- AUTO FAVORITE FUNCTION
+-- ===============================
+local function StartAutoFavorite()
+    print("[AUTO FAVORITE] Starting auto-favorite for Ruby...")
+    
+    --[[
+        STANDALONE AUTO FAVORITE - SPECIFIC ITEM
+        Target: "Ruby"
+    ]]
+
+    -- 1. CONFIGURATION
+    local Config = {
+        Enabled = true,          -- Master switch
+        TargetName = "Ruby",     -- The exact name of the item you want to favorite
+        CheckDelay = 2,          -- How often to scan inventory (seconds)
+        ActionDelay = 0.5        -- Delay between favoriting items (to prevent disconnects)
+    }
+
+    -- 2. SERVICES & MODULES
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Players = game:GetService("Players")
+
+    -- Load Game Modules
+    local Shared = ReplicatedStorage:WaitForChild("Shared")
+    local Packages = ReplicatedStorage:WaitForChild("Packages")
+
+    local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
+    local Replion = require(Packages:WaitForChild("Replion")).Client
+
+    -- 3. GET REMOTE (UUID Handler)
+    local function GetRemote(name)
+        local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+        local current = ReplicatedStorage
+        for _, child in ipairs(path) do
+            current = current:WaitForChild(child, 2)
+            if not current then return nil end
+        end
+        return current:FindFirstChild(name)
+    end
+
+    local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
+
+    -- 4. DATA HELPER (Name Checker)
+    local PlayerDataReplion = nil
+    local function GetPlayerDataReplion()
+        if PlayerDataReplion then return PlayerDataReplion end
+        PlayerDataReplion = Replion:WaitReplion("Data", 5)
+        return PlayerDataReplion
+    end
+
+    -- Logic to find the name using ID (as discussed)
+    local function GetItemName(item)
+        -- 1. Default to Identifier
+        local name = item.Identifier or "Unknown"
+        local itemID = item.Id
+
+        -- 2. Check ItemUtility using ID
+        if ItemUtility and itemID then
+            local success, itemData = pcall(function()
+                return ItemUtility:GetItemData(itemID)
+            end)
+            
+            if success and itemData and itemData.Data and itemData.Data.Name then
+                name = itemData.Data.Name
+            end
+        end
+        
+        return name
+    end
+
+    -- 5. MAIN LOGIC LOOP
+    task.spawn(function()
+        print("[Auto Favorite] Script Started for: " .. Config.TargetName)
+
+        while Config.Enabled and STATE.ScriptRunning do
+            local replion = GetPlayerDataReplion()
+            
+            if replion then
+                local success, inventoryData = pcall(function() return replion:GetExpect("Inventory") end)
+                
+                if success and inventoryData and inventoryData.Items then
+                    for _, item in ipairs(inventoryData.Items) do
+                        -- Skip if already favorite
+                        if item.IsFavorite or item.Favorited then 
+                            continue 
+                        end
+                        
+                        -- CHECK NAME
+                        local itemName = GetItemName(item)
+                        
+                        -- Match found?
+                        if itemName == Config.TargetName then
+                            local itemUUID = item.UUID -- Get the UUID
+                            
+                            if itemUUID then
+                                print("[Auto Favorite] Found " .. itemName .. "! Locking UUID: " .. itemUUID)
+                                
+                                -- FIRE SERVER with UUID
+                                if RE_FavoriteItem then
+                                    RE_FavoriteItem:FireServer(itemUUID)
+                                end
+                                
+                                task.wait(Config.ActionDelay)
+                            end
+                        end
+                    end
+                end
+            end
+            
+            task.wait(Config.CheckDelay)
+        end
+    end)
+end
+
+-- ===============================
+-- CREATE TRANSPARENT GUI (UPDATED)
+-- ===============================
+local function CreateGUI()
+    print("[GUI] Creating Treasure Room Instant Fisher GUI...")
+    
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "TreasureRoomInstantFisherGUI"
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    gui.ResetOnSpawn = false
+    gui.Parent = game.CoreGui
+
+    -- Main frame with transparency
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromOffset(350, 300) -- Increased height for graphics mode
+    frame.Position = UDim2.fromScale(0.5, 0.5)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
+    frame.BackgroundTransparency = 0.3
+    frame.Active = true
+    frame.Draggable = true
+    frame.ZIndex = 10
+    frame.Parent = gui
+    
+    GUI.Frame = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+
+    -- Top bar with transparency
+    local topBar = Instance.new("Frame")
+    topBar.Size = UDim2.new(1, 0, 0, 40)
+    topBar.Position = UDim2.new(0, 0, 0, 0)
+    topBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    topBar.BackgroundTransparency = 0.6
+    topBar.ZIndex = 11
+    topBar.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 0, 40)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "💰 TREASURE ROOM INSTANT FISHER ⚡"
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 18
+    title.TextColor3 = Color3.fromRGB(100, 200, 255)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 12
+    title.Parent = topBar
+
+    -- Status Panel with transparency
+    local statusPanel = Instance.new("Frame")
+    statusPanel.Size = UDim2.new(0.9, 0, 0, 200) -- Increased height
+    statusPanel.Position = UDim2.fromScale(0.05, 0.20)
+    statusPanel.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
+    statusPanel.BackgroundTransparency = 0.6
+    statusPanel.ZIndex = 11
+    statusPanel.Parent = frame
+
+    local statusCorner = Instance.new("UICorner")
+    statusCorner.CornerRadius = UDim.new(0, 10)
+    statusCorner.Parent = statusPanel
+
+    -- Status labels function
+    local function CreateStatusRow(y, icon, label, value)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(0.9, 0, 0, 28)
+        row.Position = UDim2.fromScale(0.05, y)
+        row.BackgroundTransparency = 1
+        row.ZIndex = 12
+        row.Parent = statusPanel
+        
+        local iconLabel = Instance.new("TextLabel")
+        iconLabel.Size = UDim2.fromOffset(28, 28)
+        iconLabel.Position = UDim2.fromOffset(0, 0)
+        iconLabel.BackgroundTransparency = 1
+        iconLabel.Text = icon
+        iconLabel.Font = Enum.Font.GothamBold
+        iconLabel.TextSize = 16
+        iconLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+        iconLabel.TextXAlignment = Enum.TextXAlignment.Left
+        iconLabel.ZIndex = 13
+        iconLabel.Parent = row
+        
+        local labelText = Instance.new("TextLabel")
+        labelText.Size = UDim2.fromOffset(120, 28)
+        labelText.Position = UDim2.fromOffset(35, 0)
+        labelText.BackgroundTransparency = 1
+        labelText.Text = label
+        labelText.Font = Enum.Font.Gotham
+        labelText.TextSize = 13
+        labelText.TextColor3 = Color3.fromRGB(220, 220, 240)
+        labelText.TextXAlignment = Enum.TextXAlignment.Left
+        labelText.ZIndex = 13
+        labelText.Parent = row
+        
+        local valueText = Instance.new("TextLabel")
+        valueText.Size = UDim2.fromOffset(150, 28)
+        valueText.Position = UDim2.fromOffset(155, 0)
+        valueText.BackgroundTransparency = 1
+        valueText.Text = value
+        valueText.Font = Enum.Font.GothamBold
+        valueText.TextSize = 13
+        valueText.TextColor3 = Color3.fromRGB(240, 250, 255)
+        valueText.TextXAlignment = Enum.TextXAlignment.Right
+        valueText.ZIndex = 13
+        valueText.Parent = row
+        
+        return valueText
+    end
+
+    -- Create status rows
+    GUI.CoinValue = CreateStatusRow(0.05, "💰", "Coins:", "0")
+    GUI.LocationValue = CreateStatusRow(0.17, "📍", "Location:", "Initializing...")
+    GUI.FishingModeText = CreateStatusRow(0.29, "⚡", "Fishing Mode:", "INSTANT")
+    GUI.GraphicsModeText = CreateStatusRow(0.41, "🎮", "Graphics Mode:", STATE.GraphicsMode) -- NEW
+    GUI.EarningsValue = CreateStatusRow(0.53, "💸", "Session Earnings:", "0")
+
+    -- Status Display
+    local statusBox = Instance.new("Frame")
+    statusBox.Size = UDim2.new(0.9, 0, 0, 40)
+    statusBox.Position = UDim2.fromScale(0.05, 0.85)
+    statusBox.BackgroundColor3 = Color3.fromRGB(30, 40, 70)
+    statusBox.BackgroundTransparency = 0.6
+    statusBox.ZIndex = 11
+    statusBox.Parent = frame
+
+    local statusBoxCorner = Instance.new("UICorner")
+    statusBoxCorner.CornerRadius = UDim.new(0, 8)
+    statusBoxCorner.Parent = statusBox
+
+    GUI.StatusText = Instance.new("TextLabel")
+    GUI.StatusText.Size = UDim2.new(1, 0, 1, 0)
+    GUI.StatusText.Position = UDim2.fromScale(0, 0)
+    GUI.StatusText.BackgroundTransparency = 1
+    GUI.StatusText.Text = "STATUS: Starting..."
+    GUI.StatusText.Font = Enum.Font.GothamBold
+    GUI.StatusText.TextSize = 14
+    GUI.StatusText.TextColor3 = Color3.fromRGB(100, 255, 100)
+    GUI.StatusText.ZIndex = 12
+    GUI.StatusText.Parent = statusBox
+
+    -- Close button with transparent effect
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.fromOffset(24, 24)
+    closeBtn.Position = UDim2.fromOffset(316, 8)
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 60)
+    closeBtn.BackgroundTransparency = 0.3
+    closeBtn.TextColor3 = Color3.new(1, 1, 1)
+    closeBtn.ZIndex = 12
+    closeBtn.AutoButtonColor = false
+    closeBtn.Parent = topBar
+    
+    -- Add hover effect to close button
+    closeBtn.MouseEnter:Connect(function()
+        closeBtn.BackgroundTransparency = 0.1
+    end)
+    
+    closeBtn.MouseLeave:Connect(function()
+        closeBtn.BackgroundTransparency = 0.3
+    end)
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = closeBtn
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        STATE.ScriptRunning = false
+        StopInstantFishing()
+        gui:Destroy()
+        print("[GUI] Treasure Room Instant Fisher stopped")
+    end)
+
+    -- Add subtle border to main frame
+    local border = Instance.new("UIStroke")
+    border.Color = Color3.fromRGB(50, 100, 150)
+    border.Thickness = 2
+    border.Transparency = 0.7
+    border.Parent = frame
+
+    -- Add subtle border to status panel
+    local statusBorder = Instance.new("UIStroke")
+    statusBorder.Color = Color3.fromRGB(50, 100, 150)
+    statusBorder.Thickness = 1.5
+    statusBorder.Transparency = 0.8
+    statusBorder.Parent = statusPanel
+
+    -- Initial animation
+    frame.Position = UDim2.fromScale(0.5, -0.5)
+    frame.BackgroundTransparency = 1
+    TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.fromScale(0.5, 0.5),
+        BackgroundTransparency = 0.3
+    }):Play()
+
+    print("[GUI] Treasure Room Instant Fisher GUI created successfully")
+    
+    return gui
+end
+
+-- ===============================
+-- GUI UPDATE LOOP (UPDATED)
+-- ===============================
+local function UpdateGUILoop()
+    while task.wait(0.5) do
+        if GUI.CoinValue and STATE.ScriptRunning then
+            -- Update coins
+            STATE.TotalCoins = GetCoins()
+            GUI.CoinValue.Text = FormatNumber(STATE.TotalCoins)
+            GUI.EarningsValue.Text = FormatNumber(STATE.SessionEarnings)
+            
+            -- Update location, fishing mode, and graphics mode
+            GUI.LocationValue.Text = STATE.CurrentLocation
+            GUI.FishingModeText.Text = "INSTANT ⚡"
+            GUI.GraphicsModeText.Text = STATE.GraphicsMode
+            
+            -- Update status text
+            if STATE.CurrentLocation == "Treasure Room" then
+                if STATE.IsFishing then
+                    GUI.StatusText.Text = "STATUS: Instant Fishing ⚡"
+                    GUI.StatusText.TextColor3 = Color3.fromRGB(100, 255, 100)
+                else
+                    GUI.StatusText.Text = "STATUS: Ready at Treasure Room"
+                    GUI.StatusText.TextColor3 = Color3.fromRGB(100, 200, 255)
+                end
+            elseif STATE.Teleporting then
+                GUI.StatusText.Text = "STATUS: Teleporting..."
+                GUI.StatusText.TextColor3 = Color3.fromRGB(100, 200, 255)
+            else
+                GUI.StatusText.Text = "STATUS: Active ✅"
+                GUI.StatusText.TextColor3 = Color3.fromRGB(100, 200, 255)
+            end
+        end
+    end
+end
+
+-- ===============================
+-- MAIN TREASURE ROOM INSTANT FISHING LOOP
+-- ===============================
+local function StartTreasureRoomFishing()
+    print("=========================================")
+    print("💰 TREASURE ROOM INSTANT FISHER")
+    print("=========================================")
+    print("⚡ INSTANT FISHING FEATURES:")
+    print("   - Ultra-fast catch rate")
+    print("   - No minigame interaction")
+    print("   - Automatic rod equipping")
+    print("   - Continuous fishing loop")
+    print("=========================================")
+    
+    -- Wait for graphics optimizer to complete
+    print("\n⏳ Waiting for graphics optimization to complete...")
+    task.wait(3)
+    
+    -- Teleport to Treasure Room
+    print("\n📍 TELEPORTING TO TREASURE ROOM...")
+    STATE.CurrentLocation = "Teleporting to Treasure Room..."
+    
+    local success = TeleportToLocation("Treasure Room")
+    
+    if not success then
+        print("❌ Failed to teleport to Treasure Room!")
+        STATE.CurrentLocation = "❌ Teleport Failed"
+        return
+    end
+    
+    print("✅ Successfully teleported to Treasure Room!")
+    
+    -- Start all systems
+    print("\n⚡ STARTING SYSTEMS...")
+    
+    -- Start instant fishing
+    StartInstantFishing()
+    
+    -- Start auto sell (every 1 minute)
+    StartAutoSell()
+    
+    -- Start auto favorite for Ruby
+    StartAutoFavorite()
+    
+    STATE.CurrentLocation = "Treasure Room"
+    print("\n✅ ALL SYSTEMS RUNNING!")
+    print("   - Instant Fishing: ACTIVE ⚡")
+    print("   - Graphics Mode: ULTRA EXTREME LOW ⚡")
+    print("   - Auto Sell (1 min): ACTIVE")
+    print("   - Auto Favorite (Ruby): ACTIVE")
+    
+    -- Main loop (just keep everything running)
+    while STATE.ScriptRunning do
+        STATE.TotalCoins = GetCoins()
+        task.wait(5)
+    end
+    
+    print("[TREASURE ROOM] Script stopped")
+    StopInstantFishing()
+end
+
+-- ===============================
+-- INITIALIZE
+-- ===============================
+local function Initialize()
+    print("=========================================")
+    print("💰 TREASURE ROOM INSTANT FISHER INITIALIZING")
+    print("=========================================")
+    print("⚡ ULTRA EXTREME LOW GRAPHICS: ENABLED")
+    print("⚡ MAXIMUM FPS OPTIMIZATION: ENABLED")
+    print("=========================================")
+    
+    -- Create GUI
+    local gui = CreateGUI()
+    
+    -- Start GUI update loop
+    task.spawn(UpdateGUILoop)
+    
+    -- Wait a moment for graphics optimization to start
+    task.wait(2)
+    
+    -- Start the main fishing loop
+    task.spawn(StartTreasureRoomFishing)
+    
+    print("✅ Treasure Room Instant Fisher LOADED")
+    print("🎯 Features:")
+    print("   - Auto teleport to Treasure Room")
+    print("   - INSTANT FISHING ⚡ (no minigame)")
+    print("   - ULTRA EXTREME LOW GRAPHICS ⚡")
+    print("   - Auto sell every 1 minute")
+    print("   - Auto favorite for Ruby items")
+    print("   - CPU/FPS saver (maximum optimization)")
+    print("   - Anti-AFK system")
+    print("   - Transparent GUI with stats")
+    print("   - Shows graphics mode: ULTRA EXTREME LOW ⚡")
+    print("   - Single button to close")
+end
+
+-- Start initialization
+task.spawn(Initialize)
