@@ -443,26 +443,21 @@ local TotemToggleUI = nil
 local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, ["Shiny Totem"] = {Id = 3} }
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 
--- Fungsi untuk geser posisi radial
-local function offsetPosition(pos, xOffset, zOffset)
-    return Vector3.new(pos.X + xOffset, pos.Y, pos.Z + zOffset)
-end
-
 local REF_SPOTS = {
-    -- Layer 1: Geser sedikit menjauh dari center
-    Vector3.new(50.0468, 9.516, 2725.190),   -- T1: X+5, Z-5
-    Vector3.new(150.644, 9.516, 2716.907),   -- T2: X+5, Z-5
-    Vector3.new(89.640, 10.217, 2631.057),   -- T3: X+5, Z-5
+    -- Layer 1: Ground level - SCALE 1.3x (+30%)
+    Vector3.new(30.381, 9.516, 2744.007),    -- T1
+    Vector3.new(161.158, 9.516, 2733.239),   -- T2
+    Vector3.new(81.852, 10.217, 2621.634),   -- T3
     
-    -- Layer 2: Geser lebih banyak
-    Vector3.new(40.0468, 110.516, 2735.190),   -- T4: X-5, Z+5
-    Vector3.new(140.644, 110.516, 2726.907),   -- T5: X-5, Z+5
-    Vector3.new(79.640, 111.217, 2641.057),    -- T6: X-5, Z+5
+    -- Layer 2: Middle level - SCALE 1.3x
+    Vector3.new(30.381, 110.516, 2744.007),  -- T4
+    Vector3.new(161.158, 110.516, 2733.239), -- T5
+    Vector3.new(81.852, 111.217, 2621.634),  -- T6
     
-    -- Layer 3: Geser sedang
-    Vector3.new(60.0468, -92.483, 2715.190),   -- T7: X+15, Z-15
-    Vector3.new(160.644, -92.483, 2706.907),   -- T8: X+15, Z-15
-    Vector3.new(99.640, -93.782, 2621.057),    -- T9: X+15, Z-15
+    -- Layer 3: Lower level - SCALE 1.3x
+    Vector3.new(30.381, -92.483, 2744.007),  -- T7
+    Vector3.new(161.158, -92.483, 2733.239), -- T8
+    Vector3.new(81.852, -93.782, 2621.634),  -- T9
 }
 
 local function GetTotemUUID(name)
