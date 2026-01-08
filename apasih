@@ -444,20 +444,20 @@ local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, [
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 
 local REF_SPOTS = {
-    -- Layer 1: Ground level
-    Vector3.new(45.0468, 9.516, 2730.190),   -- T1: SUCCESS (biarkan)
-    Vector3.new(155.644, 9.516, 2711.907),   -- T2: GESER KANAN 10 unit, BAWAH 10 unit
-    Vector3.new(84.640, 10.217, 2636.057),   -- T3: SUCCESS (biarkan)
+    -- Layer 1: Ground level - MAJU 1 UNIT (Z + 1)
+    Vector3.new(45.0468, 9.516, 2731.190),   -- T1: Z 2730.190 → 2731.190
+    Vector3.new(145.644, 9.516, 2722.907),   -- T2: Z 2721.907 → 2722.907
+    Vector3.new(84.640, 10.217, 2637.057),   -- T3: Z 2636.057 → 2637.057
     
-    -- Layer 2: Middle level - SESUAIKAN DENGAN T2 BARU
-    Vector3.new(45.0468, 110.516, 2730.190),  -- T4
-    Vector3.new(155.644, 110.516, 2711.907),  -- T5: ikuti perubahan T2
-    Vector3.new(84.640, 111.217, 2636.057),   -- T6
+    -- Layer 2: Middle level - MAJU 1 UNIT
+    Vector3.new(45.0468, 110.516, 2731.190),  -- T4
+    Vector3.new(145.644, 110.516, 2722.907),  -- T5
+    Vector3.new(84.640, 111.217, 2637.057),   -- T6
     
-    -- Layer 3: Lower level - SESUAIKAN DENGAN T2 BARU
-    Vector3.new(45.0468, -92.483, 2730.190),  -- T7
-    Vector3.new(155.644, -92.483, 2711.907),  -- T8: ikuti perubahan T2
-    Vector3.new(84.640, -93.782, 2636.057),   -- T9
+    -- Layer 3: Lower level - MAJU 1 UNIT
+    Vector3.new(45.0468, -92.483, 2731.190),  -- T7
+    Vector3.new(145.644, -92.483, 2722.907),  -- T8
+    Vector3.new(84.640, -93.782, 2637.057),   -- T9
 }
 
 local function GetTotemUUID(name)
