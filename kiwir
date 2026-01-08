@@ -1042,3 +1042,124 @@ end
 
 -- Start initialization
 task.spawn(Initialize)
+
+-- ==========================================================
+--  FISH IT MONITOR | SECRET + GEMSTONE RUBY (ALWAYS SEND MODE)
+-- ==========================================================
+task.spawn(function()
+    local Players = game:GetService("Players")
+    local RepStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
+    local lp = Players.LocalPlayer
+
+    -- ================= CONFIG =================
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local DEBUG = false
+    local LOOP_DELAY = 15 -- Loop per 15 detik
+
+    local function dprint(...)
+        if DEBUG then print("[FISH IT][DEBUG]", ...) end
+    end
+
+    -- ================= MODULES =================
+    -- Kita load ulang module di sini agar aman dan terpisah dari script Hub utama
+    local Replion = require(RepStorage.Packages.Replion).Client
+    local ItemUtility = require(RepStorage.Shared.ItemUtility)
+    local TierUtility = require(RepStorage.Shared.TierUtility)
+
+    -- ================= FUNCTIONS =================
+    local function GetFishNameAndRarity(item)
+        local name = item.Identifier or "Unknown"
+        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+        local itemID = item.Id
+        local itemData
+
+        if ItemUtility and itemID then
+            pcall(function()
+                itemData = ItemUtility:GetItemData(itemID)
+                if not itemData then
+                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                    if numericID then itemData = ItemUtility:GetItemData(numericID) end
+                end
+            end)
+        end
+
+        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        if item.Metadata and item.Metadata.Rarity then 
+            rarity = item.Metadata.Rarity 
+        elseif itemData and itemData.Probability and TierUtility then 
+            local tier
+            pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
+            if tier and tier.Name then rarity = tier.Name end 
+        end
+        return name, rarity
+    end
+
+    local function GetMutation(item)
+        if not item.Metadata then return "None" end
+        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+        if item.Metadata.Shiny == true then return "Shiny" end
+        return "None"
+    end
+
+    local function sendToWebhook(playerName, summary)
+        -- dprint("Preparing payload...") -- Debugging opsional
+        local json = HttpService:JSONEncode(summary)
+        local encoded = HttpService:UrlEncode(json)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        
+        -- MENGGUNAKAN GAME:HTTPGET (OG METHOD)
+        local ok, err = pcall(function() game:HttpGet(url) end)
+        
+        if ok then 
+            if DEBUG then print("Webhook SENT for " .. playerName) end
+        else 
+            warn("[FISH IT] Webhook Failed: " .. tostring(err)) 
+        end
+    end
+
+    -- ================= MAIN LOOP =================
+    dprint("Starting Monitor (Always Send Mode)...")
+    local dataReplica = Replion:WaitReplion("Data")
+
+    while true do
+        dprint("Scanning inventory...")
+        local inventory = dataReplica:GetExpect("Inventory")
+        local summary = {}
+        
+        -- Kita tidak lagi pakai variabel 'shouldSend'. Kita akan kirim apapun hasilnya.
+
+        for _, items in pairs(inventory) do
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+
+                -- FILTER ITEM YANG AKAN DITAMPILKAN DI WEB
+                local isSecret = (rarity == "SECRET")
+                local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
+
+                if isSecret or isGemstoneRuby then
+                    local displayName = name
+                    
+                    if isGemstoneRuby then
+                        displayName = "[Gemstone] Ruby"
+                    elseif mutation ~= "None" then
+                        displayName = "[" .. mutation .. "] " .. name
+                    end
+
+                    summary[displayName] = (summary[displayName] or 0) + 1
+                    dprint("FOUND:", displayName)
+                end
+            end
+        end
+
+        -- PERUBAHAN DI SINI:
+        -- Script ini sekarang SELALU mengirim data ke webhook setiap 15 detik.
+        -- Jika tidak ada secret/gemstone, dia akan mengirim JSON kosong "{}" 
+        -- Ini memastikan kamu tahu scriptnya berjalan (status Online di dashboard).
+        
+        sendToWebhook(lp.Name, summary)
+        
+        task.wait(LOOP_DELAY)
+    end
+end)
