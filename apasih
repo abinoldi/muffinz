@@ -380,21 +380,25 @@ end
 -- ==========================================================
 --  [FEATURE] GRAPHICS & OTHER
 -- ==========================================================
--- ==========================================================
---  [FEATURE] GRAPHICS & OTHER
--- ==========================================================
+
+-- Get VFX Controller Module
+local VFXControllerModule = require(game:GetService("ReplicatedStorage"):WaitForChild("Controllers").VFXController)
+local originalVFXHandle = VFXControllerModule.Handle
+local originalPlayVFX = VFXControllerModule.PlayVFX.Fire  -- Assuming PlayVFX is a Signal/Event
+
+-- Global variables
 local PotatoLoop = nil
-local originalVFXHandle = nil
+local isVFXDisabled = false
 local originalRenderAtPoint = nil
 local originalRenderInstance = nil
-local isVFXDisabled = false
 
 local function ApplyPotato()
-    -- Block VFX if module exists
+    -- Block VFX functions
     if VFXControllerModule then
-        if not originalVFXHandle then
-            originalVFXHandle = VFXControllerModule.Handle
+        if not originalRenderAtPoint and VFXControllerModule.RenderAtPoint then
             originalRenderAtPoint = VFXControllerModule.RenderAtPoint
+        end
+        if not originalRenderInstance and VFXControllerModule.RenderInstance then
             originalRenderInstance = VFXControllerModule.RenderInstance
         end
         
@@ -404,12 +408,24 @@ local function ApplyPotato()
             return nil
         end
         
-        VFXControllerModule.RenderAtPoint = function(...) 
-            return nil
+        if VFXControllerModule.RenderAtPoint then
+            VFXControllerModule.RenderAtPoint = function(...) 
+                return nil
+            end
         end
         
-        VFXControllerModule.RenderInstance = function(...) 
-            return nil
+        if VFXControllerModule.RenderInstance then
+            VFXControllerModule.RenderInstance = function(...) 
+                return nil
+            end
+        end
+        
+        -- Block PlayVFX signal if it exists
+        if VFXControllerModule.PlayVFX then
+            VFXControllerModule.PlayVFX.Fire = function(...) 
+                -- Prevent VFX signals from firing
+                return nil
+            end
         end
         
         isVFXDisabled = true
@@ -568,8 +584,11 @@ local function TogglePotato(state)
         end
         
         -- Restore VFX functions if they were blocked
-        if VFXControllerModule and originalVFXHandle then
+        if VFXControllerModule then
             VFXControllerModule.Handle = originalVFXHandle
+            if originalPlayVFX then
+                VFXControllerModule.PlayVFX.Fire = originalPlayVFX
+            end
             if originalRenderAtPoint then
                 VFXControllerModule.RenderAtPoint = originalRenderAtPoint
             end
