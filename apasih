@@ -444,20 +444,20 @@ local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, [
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 
 local REF_SPOTS = {
-    -- Layer 1
-    Vector3.new(45.0468, 9.516, 2730.190),   -- T1 (tetap)
-    Vector3.new(155.644, 9.516, 2711.907),   -- T2: X+10, Z-10
-    Vector3.new(84.640, 10.217, 2636.057),   -- T3 (tetap)
+    -- Layer 1: SUCCESS (dengan offset X+15, Z-5)
+    Vector3.new(45.0468, 9.516, 2730.190),     -- T1
+    Vector3.new(160.644, 9.516, 2716.907),     -- T2: SUCCESS offset
+    Vector3.new(84.640, 10.217, 2636.057),     -- T3
     
-    -- Layer 2
-    Vector3.new(45.0468, 110.516, 2730.190),  -- T4
-    Vector3.new(155.644, 110.516, 2711.907),  -- T5: X+10, Z-10
-    Vector3.new(84.640, 111.217, 2636.057),   -- T6
+    -- Layer 2: OTOTMATIS dari Layer 1 (tambah Y +101)
+    Vector3.new(45.0468, 110.516, 2730.190),   -- T4 = T1 + (0, 101, 0)
+    Vector3.new(160.644, 110.516, 2716.907),   -- T5 = T2 + (0, 101, 0)
+    Vector3.new(84.640, 111.217, 2636.057),    -- T6 = T3 + (0, 101, 0)
     
-    -- Layer 3
-    Vector3.new(45.0468, -92.483, 2730.190),  -- T7
-    Vector3.new(155.644, -92.483, 2711.907),  -- T8: X+10, Z-10
-    Vector3.new(84.640, -93.782, 2636.057),   -- T9
+    -- Layer 3: OTOTMATIS dari Layer 1 (kurang Y -101.999)
+    Vector3.new(45.0468, -92.483, 2730.190),   -- T7 = T1 + (0, -101.999, 0)
+    Vector3.new(160.644, -92.483, 2716.907),   -- T8 = T2 + (0, -101.999, 0)
+    Vector3.new(84.640, -93.782, 2636.057),    -- T9 = T3 + (0, -103.999, 0)
 }
 
 local function GetTotemUUID(name)
