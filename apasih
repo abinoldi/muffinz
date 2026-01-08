@@ -587,18 +587,6 @@ local function ApplyPotato()
         pcall(function() collectgarbage("collect") end) 
     end
     
-    -- Send notification if WindUI exists
-    if WindUI and WindUI.Notify then
-        pcall(function()
-            WindUI:Notify({ 
-                Title = "FPS Ultra Boost", 
-                Content = "Maximum FPS mode enabled (Minimal Graphics).", 
-                Duration = 3, 
-                Icon = "zap" 
-            })
-        end)
-    end
-    
     isBoostActive = true
 end
 
