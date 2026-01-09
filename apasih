@@ -393,8 +393,16 @@ local originalRenderAtPoint = nil
 local originalRenderInstance = nil
 local isBoostActive = false
 local originalLightingValues = {}
+local isPotatoApplied = false  -- ADD THIS: Track if potato mode is already applied
 
 local function ApplyPotato()
+    -- Don't reapply if already applied
+    if isPotatoApplied then
+        return
+    end
+    
+    print("Applying Potato Mode optimizations...")
+    
     -- Block VFX functions
     if VFXControllerModule then
         if not originalRenderAtPoint and VFXControllerModule.RenderAtPoint then
@@ -431,16 +439,6 @@ local function ApplyPotato()
         end
         
         isVFXDisabled = true
-        
-        -- Clean up existing cosmetic effects
-        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
-        if cosmeticFolder then
-            pcall(function() 
-                for _, child in ipairs(cosmeticFolder:GetChildren()) do
-                    child:Destroy()
-                end
-            end)
-        end
     end
     
     -- FPS Ultra Boost Optimizations
@@ -459,8 +457,19 @@ local function ApplyPotato()
         end)
     end
     
-    -- 1. VISUAL & EFFECTS (Ultimate optimization)
+    -- Only apply visual effects once (not in a loop)
     pcall(function()
+        -- 1. Clean up existing cosmetic effects ONCE
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then
+            pcall(function() 
+                for _, child in ipairs(cosmeticFolder:GetChildren()) do
+                    child:Destroy()
+                end
+            end)
+        end
+        
+        -- 2. VISUAL & EFFECTS (Apply once)
         for _, v in ipairs(workspace:GetDescendants()) do
             -- Disable all visual effects
             if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or 
@@ -468,40 +477,23 @@ local function ApplyPotato()
                 v.Enabled = false
                 if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or 
                    v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                    pcall(function() v:Destroy() end)  -- Destroy for extra performance
+                    pcall(function() v:Destroy() end)
                 end
             -- Hide all textures
             elseif v:IsA("Decal") or v:IsA("Texture") then
                 v.Transparency = 1
                 if v:IsA("Decal") then
-                    pcall(function() v:Destroy() end)  -- Destroy decals completely
+                    pcall(function() v:Destroy() end)
                 end
             -- Extreme part optimization
             elseif v:IsA("BasePart") then
                 v.CastShadow = false
                 v.Material = Enum.Material.Plastic
                 v.Reflectance = 0
-                
-                -- Remove any attached effects
-                for _, child in ipairs(v:GetChildren()) do
-                    if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
-                       child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") or
-                       child:IsA("Sound") or child:IsA("Light") then
-                        pcall(function() child:Destroy() end)
-                    end
-                end
-            -- Disable animations
-            elseif v:IsA("AnimationController") or v:IsA("Animator") then
-                pcall(function() v:Destroy() end)
-            -- Remove sounds
-            elseif v:IsA("Sound") then
-                pcall(function() v:Destroy() end)
             end
         end
-    end)
-    
-    -- 2. LIGHTING & ENVIRONMENT (Minimalist settings)
-    pcall(function()
+        
+        -- 3. LIGHTING & ENVIRONMENT (Apply once)
         -- Disable all post-processing effects
         for _, effect in ipairs(Lighting:GetChildren()) do
             if effect:IsA("PostEffect") then 
@@ -519,8 +511,8 @@ local function ApplyPotato()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.FogStart = 9e9
-        Lighting.Brightness = 0  -- Darker for contrast and efficiency
-        Lighting.ClockTime = 14  -- Noon without shadows
+        Lighting.Brightness = 0
+        Lighting.ClockTime = 14
         Lighting.Ambient = Color3.new(0, 0, 0)
         Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
         Lighting.ShadowSoftness = 0
@@ -528,7 +520,7 @@ local function ApplyPotato()
         Lighting.ExposureCompensation = 0
     end)
     
-    -- 3. TERRAIN & WATER (Complete optimization)
+    -- 4. TERRAIN & WATER (Apply once)
     if Terrain then
         pcall(function()
             Terrain.WaterWaveSize = 0
@@ -540,7 +532,7 @@ local function ApplyPotato()
         end)
     end
     
-    -- 4. QUALITY & RENDERING SETTINGS (Maximum performance)
+    -- 5. QUALITY & RENDERING SETTINGS (Apply once)
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
@@ -549,62 +541,63 @@ local function ApplyPotato()
         settings().Rendering.RenderCSGTrianglesDebug = false
     end)
     
-    -- 5. CHARACTER OPTIMIZATION
-    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-        if player.Character then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                -- Stop all playing animations
-                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-                    pcall(function() track:Stop() end)
-                end
-                
-                -- Remove animator
-                local animator = humanoid:FindFirstChildOfClass("Animator")
-                if animator then
-                    pcall(function() animator:Destroy() end)
-                end
-            end
-            
-            -- Clean character effects
-            for _, part in ipairs(player.Character:GetDescendants()) do
-                if part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Beam") or 
-                   part:IsA("Fire") or part:IsA("Smoke") or part:IsA("Sparkles") or
-                   part:IsA("Sound") or part:IsA("Light") then
-                    pcall(function() part:Destroy() end)
-                end
-            end
-        end
-    end
-    
-    -- 6. EXTRA PERFORMANCE BOOSTS
+    -- 6. Set FPS cap ONCE
     if setfpscap then 
         pcall(function() 
-            setfpscap(Config.PotatoFPS or 100)  -- Use config value or default to 100 for FPS Boost
+            setfpscap(Config.PotatoFPS or 100)
         end) 
-    end
-    if type(collectgarbage) == "function" then 
-        pcall(function() collectgarbage("collect") end) 
     end
     
     isBoostActive = true
+    isPotatoApplied = true  -- Mark as applied
+    
+    print("Potato Mode applied successfully")
 end
 
 local function TogglePotato(state)
     if state then
+        -- If already active, don't start another loop
+        if isBoostActive then
+            return
+        end
+        
+        -- Reset the flag
+        isPotatoApplied = false
+        
+        -- Apply once immediately
         ApplyPotato()
+        
+        -- Start monitoring loop instead of reapplying
         PotatoLoop = task.spawn(function() 
             while Config.PotatoModeEnabled == 1 do 
-                ApplyPotato() 
-                task.wait(8) 
+                -- Only monitor for new objects, don't reapply everything
+                task.wait(1)
+                
+                -- Optional: Clean up any new cosmetic effects that appear
+                local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+                if cosmeticFolder then
+                    pcall(function() 
+                        for _, child in ipairs(cosmeticFolder:GetChildren()) do
+                            if child:IsA("ParticleEmitter") or child:IsA("Trail") or 
+                               child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") then
+                                child:Destroy()
+                            end
+                        end
+                    end)
+                end
             end 
         end)
     else
+        -- Stop the monitoring loop
         if PotatoLoop then 
             task.cancel(PotatoLoop) 
+            PotatoLoop = nil
         end
         
-        -- Restore VFX functions if they were blocked
+        -- Reset the flag
+        isPotatoApplied = false
+        
+        -- Restore VFX functions
         if VFXControllerModule then
             VFXControllerModule.Handle = originalVFXHandle
             if originalPlayVFX then
@@ -619,7 +612,7 @@ local function TogglePotato(state)
             isVFXDisabled = false
         end
         
-        -- RESET LIGHTING & SETTINGS
+        -- RESTORE LIGHTING & SETTINGS
         pcall(function()
             if next(originalLightingValues) then
                 Lighting.GlobalShadows = originalLightingValues.GlobalShadows or false
@@ -631,12 +624,7 @@ local function TogglePotato(state)
                 Lighting.ShadowSoftness = originalLightingValues.ShadowSoftness or 0.5
             end
             
-            -- Restore post-processing effects
-            for _, effect in ipairs(Lighting:GetChildren()) do
-                if effect:IsA("PostEffect") then 
-                    effect.Enabled = true 
-                end
-            end
+            -- Restore post-processing effects (they were destroyed, so can't be restored)
             
             -- Reset rendering settings
             settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
