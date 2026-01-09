@@ -1,5 +1,5 @@
 -- ======================================================
--- WEATHER MACHINE INSTANT FISHER
+-- TREASURE ROOM INSTANT FISHER
 -- ======================================================
 
 -- ===============================
@@ -18,248 +18,306 @@ pcall(function()
 end)
 
 -- ======================================================
--- ULTRA EXTREME LOW GRAPHICS OPTIMIZER
+-- POTATO MODE FUNCTIONS (ULTRA EXTREME LOW GRAPHICS)
+-- ======================================================
+
+-- Get VFX Controller Module (if exists)
+local VFXControllerModule, originalVFXHandle, originalPlayVFX, originalRenderAtPoint, originalRenderInstance
+
+pcall(function()
+    VFXControllerModule = require(game:GetService("ReplicatedStorage"):WaitForChild("Controllers").VFXController)
+    originalVFXHandle = VFXControllerModule.Handle
+    originalPlayVFX = VFXControllerModule.PlayVFX.Fire  -- Assuming PlayVFX is a Signal/Event
+    originalRenderAtPoint = VFXControllerModule.RenderAtPoint
+    originalRenderInstance = VFXControllerModule.RenderInstance
+end)
+
+-- Global variables
+local PotatoLoop = nil
+local isVFXDisabled = false
+local isBoostActive = false
+local originalLightingValues = {}
+
+local function ApplyPotato()
+    -- Block VFX functions
+    if VFXControllerModule then
+        -- Block all VFX functions
+        VFXControllerModule.Handle = function(...) 
+            -- Prevent all VFX code from running
+            return nil
+        end
+        
+        if VFXControllerModule.RenderAtPoint then
+            VFXControllerModule.RenderAtPoint = function(...) 
+                return nil
+            end
+        end
+        
+        if VFXControllerModule.RenderInstance then
+            VFXControllerModule.RenderInstance = function(...) 
+                return nil
+            end
+        end
+        
+        -- Block PlayVFX signal if it exists
+        if VFXControllerModule.PlayVFX then
+            VFXControllerModule.PlayVFX.Fire = function(...) 
+                -- Prevent VFX signals from firing
+                return nil
+            end
+        end
+        
+        isVFXDisabled = true
+        
+        -- Clean up existing cosmetic effects
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then
+            pcall(function() 
+                for _, child in ipairs(cosmeticFolder:GetChildren()) do
+                    child:Destroy()
+                end
+            end)
+        end
+    end
+    
+    -- FPS Ultra Boost Optimizations
+    local Lighting = game:GetService("Lighting")
+    local Terrain = workspace:FindFirstChildOfClass("Terrain")
+    local Workspace = game:GetService("Workspace")
+    
+    -- Save original lighting values once
+    if not next(originalLightingValues) then
+        pcall(function()
+            originalLightingValues.GlobalShadows = Lighting.GlobalShadows
+            originalLightingValues.FogEnd = Lighting.FogEnd
+            originalLightingValues.Brightness = Lighting.Brightness
+            originalLightingValues.ClockTime = Lighting.ClockTime
+            originalLightingValues.Ambient = Lighting.Ambient
+            originalLightingValues.OutdoorAmbient = Lighting.OutdoorAmbient
+            originalLightingValues.ShadowSoftness = Lighting.ShadowSoftness
+        end)
+    end
+    
+    -- 1. VISUAL & EFFECTS (Ultimate optimization)
+    pcall(function()
+        for _, v in ipairs(workspace:GetDescendants()) do
+            -- Disable all visual effects
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or 
+               v:IsA("Fire") or v:IsA("Explosion") or v:IsA("Beam") or v:IsA("Light") then
+                v.Enabled = false
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or 
+                   v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+                    pcall(function() v:Destroy() end)  -- Destroy for extra performance
+                end
+            -- Hide all textures
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                v.Transparency = 1
+                if v:IsA("Decal") then
+                    pcall(function() v:Destroy() end)  -- Destroy decals completely
+                end
+            -- Extreme part optimization
+            elseif v:IsA("BasePart") then
+                v.CastShadow = false
+                v.Material = Enum.Material.Plastic
+                v.Reflectance = 0
+                
+                -- Remove any attached effects
+                for _, child in ipairs(v:GetChildren()) do
+                    if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Beam") or 
+                       child:IsA("Fire") or child:IsA("Smoke") or child:IsA("Sparkles") or
+                       child:IsA("Sound") or child:IsA("Light") then
+                        pcall(function() child:Destroy() end)
+                    end
+                end
+            -- Disable animations
+            elseif v:IsA("AnimationController") or v:IsA("Animator") then
+                pcall(function() v:Destroy() end)
+            -- Remove sounds
+            elseif v:IsA("Sound") then
+                pcall(function() v:Destroy() end)
+            end
+        end
+    end)
+    
+    -- 2. LIGHTING & ENVIRONMENT (Minimalist settings)
+    pcall(function()
+        -- Disable all post-processing effects
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then 
+                effect.Enabled = false
+            end
+            if effect:IsA("BlurEffect") or effect:IsA("BloomEffect") or 
+               effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or 
+               effect:IsA("DepthOfFieldEffect") or effect:IsA("Atmosphere") or 
+               effect:IsA("Sky") then
+                pcall(function() effect:Destroy() end)
+            end
+        end
+        
+        -- Ultra low lighting settings
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.FogStart = 9e9
+        Lighting.Brightness = 0  -- Darker for contrast and efficiency
+        Lighting.ClockTime = 14  -- Noon without shadows
+        Lighting.Ambient = Color3.new(0, 0, 0)
+        Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
+        Lighting.ShadowSoftness = 0
+        Lighting.GeographicLatitude = 0
+        Lighting.ExposureCompensation = 0
+    end)
+    
+    -- 3. TERRAIN & WATER (Complete optimization)
+    if Terrain then
+        pcall(function()
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterWaveSpeed = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 1
+            Terrain.Decoration = false
+            Terrain.WaterWaveHeight = 0
+        end)
+    end
+    
+    -- 4. QUALITY & RENDERING SETTINGS (Maximum performance)
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+        settings().Rendering.TextureQuality = Enum.TextureQuality.Low
+        settings().Rendering.EagerBulkExecution = true
+        settings().Rendering.RenderCSGTrianglesDebug = false
+    end)
+    
+    -- 5. CHARACTER OPTIMIZATION
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                -- Stop all playing animations
+                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                    pcall(function() track:Stop() end)
+                end
+                
+                -- Remove animator
+                local animator = humanoid:FindFirstChildOfClass("Animator")
+                if animator then
+                    pcall(function() animator:Destroy() end)
+                end
+            end
+            
+            -- Clean character effects
+            for _, part in ipairs(player.Character:GetDescendants()) do
+                if part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Beam") or 
+                   part:IsA("Fire") or part:IsA("Smoke") or part:IsA("Sparkles") or
+                   part:IsA("Sound") or part:IsA("Light") then
+                    pcall(function() part:Destroy() end)
+                end
+            end
+        end
+    end
+    
+    -- 6. EXTRA PERFORMANCE BOOSTS
+    if setfpscap then 
+        pcall(function() 
+            setfpscap(30)  -- Ultra low FPS for maximum performance
+        end) 
+    end
+    if type(collectgarbage) == "function" then 
+        pcall(function() collectgarbage("collect") end) 
+    end
+    
+    print("[POTATO MODE] ULTRA EXTREME LOW GRAPHICS ACTIVATED")
+    print("[POTATO MODE] FPS: MAXIMUM PERFORMANCE MODE")
+    isBoostActive = true
+end
+
+local function StartPotatoLoop()
+    if PotatoLoop then return end
+    
+    print("[POTATO MODE] Starting continuous potato optimization...")
+    ApplyPotato()
+    
+    PotatoLoop = task.spawn(function() 
+        while task.wait(5) do
+            ApplyPotato()
+        end
+    end)
+end
+
+local function StopPotato()
+    if PotatoLoop then 
+        task.cancel(PotatoLoop)
+        PotatoLoop = nil
+    end
+    
+    -- Restore VFX functions if they were blocked
+    if VFXControllerModule then
+        VFXControllerModule.Handle = originalVFXHandle
+        if originalPlayVFX then
+            VFXControllerModule.PlayVFX.Fire = originalPlayVFX
+        end
+        if originalRenderAtPoint then
+            VFXControllerModule.RenderAtPoint = originalRenderAtPoint
+        end
+        if originalRenderInstance then
+            VFXControllerModule.RenderInstance = originalRenderInstance
+        end
+        isVFXDisabled = false
+    end
+    
+    -- Reset lighting & settings
+    local Lighting = game:GetService("Lighting")
+    pcall(function()
+        if next(originalLightingValues) then
+            Lighting.GlobalShadows = originalLightingValues.GlobalShadows or false
+            Lighting.FogEnd = originalLightingValues.FogEnd or 100000
+            Lighting.Brightness = originalLightingValues.Brightness or 1
+            Lighting.ClockTime = originalLightingValues.ClockTime or 14
+            Lighting.Ambient = originalLightingValues.Ambient or Color3.new(0.5, 0.5, 0.5)
+            Lighting.OutdoorAmbient = originalLightingValues.OutdoorAmbient or Color3.new(0.5, 0.5, 0.5)
+            Lighting.ShadowSoftness = originalLightingValues.ShadowSoftness or 0.5
+        end
+        
+        -- Restore post-processing effects
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then 
+                effect.Enabled = true 
+            end
+        end
+        
+        -- Reset rendering settings
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Automatic
+        settings().Rendering.TextureQuality = Enum.TextureQuality.Automatic
+    end)
+    
+    -- Reset FPS cap
+    if setfpscap then 
+        pcall(function() setfpscap(60) end) 
+    end
+    
+    isBoostActive = false
+    print("[POTATO MODE] Stopped")
+end
+
+-- ======================================================
+-- ULTRA EXTREME LOW GRAPHICS OPTIMIZER (AUTO-START)
 -- ======================================================
 task.spawn(function()
     print("=========================================")
     print("⚡ ULTRA EXTREME LOW GRAPHICS ACTIVATING")
     print("=========================================")
     
-    local RunService = game:GetService("RunService")
-    local Lighting = game:GetService("Lighting")
-    local Terrain = workspace:FindFirstChildOfClass("Terrain")
-    local Workspace = game:GetService("Workspace")
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local UserSettings = UserSettings()
-    local Settings = UserSettings:GetService("UserGameSettings")
+    -- Wait for game to load
+    repeat task.wait() until game:IsLoaded()
+    task.wait(2)
     
-    -- EXTREME FPS BOOST SETTINGS
-    print("[GRAPHICS] Activating ULTRA EXTREME low graphics...")
-    
-    -- 1. KILL ALL VISUAL EFFECTS PERMANENTLY
-    pcall(function()
-        print("[GRAPHICS] Removing all visual effects...")
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("ParticleEmitter") or 
-               obj:IsA("Trail") or 
-               obj:IsA("Smoke") or 
-               obj:IsA("Fire") or 
-               obj:IsA("Explosion") or
-               obj:IsA("Sparkles") or
-               obj:IsA("Beam") or
-               obj:IsA("Light") or
-               obj:IsA("SurfaceLight") or
-               obj:IsA("PointLight") or
-               obj:IsA("SpotLight") then
-                obj.Enabled = false
-            end
-        end
-    end)
-    
-    -- 2. DESTROY ALL DECALS/TEXTURES
-    pcall(function()
-        print("[GRAPHICS] Destroying all decals/textures...")
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("Decal") or obj:IsA("Texture") then
-                obj:Destroy()
-            end
-        end
-    end)
-    
-    -- 3. EXTREME LIGHTING OPTIMIZATION
-    pcall(function()
-        print("[GRAPHICS] Applying extreme lighting optimizations...")
-        
-        -- Remove all lighting effects
-        for _, effect in pairs(Lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or 
-               effect:IsA("Sky") or 
-               effect:IsA("Atmosphere") or
-               effect:IsA("BloomEffect") or
-               effect:IsA("BlurEffect") or
-               effect:IsA("ColorCorrectionEffect") or
-               effect:IsA("SunRaysEffect") or
-               effect:IsA("DepthOfFieldEffect") then
-                effect:Destroy()
-            end
-        end
-        
-        -- Minimal lighting settings
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        Lighting.FogStart = 9e9
-        Lighting.Brightness = 0
-        Lighting.ClockTime = 12
-        Lighting.GeographicLatitude = 0
-        Lighting.Ambient = Color3.new(0, 0, 0)
-        Lighting.OutdoorAmbient = Color3.new(0, 0, 0)
-        Lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
-        Lighting.ColorShift_Top = Color3.new(0, 0, 0)
-        Lighting.ExposureCompensation = -1
-        
-        -- Destroy environmental effects
-        Lighting.Blur = 0
-        Lighting.BlurSize = 0
-        
-        -- Clear sky
-        Lighting.Sky = nil
-    end)
-    
-    -- 4. KILL TERRAIN AND WATER COMPLETELY
-    if Terrain then
-        pcall(function()
-            print("[GRAPHICS] Disabling terrain and water...")
-            Terrain.WaterWaveSize = 0
-            Terrain.WaterWaveSpeed = 0
-            Terrain.WaterReflectance = 0
-            Terrain.WaterTransparency = 1
-            Terrain.WaterColor = Color3.new(0, 0, 0)
-            Terrain.Decoration = false
-            Terrain.MaxExtents = Vector3.new(0, 0, 0)
-        end)
-    end
-    
-    -- 5. EXTREME RENDER QUALITY REDUCTION
-    pcall(function()
-        print("[GRAPHICS] Setting extreme low render quality...")
-        
-        -- Absolute minimum quality settings
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-        settings().Rendering.TextureQuality = Enum.TextureQuality.Low
-        settings().Rendering.EagerBulkExecution = true
-        
-        -- Disable all graphics features
-        settings().Rendering.EnableFRM = false
-        settings().Rendering.RenderCSGTrianglesDebug = false
-        settings().Rendering.ShowBoundingBoxes = false
-    end)
-    
-    -- 6. DISABLE ALL SOUNDS
-    pcall(function()
-        print("[GRAPHICS] Disabling all sounds...")
-        for _, sound in pairs(workspace:GetDescendants()) do
-            if sound:IsA("Sound") then
-                sound:Stop()
-                sound.Volume = 0
-            end
-        end
-    end)
-    
-    -- 7. REMOVE UNNECESSARY UI ELEMENTS
-    pcall(function()
-        print("[GRAPHICS] Cleaning up UI elements...")
-        local CoreGui = game:GetService("CoreGui")
-        
-        -- Remove Roblox default GUIs
-        for _, gui in pairs(CoreGui:GetChildren()) do
-            if gui.Name == "RobloxGui" or gui.Name == "PlayerList" or gui.Name == "Chat" then
-                gui.Enabled = false
-            end
-        end
-    end)
-    
-    -- 8. OPTIMIZE PLAYER CHARACTERS
-    pcall(function()
-        print("[GRAPHICS] Optimizing player characters...")
-        
-        local function OptimizeCharacter(character)
-            if character then
-                for _, part in pairs(character:GetDescendants()) do
-                    -- Remove unnecessary parts
-                    if part:IsA("ShirtGraphic") or part:IsA("Shirt") or part:IsA("Pants") then
-                        part:Destroy()
-                    end
-                    
-                    -- Remove accessories
-                    if part:IsA("Accessory") then
-                        part:Destroy()
-                    end
-                    
-                    -- Simplify parts
-                    if part:IsA("BasePart") then
-                        part.Material = Enum.Material.Plastic
-                        part.Reflectance = 0
-                        part.Transparency = 0
-                    end
-                end
-            end
-        end
-        
-        -- Optimize all players
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character then
-                OptimizeCharacter(player.Character)
-            end
-            player.CharacterAdded:Connect(OptimizeCharacter)
-        end
-    end)
-    
-    -- 9. REMOVE PHYSICS PARTICLES
-    pcall(function()
-        print("[GRAPHICS] Removing physics particles...")
-        workspace.Gravity = 0
-        
-        -- Remove physics controllers
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("BodyVelocity") or 
-               obj:IsA("BodyForce") or 
-               obj:IsA("BodyThrust") or 
-               obj:IsA("BodyAngularVelocity") or
-               obj:IsA("RocketPropulsion") then
-                obj:Destroy()
-            end
-        end
-    end)
-    
-    -- 10. MINIMAL FPS SETTINGS
-    pcall(function()
-        print("[GRAPHICS] Setting FPS limits...")
-        if setfpscap then 
-            setfpscap(30) -- Ultra low FPS for maximum performance
-        end
-        
-        -- Force low quality
-        if Settings then
-            Settings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-            Settings.MasterVolume = 0
-        end
-    end)
-    
-    -- 11. AGGRESSIVE GARBAGE COLLECTION
-    pcall(function()
-        print("[GRAPHICS] Running aggressive garbage collection...")
-        for i = 1, 5 do
-            if collectgarbage then
-                collectgarbage("collect")
-                task.wait(0.1)
-            end
-        end
-    end)
-    
-    -- 12. CONTINUOUS OPTIMIZATION LOOP
-    task.spawn(function()
-        while task.wait(5) do
-            -- Keep removing new particles/effects
-            pcall(function()
-                for _, obj in pairs(workspace:GetDescendants()) do
-                    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") then
-                        obj.Enabled = false
-                    end
-                end
-            end)
-            
-            -- Continuous garbage collection
-            if collectgarbage then
-                collectgarbage("step", 100)
-            end
-        end
-    end)
+    -- Start Potato Mode automatically
+    StartPotatoLoop()
     
     print("=========================================")
-    print("✅ ULTRA EXTREME LOW GRAPHICS ACTIVATED")
-    print("✅ FPS: MAXIMUM PERFORMANCE MODE")
+    print("✅ POTATO MODE: AUTO-ACTIVATED")
+    print("✅ FPS: MAXIMUM PERFORMANCE")
     print("✅ VRAM USAGE: MINIMAL")
     print("✅ CPU USAGE: OPTIMIZED")
     print("=========================================")
@@ -284,18 +342,18 @@ local Workspace = game:GetService("Workspace")
 -- ===============================
 local InstantFishConfig = {
     Enabled = false,          -- Will be enabled when we start fishing
-    CatchDelay = 1.25,        -- Delay between casting and catching (Lower = Faster, but riskier)
+    CatchDelay = 1.5,        -- Delay between casting and catching (Lower = Faster, but riskier)
     AutoEquip = true,        -- Automatically equips rod (Slot 1) to prevent stopping
     SpamEquipDelay = 0.5,    -- How often to force equip the rod
 }
 
 -- ===============================
--- LOCATIONS - CHANGED TO WEATHER MACHINE
+-- LOCATIONS
 -- ===============================
 local Locations = {
-    ["Weather Machine"] = {
-        Pos = Vector3.new(-1518.550, 2.875, 1916.148), 
-        Look = Vector3.new(0.042, 0.000, 0.999)
+    ["Treasure Room"] = {
+        Pos = Vector3.new(-3598.440, -281.274, -1645.855), 
+        Look = Vector3.new(-0.065, 0.000, -0.998)
     }
 }
 
@@ -309,7 +367,7 @@ local STATE = {
     SessionEarnings = 0,
     Teleporting = false,
     IsFishing = false,
-    GraphicsMode = "ULTRA EXTREME LOW ⚡",
+    GraphicsMode = "ULTRA EXTREME LOW ⚡", -- NEW: Track graphics mode
 }
 
 -- ===============================
@@ -322,7 +380,7 @@ local GUI = {
     EarningsValue = nil,
     StatusText = nil,
     FishingModeText = nil,
-    GraphicsModeText = nil,
+    GraphicsModeText = nil, -- NEW: Graphics mode display
 }
 
 -- ===============================
@@ -705,20 +763,20 @@ local function StartAutoFavorite()
 end
 
 -- ===============================
--- CREATE TRANSPARENT GUI (UPDATED FOR WEATHER MACHINE)
+-- CREATE TRANSPARENT GUI (UPDATED)
 -- ===============================
 local function CreateGUI()
-    print("[GUI] Creating Weather Machine Instant Fisher GUI...")
+    print("[GUI] Creating Treasure Room Instant Fisher GUI...")
     
     local gui = Instance.new("ScreenGui")
-    gui.Name = "WeatherMachineInstantFisherGUI"
+    gui.Name = "TreasureRoomInstantFisherGUI"
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     gui.ResetOnSpawn = false
     gui.Parent = game.CoreGui
 
     -- Main frame with transparency
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.fromOffset(350, 300)
+    frame.Size = UDim2.fromOffset(350, 300) -- Increased height for graphics mode
     frame.Position = UDim2.fromScale(0.5, 0.5)
     frame.AnchorPoint = Vector2.new(0.5, 0.5)
     frame.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
@@ -747,7 +805,7 @@ local function CreateGUI()
     title.Size = UDim2.new(1, -20, 0, 40)
     title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🌩️ WEATHER MACHINE INSTANT FISHER ⚡"
+    title.Text = "💰 TREASURE ROOM INSTANT FISHER ⚡"
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 18
     title.TextColor3 = Color3.fromRGB(100, 200, 255)
@@ -757,7 +815,7 @@ local function CreateGUI()
 
     -- Status Panel with transparency
     local statusPanel = Instance.new("Frame")
-    statusPanel.Size = UDim2.new(0.9, 0, 0, 200)
+    statusPanel.Size = UDim2.new(0.9, 0, 0, 200) -- Increased height
     statusPanel.Position = UDim2.fromScale(0.05, 0.20)
     statusPanel.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
     statusPanel.BackgroundTransparency = 0.6
@@ -820,7 +878,7 @@ local function CreateGUI()
     GUI.CoinValue = CreateStatusRow(0.05, "💰", "Coins:", "0")
     GUI.LocationValue = CreateStatusRow(0.17, "📍", "Location:", "Initializing...")
     GUI.FishingModeText = CreateStatusRow(0.29, "⚡", "Fishing Mode:", "INSTANT")
-    GUI.GraphicsModeText = CreateStatusRow(0.41, "🎮", "Graphics Mode:", STATE.GraphicsMode)
+    GUI.GraphicsModeText = CreateStatusRow(0.41, "🎮", "Graphics Mode:", STATE.GraphicsMode) -- NEW
     GUI.EarningsValue = CreateStatusRow(0.53, "💸", "Session Earnings:", "0")
 
     -- Status Display
@@ -877,8 +935,9 @@ local function CreateGUI()
     closeBtn.MouseButton1Click:Connect(function()
         STATE.ScriptRunning = false
         StopInstantFishing()
+        StopPotato()  -- Stop potato mode when closing
         gui:Destroy()
-        print("[GUI] Weather Machine Instant Fisher stopped")
+        print("[GUI] Treasure Room Instant Fisher stopped")
     end)
 
     -- Add subtle border to main frame
@@ -903,7 +962,7 @@ local function CreateGUI()
         BackgroundTransparency = 0.3
     }):Play()
 
-    print("[GUI] Weather Machine Instant Fisher GUI created successfully")
+    print("[GUI] Treasure Room Instant Fisher GUI created successfully")
     
     return gui
 end
@@ -925,12 +984,12 @@ local function UpdateGUILoop()
             GUI.GraphicsModeText.Text = STATE.GraphicsMode
             
             -- Update status text
-            if STATE.CurrentLocation == "Weather Machine" then
+            if STATE.CurrentLocation == "Treasure Room" then
                 if STATE.IsFishing then
                     GUI.StatusText.Text = "STATUS: Instant Fishing ⚡"
                     GUI.StatusText.TextColor3 = Color3.fromRGB(100, 255, 100)
                 else
-                    GUI.StatusText.Text = "STATUS: Ready at Weather Machine"
+                    GUI.StatusText.Text = "STATUS: Ready at Treasure Room"
                     GUI.StatusText.TextColor3 = Color3.fromRGB(100, 200, 255)
                 end
             elseif STATE.Teleporting then
@@ -945,11 +1004,11 @@ local function UpdateGUILoop()
 end
 
 -- ===============================
--- MAIN WEATHER MACHINE INSTANT FISHING LOOP
+-- MAIN TREASURE ROOM INSTANT FISHING LOOP
 -- ===============================
-local function StartWeatherMachineFishing()
+local function StartTreasureRoomFishing()
     print("=========================================")
-    print("🌩️ WEATHER MACHINE INSTANT FISHER")
+    print("💰 TREASURE ROOM INSTANT FISHER")
     print("=========================================")
     print("⚡ INSTANT FISHING FEATURES:")
     print("   - Ultra-fast catch rate")
@@ -958,23 +1017,23 @@ local function StartWeatherMachineFishing()
     print("   - Continuous fishing loop")
     print("=========================================")
     
-    -- Wait for graphics optimizer to complete
+    -- Wait for potato mode to complete
     print("\n⏳ Waiting for graphics optimization to complete...")
     task.wait(3)
     
-    -- Teleport to Weather Machine
-    print("\n📍 TELEPORTING TO WEATHER MACHINE...")
-    STATE.CurrentLocation = "Teleporting to Weather Machine..."
+    -- Teleport to Treasure Room
+    print("\n📍 TELEPORTING TO TREASURE ROOM...")
+    STATE.CurrentLocation = "Teleporting to Treasure Room..."
     
-    local success = TeleportToLocation("Weather Machine")
+    local success = TeleportToLocation("Treasure Room")
     
     if not success then
-        print("❌ Failed to teleport to Weather Machine!")
+        print("❌ Failed to teleport to Treasure Room!")
         STATE.CurrentLocation = "❌ Teleport Failed"
         return
     end
     
-    print("✅ Successfully teleported to Weather Machine!")
+    print("✅ Successfully teleported to Treasure Room!")
     
     -- Start all systems
     print("\n⚡ STARTING SYSTEMS...")
@@ -988,7 +1047,7 @@ local function StartWeatherMachineFishing()
     -- Start auto favorite for Ruby
     StartAutoFavorite()
     
-    STATE.CurrentLocation = "Weather Machine"
+    STATE.CurrentLocation = "Treasure Room"
     print("\n✅ ALL SYSTEMS RUNNING!")
     print("   - Instant Fishing: ACTIVE ⚡")
     print("   - Graphics Mode: ULTRA EXTREME LOW ⚡")
@@ -1001,7 +1060,7 @@ local function StartWeatherMachineFishing()
         task.wait(5)
     end
     
-    print("[WEATHER MACHINE] Script stopped")
+    print("[TREASURE ROOM] Script stopped")
     StopInstantFishing()
 end
 
@@ -1010,7 +1069,7 @@ end
 -- ===============================
 local function Initialize()
     print("=========================================")
-    print("🌩️ WEATHER MACHINE INSTANT FISHER INITIALIZING")
+    print("💰 TREASURE ROOM INSTANT FISHER INITIALIZING")
     print("=========================================")
     print("⚡ ULTRA EXTREME LOW GRAPHICS: ENABLED")
     print("⚡ MAXIMUM FPS OPTIMIZATION: ENABLED")
@@ -1022,15 +1081,12 @@ local function Initialize()
     -- Start GUI update loop
     task.spawn(UpdateGUILoop)
     
-    -- Wait a moment for graphics optimization to start
-    task.wait(2)
-    
     -- Start the main fishing loop
-    task.spawn(StartWeatherMachineFishing)
+    task.spawn(StartTreasureRoomFishing)
     
-    print("✅ Weather Machine Instant Fisher LOADED")
+    print("✅ Treasure Room Instant Fisher LOADED")
     print("🎯 Features:")
-    print("   - Auto teleport to Weather Machine")
+    print("   - Auto teleport to Treasure Room")
     print("   - INSTANT FISHING ⚡ (no minigame)")
     print("   - ULTRA EXTREME LOW GRAPHICS ⚡")
     print("   - Auto sell every 1 minute")
