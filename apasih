@@ -24,8 +24,8 @@ local DefaultConfig = {
     -- Blatant V1
     BlatantEnabled = 0,
     AutoEquip = 1,
-    CompleteDelay = 0.705, 
-    CancelDelay = 0.346, -- [USER] Preserved setting
+    CompleteDelay = 1.53, 
+    CancelDelay = 0.38, -- [USER] Preserved setting
     
     -- Blatant V2
     FishingV2Enabled = 0,
