@@ -1,0 +1,138 @@
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+
+-- 1. Setup Remote Path (Sesuai dengan FishItX.lua)
+local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+
+-- Helper function untuk mencari Remote
+local function GetRemote(remotePath, name, timeout)
+    local currentInstance = ReplicatedStorage
+    for _, childName in ipairs(remotePath) do
+        currentInstance = currentInstance:WaitForChild(childName, timeout or 0.5)
+        if not currentInstance then return nil end
+    end
+    return currentInstance:FindFirstChild(name)
+end
+
+-- 2. Dapatkan Remote Event Target
+local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification", 10)
+
+if not RE_ObtainedNewFishNotification then
+    warn("Remote RE/ObtainedNewFishNotification tidak ditemukan! Pastikan game sudah loading sepenuhnya.")
+    return
+end
+
+-- 3. Load ItemUtility (Opsional: Untuk mendapatkan nama ikan yang asli)
+local ItemUtility = nil
+pcall(function()
+    ItemUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemUtility", 5))
+end)
+
+-- Variables
+local totalFishCaught = 0
+local lastFishName = "-"
+
+-- 4. Buat GUI Standalone (Draggable)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FishCounterStandalone"
+ScreenGui.Parent = CoreGui
+ScreenGui.IgnoreGuiInset = true
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 220, 0, 90)
+MainFrame.Position = UDim2.new(0.5, -110, 0.1, 0) -- Posisi awal di tengah atas
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true -- Bisa digeser
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- Judul
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, 0, 0.35, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Fish Counter"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 16
+TitleLabel.Parent = MainFrame
+
+-- Total Angka
+local CountLabel = Instance.new("TextLabel")
+CountLabel.Size = UDim2.new(1, 0, 0.35, 0)
+CountLabel.Position = UDim2.new(0, 0, 0.35, 0)
+CountLabel.BackgroundTransparency = 1
+CountLabel.Text = "Total: 0"
+CountLabel.TextColor3 = Color3.fromRGB(0, 255, 127) -- Warna Hijau
+CountLabel.Font = Enum.Font.GothamBlack
+CountLabel.TextSize = 22
+CountLabel.Parent = MainFrame
+
+-- Ikan Terakhir
+local LastLabel = Instance.new("TextLabel")
+LastLabel.Size = UDim2.new(1, 0, 0.3, 0)
+LastLabel.Position = UDim2.new(0, 0, 0.7, 0)
+LastLabel.BackgroundTransparency = 1
+LastLabel.Text = "Last: -"
+LastLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+LastLabel.Font = Enum.Font.Gotham
+LastLabel.TextSize = 12
+LastLabel.TextTruncate = Enum.TextTruncate.AtEnd
+LastLabel.Parent = MainFrame
+
+-- Fungsi Update UI
+local function UpdateUI()
+    CountLabel.Text = "Total: " .. tostring(totalFishCaught)
+    LastLabel.Text = "Last: " .. lastFishName
+end
+
+-- 5. Hubungkan ke Remote Event
+local connection = RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(itemId, metadata, fullData)
+    totalFishCaught = totalFishCaught + 1
+    
+    -- Coba ambil nama ikan
+    local name = "Unknown Fish"
+    
+    -- Cara 1: Pakai ItemUtility (Paling Akurat)
+    if ItemUtility then
+        local data = ItemUtility:GetItemData(itemId)
+        if data and data.Data then
+            name = data.Data.Name
+        end
+    end
+    
+    -- Cara 2: Pakai data remote jika Cara 1 gagal
+    if name == "Unknown Fish" and fullData and fullData.Identifier then
+        name = fullData.Identifier
+    end
+
+    -- Format jika ada beratnya
+    if metadata and metadata.Weight then
+        name = string.format("%s (%.1fkg)", name, metadata.Weight)
+    end
+    
+    lastFishName = name
+    UpdateUI()
+end)
+
+-- Notifikasi Awal
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Fish Counter Loaded";
+    Text = "Draggable UI active. Monitoring fish...";
+    Duration = 5;
+})
+
+-- Handle GUI Cleanup saat script dimatikan (opsional jika dijalankan ulang)
+local function Cleanup()
+    if connection then connection:Disconnect() end
+    if ScreenGui then ScreenGui:Destroy() end
+end
+
+-- (Untuk testing di executor yang support script connection cleanup, biarkan berjalan terus)
