@@ -1078,7 +1078,4 @@ task.spawn(function()
         task.wait(LOOP_DELAY)
     end
 end)
-    
-    -- Notif Kecil
-    StarterGui:SetCore("SendNotification", {Title="Monitor Fixed"; Text="Tracking Secret & Ruby Correctly"; Duration=5;})
 end)
