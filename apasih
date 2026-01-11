@@ -957,359 +957,229 @@ if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
+-- [[ ------------------------------------------------------- ]]
+-- [[  PASTE KODE INI DI BARIS PALING BAWAH SCRIPT UTAMA ANDA ]]
+-- [[  FISH IT MONITOR: GUI + SAVER + WEBHOOK (ADD-ON)        ]]
+-- [[ ------------------------------------------------------- ]]
 
--- ==========================================================
---  FISH IT ULTIMATE | INVENTORY COUNT + REALTIME + SAVER
--- ==========================================================
+task.spawn(function()
+    -- Tunggu sebentar agar script utama loading duluan
+    task.wait(2)
 
--- Services
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local CoreGui = game:GetService("CoreGui")
+    local RunService = game:GetService("RunService")
+    local HttpService = game:GetService("HttpService")
+    local StarterGui = game:GetService("StarterGui")
+    local LocalPlayer = Players.LocalPlayer
 
-local LocalPlayer = Players.LocalPlayer
+    -- === CONFIG WEBHOOK ===
+    local WEBHOOK_URL_BASE = "http://43.134.116.2:5000/webhook/fishit"
 
--- ==========================================
--- 1. SETUP REMOTE & MODULES
--- ==========================================
-local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    -- === VARIABLES ===
+    local Stats = { Session = 0, Secret = 0, Ruby = 0 }
+    local FPS_Cap_Active = false
+    local Render_Active = true
 
-local function GetRemote(remotePath, name, timeout)
-    local currentInstance = ReplicatedStorage
-    for _, childName in ipairs(remotePath) do
-        currentInstance = currentInstance:WaitForChild(childName, timeout or 0.5)
-        if not currentInstance then return nil end
+    -- === SETUP MODULES & REMOTE ===
+    local function GetRemote(path, name)
+        local current = ReplicatedStorage
+        for _, child in ipairs(path) do
+            current = current:WaitForChild(child, 2)
+            if not current then return nil end
+        end
+        return current:FindFirstChild(name)
     end
-    return currentInstance:FindFirstChild(name)
-end
 
--- Remote Notification
-local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification", 10)
+    local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local RE_NewFish = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 
--- Load Modules (PENTING untuk baca Inventory)
-local ItemUtility, TierUtility, Replion
-local ModulesLoaded = false
+    local ItemUtility, Replion
+    pcall(function()
+        ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+        Replion = require(ReplicatedStorage.Packages.Replion).Client
+    end)
 
-pcall(function()
-    ItemUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemUtility", 5))
-    TierUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("TierUtility", 5))
-    Replion = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Replion")).Client
-    ModulesLoaded = true
-end)
+    -- === UI CREATION (SAFE MODE) ===
+    if CoreGui:FindFirstChild("FishItStandaloneUI") then
+        CoreGui.FishItStandaloneUI:Destroy()
+    end
 
-if not ModulesLoaded then
-    warn("Gagal load modules (ItemUtility/Replion). Script mungkin tidak akurat membaca inventory awal.")
-end
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "FishItStandaloneUI"
+    ScreenGui.Parent = CoreGui
+    ScreenGui.IgnoreGuiInset = true
+    -- ZIndexBehavior untuk memastikan dia di atas UI lain jika perlu
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- ==========================================
--- 2. HELPER FUNCTIONS (IDENTIFIKASI ITEM)
--- ==========================================
-local function GetFishNameAndRarity(item)
-    local name = item.Identifier or "Unknown"
-    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-    local itemID = item.Id
-    local itemData
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 240, 0, 160)
+    MainFrame.Position = UDim2.new(0.5, -120, 0.05, 0) -- Posisi Sedikit Lebih Atas
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = ScreenGui
 
-    -- Coba ambil data dari ItemUtility jika ada ID
-    if ItemUtility and itemID then
-        pcall(function()
-            itemData = ItemUtility:GetItemData(itemID)
-            if not itemData then
-                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
-                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = MainFrame
+
+    -- Title
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0.15, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "Monitor & Saver Add-on"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 13
+    Title.Parent = MainFrame
+
+    -- Labels
+    local function CreateLabel(text, order, color)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.9, 0, 0.12, 0)
+        lbl.Position = UDim2.new(0.05, 0, 0.15 + (order * 0.13), 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.TextColor3 = color
+        lbl.Font = Enum.Font.GothamSemibold
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = MainFrame
+        return lbl
+    end
+
+    local LblSession = CreateLabel("Session Catch: 0", 0, Color3.fromRGB(200, 200, 200))
+    local LblSecret = CreateLabel("Total Secret: 0", 1, Color3.fromRGB(255, 215, 0))
+    local LblRuby = CreateLabel("Total Ruby Gems: 0", 2, Color3.fromRGB(255, 80, 80))
+    local LblLast = CreateLabel("Last: -", 3, Color3.fromRGB(150, 150, 150))
+
+    -- Buttons
+    local function CreateBtn(text, pos, color)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.42, 0, 0.18, 0)
+        btn.Position = pos
+        btn.BackgroundColor3 = color
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 11
+        btn.Parent = MainFrame
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
+        return btn
+    end
+
+    local BtnFPS = CreateBtn("FPS Saver: OFF", UDim2.new(0.05, 0, 0.75, 0), Color3.fromRGB(60, 60, 60))
+    local BtnRender = CreateBtn("3D Render: ON", UDim2.new(0.53, 0, 0.75, 0), Color3.fromRGB(0, 170, 0))
+
+    -- === BUTTON FUNCTIONS ===
+    BtnFPS.MouseButton1Click:Connect(function()
+        FPS_Cap_Active = not FPS_Cap_Active
+        if setfpscap then setfpscap(FPS_Cap_Active and 30 or 120) end
+        BtnFPS.Text = FPS_Cap_Active and "FPS Saver: ON" or "FPS Saver: OFF"
+        BtnFPS.BackgroundColor3 = FPS_Cap_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
+    end)
+
+    BtnRender.MouseButton1Click:Connect(function()
+        Render_Active = not Render_Active
+        RunService:Set3dRenderingEnabled(Render_Active)
+        BtnRender.Text = Render_Active and "3D Render: ON" or "3D Render: OFF"
+        BtnRender.BackgroundColor3 = Render_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
+    end)
+
+    ScreenGui.Destroying:Connect(function()
+        RunService:Set3dRenderingEnabled(true)
+        if setfpscap then setfpscap(60) end
+    end)
+
+    -- === LOGIC FUNCTIONS ===
+    local function GetDetails(item)
+        local name = item.Identifier or "Unknown"
+        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+        local mutation = "None"
+        if ItemUtility and item.Id then
+            local d = ItemUtility:GetItemData(item.Id)
+            if d and d.Data then name = d.Data.Name end
+        end
+        if item.Metadata then
+            if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then mutation = item.Metadata.VariantId
+            elseif item.Metadata.Shiny then mutation = "Shiny" end
+        end
+        return name, rarity, mutation
+    end
+
+    -- Listener Realtime
+    if RE_NewFish then
+        RE_NewFish.OnClientEvent:Connect(function(itemId, metadata, fullData)
+            Stats.Session = Stats.Session + 1
+            LblSession.Text = "Session Catch: " .. Stats.Session
+            
+            local dummy = {Id = itemId, Metadata = metadata, Identifier = fullData and fullData.Identifier}
+            local name, rarity, mutation = GetDetails(dummy)
+            
+            local show = name
+            if mutation ~= "None" then show = "["..mutation.."] "..name end
+            if metadata.Weight then show = show .. string.format(" (%.1fkg)", metadata.Weight) end
+            LblLast.Text = "Last: " .. show
+
+            if rarity == "SECRET" then
+                Stats.Secret = Stats.Secret + 1
+                LblSecret.Text = "Total Secret: " .. Stats.Secret
+            end
+            if name == "Ruby" and mutation == "Gemstone" then
+                Stats.Ruby = Stats.Ruby + 1
+                LblRuby.Text = "Total Ruby Gems: " .. Stats.Ruby
             end
         end)
     end
 
-    -- Pastikan nama dan rarity akurat
-    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
-    if item.Metadata and item.Metadata.Rarity then 
-        rarity = item.Metadata.Rarity 
-    elseif itemData and itemData.Probability and TierUtility then 
-        local tier
-        pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
-        if tier and tier.Name then rarity = tier.Name end 
-    end
-    return name, rarity
-end
-
-local function GetMutation(item)
-    if not item.Metadata then return "None" end
-    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
-    if item.Metadata.Shiny == true then return "Shiny" end
-    return "None"
-end
-
--- ==========================================
--- 3. CALCULATE INITIAL INVENTORY
--- ==========================================
-local stats = {
-    SessionCatch = 0, -- Ikan yang ditangkap sesi ini
-    TotalSecret = 0,  -- Total Secret di Inventory
-    TotalRuby = 0     -- Total Ruby Gemstone di Inventory
-}
-
-local function ScanInventory()
-    if not Replion then return end
-    
-    local dataReplica = Replion:WaitReplion("Data")
-    local success, inventory = pcall(function() return dataReplica:GetExpect("Inventory") end)
-    
-    if success and inventory then
-        local sCount = 0
-        local rCount = 0
-        
-        for _, items in pairs(inventory) do
-            for _, item in ipairs(items) do
-                local name, rarity = GetFishNameAndRarity(item)
-                local mutation = GetMutation(item)
-                
-                -- Cek Secret
-                if rarity == "SECRET" then
-                    sCount = sCount + 1
-                end
-                
-                -- Cek Ruby Gemstone
-                if name == "Ruby" and mutation == "Gemstone" then
-                    rCount = rCount + 1
-                end
-            end
-        end
-        
-        stats.TotalSecret = sCount
-        stats.TotalRuby = rCount
-    end
-end
-
--- Jalankan scan awal
-ScanInventory()
-
--- ==========================================
--- 4. GUI SETUP
--- ==========================================
-if CoreGui:FindFirstChild("FishItMonitorStats") then
-    CoreGui.FishItMonitorStats:Destroy()
-end
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "FishItMonitorStats"
-ScreenGui.Parent = CoreGui
-ScreenGui.IgnoreGuiInset = true
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 240, 0, 180) 
-MainFrame.Position = UDim2.new(0.5, -120, 0.1, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
-UICorner.Parent = MainFrame
-
--- Title
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, 0, 0.15, 0)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Inventory Monitor & Saver"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.TextSize = 14
-TitleLabel.Parent = MainFrame
-
--- Container Stats
-local StatsContainer = Instance.new("Frame")
-StatsContainer.Size = UDim2.new(1, -20, 0.4, 0)
-StatsContainer.Position = UDim2.new(0, 10, 0.15, 0)
-StatsContainer.BackgroundTransparency = 1
-StatsContainer.Parent = MainFrame
-
-local function CreateStatLabel(order, color)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, 0, 0.33, 0)
-    lbl.Position = UDim2.new(0, 0, (order - 1) * 0.33, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.GothamSemibold
-    lbl.TextSize = 14
-    lbl.TextColor3 = color
-    lbl.Parent = StatsContainer
-    return lbl
-end
-
-local TotalLabel = CreateStatLabel(1, Color3.fromRGB(200, 200, 200))
-local SecretLabel = CreateStatLabel(2, Color3.fromRGB(255, 215, 0))   
-local RubyLabel   = CreateStatLabel(3, Color3.fromRGB(255, 60, 60))   
-
--- Last Catch Label
-local LastLabel = Instance.new("TextLabel")
-LastLabel.Size = UDim2.new(1, -10, 0.15, 0)
-LastLabel.Position = UDim2.new(0, 5, 0.55, 0)
-LastLabel.BackgroundTransparency = 1
-LastLabel.Text = "Last: -"
-LastLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-LastLabel.Font = Enum.Font.Gotham
-LastLabel.TextSize = 11
-LastLabel.TextTruncate = Enum.TextTruncate.AtEnd
-LastLabel.Parent = MainFrame
-
--- ==========================================
--- 5. BUTTONS (FPS & RENDER)
--- ==========================================
-local ButtonContainer = Instance.new("Frame")
-ButtonContainer.Size = UDim2.new(1, -20, 0.25, 0)
-ButtonContainer.Position = UDim2.new(0, 10, 0.72, 0)
-ButtonContainer.BackgroundTransparency = 1
-ButtonContainer.Parent = MainFrame
-
-local function CreateButton(name, text, color, pos)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(0.48, 0, 1, 0)
-    btn.Position = pos
-    btn.BackgroundColor3 = color
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 12
-    btn.Parent = ButtonContainer
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
-    return btn
-end
-
-local isFpsCapActive = false
-local isRenderingEnabled = true
-
-local FPSButton = CreateButton("FPSBtn", "FPS Saver: OFF", Color3.fromRGB(60, 60, 60), UDim2.new(0, 0, 0, 0))
-local RenderButton = CreateButton("RenderBtn", "3D Render: ON", Color3.fromRGB(0, 170, 0), UDim2.new(0.52, 0, 0, 0))
-
-FPSButton.MouseButton1Click:Connect(function()
-    isFpsCapActive = not isFpsCapActive
-    if isFpsCapActive then
-        if setfpscap then setfpscap(30) end
-        FPSButton.Text = "FPS Saver: ON"
-        FPSButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-    else
-        if setfpscap then setfpscap(120) end
-        FPSButton.Text = "FPS Saver: OFF"
-        FPSButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    end
-end)
-
-RenderButton.MouseButton1Click:Connect(function()
-    isRenderingEnabled = not isRenderingEnabled
-    RunService:Set3dRenderingEnabled(isRenderingEnabled)
-    if isRenderingEnabled then
-        RenderButton.Text = "3D Render: ON"
-        RenderButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-    else
-        RenderButton.Text = "3D Render: OFF"
-        RenderButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-    end
-end)
-
--- ==========================================
--- 6. GUI UPDATER & REALTIME LISTENER
--- ==========================================
-local function UpdateStatsGUI()
-    TotalLabel.Text  = "Session Catch: " .. stats.SessionCatch
-    SecretLabel.Text = "Total Secrets: " .. stats.TotalSecret
-    RubyLabel.Text   = "Total Ruby Gems: " .. stats.TotalRuby
-    LastLabel.Text   = "Last: " .. (stats.lastFishText or "-")
-end
-
-if RE_ObtainedNewFishNotification then
-    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(itemId, metadata, fullData)
-        stats.SessionCatch = stats.SessionCatch + 1
-        
-        -- Simulasi item object untuk fungsi helper
-        local dummyItem = {
-            Id = itemId,
-            Identifier = fullData and fullData.Identifier,
-            Metadata = metadata
-        }
-        
-        local name, rarity = GetFishNameAndRarity(dummyItem)
-        local mutation = GetMutation(dummyItem)
-        
-        -- Update Teks Terakhir
-        local displayStr = name
-        if mutation ~= "None" then displayStr = "[" .. mutation .. "] " .. name end
-        if metadata and metadata.Weight then displayStr = displayStr .. string.format(" (%.1fkg)", metadata.Weight) end
-        stats.lastFishText = displayStr
-        
-        -- Tambah Total jika dapat baru
-        if rarity == "SECRET" then 
-            stats.TotalSecret = stats.TotalSecret + 1 
-        end
-        if name == "Ruby" and mutation == "Gemstone" then 
-            stats.TotalRuby = stats.TotalRuby + 1 
-        end
-
-        UpdateStatsGUI()
-    end)
-end
-
--- Update awal biar angka inventory langsung muncul
-UpdateStatsGUI()
-
--- Cleanup Safety
-ScreenGui.Destroying:Connect(function()
-    RunService:Set3dRenderingEnabled(true)
-    if setfpscap then setfpscap(60) end
-end)
-
--- ==========================================================
--- 7. WEBHOOK MONITOR (BACKGROUND)
--- ==========================================================
-task.spawn(function()
-    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local LOOP_DELAY = 15 
-
-    local function sendToWebhook(playerName, summary)
-        local json = HttpService:JSONEncode(summary)
-        local encoded = HttpService:UrlEncode(json)
-        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
-        pcall(function() game:HttpGet(url) end)
-    end
-
-    if Replion then
-        local dataReplica = Replion:WaitReplion("Data")
+    -- Loop Background: Scan Inventory + Webhook
+    task.spawn(function()
         while true do
-            local success, inventory = pcall(function() return dataReplica:GetExpect("Inventory") end)
-            if success and inventory then
-                local summary = {}
-                -- Kita scan lagi untuk Webhook agar data selalu fresh dari server
-                for _, items in pairs(inventory) do
-                    for _, item in ipairs(items) do
-                        local name, rarity = GetFishNameAndRarity(item)
-                        local mutation = GetMutation(item)
+            if Replion then
+                local r = Replion:WaitReplion("Data", 5)
+                local s, inventory = pcall(function() return r and r:GetExpect("Inventory") end)
+                if s and inventory then
+                    local sCount, rCount = 0, 0
+                    local summary = {}
 
-                        local isSecret = (rarity == "SECRET")
-                        local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
-
-                        if isSecret or isGemstoneRuby then
-                            local displayName = name
-                            if isGemstoneRuby then displayName = "[Gemstone] Ruby"
-                            elseif mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
-                            summary[displayName] = (summary[displayName] or 0) + 1
+                    for _, items in pairs(inventory) do
+                        for _, item in ipairs(items) do
+                            local name, rarity, mutation = GetDetails(item)
+                            
+                            -- Hitung Total untuk GUI
+                            if rarity == "SECRET" then sCount = sCount + 1 end
+                            if name == "Ruby" and mutation == "Gemstone" then rCount = rCount + 1 end
+                            
+                            -- Data Webhook
+                            local isS, isR = (rarity == "SECRET"), (name == "Ruby" and mutation == "Gemstone")
+                            if isS or isR then
+                                local dName = name
+                                if isR then dName = "[Gemstone] Ruby"
+                                elseif mutation ~= "None" then dName = "["..mutation.."] "..name end
+                                summary[dName] = (summary[dName] or 0) + 1
+                            end
                         end
                     end
-                end
-                sendToWebhook(LocalPlayer.Name, summary)
-            end
-            task.wait(LOOP_DELAY)
-        end
-    end
-end)
+                    -- Update GUI dari hasil Scan (Biar sinkron kalau ada jual/beli)
+                    Stats.Secret = sCount
+                    Stats.Ruby = rCount
+                    LblSecret.Text = "Total Secret: " .. Stats.Secret
+                    LblRuby.Text = "Total Ruby Gems: " .. Stats.Ruby
 
-game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "Inventory Loaded";
-    Text = "Monitoring Total Secrets & Rubies";
-    Duration = 5;
-})
+                    -- Kirim Webhook
+                    local json = HttpService:JSONEncode(summary)
+                    local url = WEBHOOK_URL_BASE .. "?player=" .. HttpService:UrlEncode(LocalPlayer.Name) .. "&data=" .. HttpService:UrlEncode(json)
+                    pcall(function() game:HttpGet(url) end)
+                end
+            end
+            task.wait(15)
+        end
+    end)
+    
+    -- Notif Kecil
+    StarterGui:SetCore("SendNotification", {Title="Monitor Add-on"; Text="Active & Running"; Duration=5;})
+end)
