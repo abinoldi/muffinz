@@ -892,12 +892,14 @@ if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
---  FISH IT MONITOR | SECRET + GEMSTONE RUBY (ALWAYS SEND MODE)
+--  FISH IT MONITOR | WEBHOOK + GUI + RESOURCE SAVER
 -- ==========================================================
 task.spawn(function()
     local Players = game:GetService("Players")
     local RepStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
+    local CoreGui = game:GetService("CoreGui")
+    local RunService = game:GetService("RunService") -- Service baru
     local lp = Players.LocalPlayer
 
     -- ================= CONFIG =================
@@ -909,8 +911,156 @@ task.spawn(function()
         if DEBUG then print("[FISH IT][DEBUG]", ...) end
     end
 
+    -- ================= GUI SETUP =================
+    local guiInstanceName = "FishItMonitorOverlay"
+    
+    if CoreGui:FindFirstChild(guiInstanceName) then
+        CoreGui[guiInstanceName]:Destroy()
+    end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = guiInstanceName
+    ScreenGui.Parent = CoreGui
+
+    -- Container Utama
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 250, 0, 160) -- Sedikit lebih tinggi untuk tombol
+    MainFrame.Position = UDim2.new(0, 20, 0.3, 0)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    MainFrame.BackgroundTransparency = 0.3
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = ScreenGui
+
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = MainFrame
+
+    local UIStroke = Instance.new("UIStroke")
+    UIStroke.Color = Color3.fromRGB(255, 85, 85)
+    UIStroke.Thickness = 2
+    UIStroke.Parent = MainFrame
+
+    -- Judul
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Text = "FISH IT MONITOR"
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 16
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Size = UDim2.new(1, 0, 0, 30)
+    TitleLabel.Parent = MainFrame
+
+    -- Tempat Text List Item
+    local ListLabel = Instance.new("TextLabel")
+    ListLabel.Name = "ListLabel"
+    ListLabel.Text = "Scanning..."
+    ListLabel.Font = Enum.Font.GothamSemibold
+    ListLabel.TextSize = 14
+    ListLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    ListLabel.BackgroundTransparency = 1
+    ListLabel.Size = UDim2.new(1, -20, 1, -80) -- Kurangi tinggi agar tidak menabrak tombol
+    ListLabel.Position = UDim2.new(0, 10, 0, 35)
+    ListLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ListLabel.TextYAlignment = Enum.TextYAlignment.Top
+    ListLabel.TextWrapped = true
+    ListLabel.Parent = MainFrame
+
+    -- ================= TOMBOL SETUP =================
+    local ButtonContainer = Instance.new("Frame")
+    ButtonContainer.Name = "ButtonContainer"
+    ButtonContainer.Size = UDim2.new(1, -20, 0, 30)
+    ButtonContainer.Position = UDim2.new(0, 10, 1, -40) -- Posisi selalu di bawah
+    ButtonContainer.BackgroundTransparency = 1
+    ButtonContainer.Parent = MainFrame
+
+    -- Helper Function buat bikin tombol
+    local function CreateToggleButton(name, text, posScale, callback)
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.Text = text
+        btn.Size = UDim2.new(0.48, 0, 1, 0)
+        btn.Position = UDim2.new(posScale, 0, 0, 0)
+        btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Default Hijau (Aktif)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 12
+        btn.Parent = ButtonContainer
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = btn
+
+        btn.MouseButton1Click:Connect(function()
+            callback(btn)
+        end)
+        return btn
+    end
+
+    -- 1. Tombol 3D Render
+    local isRenderOn = true
+    CreateToggleButton("RenderBtn", "3D: ON", 0, function(btn)
+        isRenderOn = not isRenderOn
+        RunService:Set3dRenderingEnabled(isRenderOn)
+        
+        if isRenderOn then
+            btn.Text = "3D: ON"
+            btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Hijau
+        else
+            btn.Text = "3D: OFF"
+            btn.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Merah
+        end
+    end)
+
+    -- 2. Tombol FPS Cap
+    local isLowFps = false
+    CreateToggleButton("FpsBtn", "FPS: MAX", 0.52, function(btn)
+        isLowFps = not isLowFps
+        
+        -- Cek apakah executor support setfpscap
+        if setfpscap then
+            if isLowFps then
+                setfpscap(30)
+                btn.Text = "FPS: 30"
+                btn.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Merah (Tanda mode hemat)
+            else
+                setfpscap(360) -- Atau berapapun max fps kamu
+                btn.Text = "FPS: MAX"
+                btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Hijau
+            end
+        else
+            btn.Text = "Not Supp."
+            warn("Executor kamu tidak support 'setfpscap'")
+        end
+    end)
+
+
+    -- Fungsi Update GUI (Updated Size Logic)
+    local function UpdateOverlay(summaryData)
+        local textString = ""
+        local countItems = 0
+
+        for name, count in pairs(summaryData) do
+            textString = textString .. "• " .. name .. ": " .. tostring(count) .. "\n"
+            countItems = countItems + 1
+        end
+
+        local baseHeight = 90 -- Tinggi dasar (Header + Tombol)
+        
+        if textString == "" then
+            ListLabel.Text = "No Secrets/Rubies Found.\nMonitoring..."
+            ListLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+            MainFrame.Size = UDim2.new(0, 250, 0, baseHeight + 40)
+        else
+            ListLabel.Text = textString
+            ListLabel.TextColor3 = Color3.fromRGB(255, 230, 100)
+            -- Resize frame agar tombol tetap terlihat di bawah
+            local newHeight = baseHeight + (countItems * 20)
+            MainFrame.Size = UDim2.new(0, 250, 0, newHeight)
+        end
+    end
+
     -- ================= MODULES =================
-    -- Kita load ulang module di sini agar aman dan terpisah dari script Hub utama
     local Replion = require(RepStorage.Packages.Replion).Client
     local ItemUtility = require(RepStorage.Shared.ItemUtility)
     local TierUtility = require(RepStorage.Shared.TierUtility)
@@ -951,63 +1101,41 @@ task.spawn(function()
     end
 
     local function sendToWebhook(playerName, summary)
-        -- dprint("Preparing payload...") -- Debugging opsional
         local json = HttpService:JSONEncode(summary)
         local encoded = HttpService:UrlEncode(json)
         local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
         
-        -- MENGGUNAKAN GAME:HTTPGET (OG METHOD)
         local ok, err = pcall(function() game:HttpGet(url) end)
-        
-        if ok then 
-            if DEBUG then print("Webhook SENT for " .. playerName) end
-        else 
-            warn("[FISH IT] Webhook Failed: " .. tostring(err)) 
-        end
+        if ok then if DEBUG then print("Webhook SENT") end end
     end
 
     -- ================= MAIN LOOP =================
-    dprint("Starting Monitor (Always Send Mode)...")
+    dprint("Starting Monitor with Resource Controls...")
     local dataReplica = Replion:WaitReplion("Data")
 
     while true do
-        dprint("Scanning inventory...")
         local inventory = dataReplica:GetExpect("Inventory")
         local summary = {}
         
-        -- Kita tidak lagi pakai variabel 'shouldSend'. Kita akan kirim apapun hasilnya.
-
         for _, items in pairs(inventory) do
             for _, item in ipairs(items) do
                 local name, rarity = GetFishNameAndRarity(item)
                 local mutation = GetMutation(item)
 
-                -- FILTER ITEM YANG AKAN DITAMPILKAN DI WEB
                 local isSecret = (rarity == "SECRET")
                 local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
 
                 if isSecret or isGemstoneRuby then
                     local displayName = name
-                    
-                    if isGemstoneRuby then
-                        displayName = "[Gemstone] Ruby"
-                    elseif mutation ~= "None" then
-                        displayName = "[" .. mutation .. "] " .. name
-                    end
-
+                    if isGemstoneRuby then displayName = "[Gemstone] Ruby"
+                    elseif mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
                     summary[displayName] = (summary[displayName] or 0) + 1
-                    dprint("FOUND:", displayName)
                 end
             end
         end
 
-        -- PERUBAHAN DI SINI:
-        -- Script ini sekarang SELALU mengirim data ke webhook setiap 15 detik.
-        -- Jika tidak ada secret/gemstone, dia akan mengirim JSON kosong "{}" 
-        -- Ini memastikan kamu tahu scriptnya berjalan (status Online di dashboard).
-        
+        UpdateOverlay(summary)
         sendToWebhook(lp.Name, summary)
-        
         task.wait(LOOP_DELAY)
     end
 end)
