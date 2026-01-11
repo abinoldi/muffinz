@@ -79,7 +79,7 @@ local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/rel
 
 local Window = WindUI:CreateWindow({
     Title = "EnochHub | V5.7 (Clean Loop)",
-    Icon = "rbxassetid://130348378128532",
+    Icon = "rbxassetid://49835792834",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
     Size = UDim2.fromOffset(580, 520),
