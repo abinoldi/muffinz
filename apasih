@@ -1014,7 +1014,7 @@ task.spawn(function()
     -- === BUTTON LOGIC ===
     BtnFPS.MouseButton1Click:Connect(function()
         FPS_Cap_Active = not FPS_Cap_Active
-        if setfpscap then setfpscap(FPS_Cap_Active and 30 or 120) end
+        if setfpscap then setfpscap(FPS_Cap_Active and 20 or 30) end
         BtnFPS.Text = FPS_Cap_Active and "FPS Saver: ON" or "FPS Saver: OFF"
         BtnFPS.BackgroundColor3 = FPS_Cap_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
     end)
@@ -1028,7 +1028,7 @@ task.spawn(function()
     
     ScreenGui.Destroying:Connect(function()
         RunService:Set3dRenderingEnabled(true)
-        if setfpscap then setfpscap(60) end
+        if setfpscap then setfpscap(30) end
     end)
 
     -- === HELPER FUNCTIONS (Sama seperti script original) ===
