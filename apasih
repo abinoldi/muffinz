@@ -1078,4 +1078,3 @@ task.spawn(function()
         task.wait(LOOP_DELAY)
     end
 end)
-end)
