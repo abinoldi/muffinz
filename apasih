@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.7 (CLEAN LOOP)
-    - [REMOVED] Absolutely NO "Auto Reset" or 4s timeout logic.
-    - [FIX] Loop is now strictly linear: Throw -> Wait -> Catch -> Wait -> Throw.
-    - [SPEED] Uses Heartbeat with Fallthrough to eliminate frame delays.
+    ENOCHHUB ULTIMATE - V5.7 (FIXED)
+    - [FIX] Replaced broken WindUI link with stable RAW link (Fixes "attempt to call nil value").
+    - [FIX] Removed extra 'end)' at the bottom of the script.
+    - [FIX] Cleaned loop logic.
 ]]
 
 local Players = game:GetService("Players")
@@ -25,7 +25,7 @@ local DefaultConfig = {
     BlatantEnabled = 0,
     AutoEquip = 1,
     CompleteDelay = 1.53, 
-    CancelDelay = 0.38, -- [USER] Preserved setting
+    CancelDelay = 0.38,
     
     -- Blatant V2
     FishingV2Enabled = 0,
@@ -73,13 +73,21 @@ local function ResetConfig()
 end
 
 -- ==========================================================
---  WIND UI SETUP
+--  WIND UI SETUP (FIXED LINK)
 -- ==========================================================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+-- Using the raw link avoids redirect errors that cause "call a nil value"
+local Success, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/WindUI.lua"))()
+end)
+
+if not Success or not WindUI then
+    warn("WindUI Failed to load. Trying backup link...")
+    WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+end
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.7 (Clean Loop)",
-    Icon = "rbxassetid://49835792834",
+    Title = "EnochHub | V5.7 (Fixed)",
+    Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
     Size = UDim2.fromOffset(580, 520),
@@ -223,7 +231,6 @@ local phase = "STEP123"
 local lastStepTime = 0
 
 local function ForceStep123()
-    -- Run in new thread so InvokeServer doesn't block the loop
     task.spawn(function()
         pcall(function()
             RF_CancelFishingInputs:InvokeServer()
@@ -254,15 +261,12 @@ local function ToggleBlatant(state)
 
         if BlatantConnection then BlatantConnection:Disconnect() end
         
-        -- Force Start
         phase = "INIT23"
         lastStepTime = os.clock()
 
-        -- FRAME-PERFECT LOOP
         BlatantConnection = RunService.Heartbeat:Connect(function()
             if Config.BlatantEnabled ~= 1 then return end
             
-            -- Auto-Sell Pause Logic
             if _G.EnochHub_IsSelling then
                 phase = "WAIT_STOP"
                 lastStepTime = os.clock()
@@ -271,34 +275,25 @@ local function ToggleBlatant(state)
 
             local now = os.clock()
 
-            -- LOGIC: Fall-through check. 
-            -- If Condition Met -> Change Phase -> Immediately check Next Phase in SAME FRAME.
-
-            -- 1. Cooldown Finished? -> Ready to Cast
             if phase == "WAIT_STOP" and (now - lastStepTime) >= Config.CancelDelay then
                 phase = "STEP123"
             end
 
-            -- 2. Cast Phase
             if phase == "INIT23" or phase == "STEP123" then
                 lastStepTime = now
                 ForceStep123()
                 phase = "WAIT_COMPLETE"
             end
 
-            -- 3. Waiting for Fish?
             if phase == "WAIT_COMPLETE" and (now - lastStepTime) >= Config.CompleteDelay then
                 phase = "STEP4"
             end
 
-            -- 4. Catch Fish
             if phase == "STEP4" then
                 lastStepTime = now
                 ForceStep4()
                 phase = "WAIT_STOP"
             end
-            
-            -- NOTE: No "else if > 4 reset" logic here. It is gone.
         end)
         
         EquipThread = task.spawn(function()
@@ -393,17 +388,11 @@ local originalRenderAtPoint = nil
 local originalRenderInstance = nil
 local isBoostActive = false
 local originalLightingValues = {}
-local isPotatoApplied = false  -- ADD THIS: Track if potato mode is already applied
+local isPotatoApplied = false 
 
 local function ApplyPotato()
-    -- Don't reapply if already applied
-    if isPotatoApplied then
-        return
-    end
+    if isPotatoApplied then return end
     
-    print("Applying Potato Mode optimizations...")
-    
-    -- Block VFX functions
     if VFXControllerModule then
         if not originalRenderAtPoint and VFXControllerModule.RenderAtPoint then
             originalRenderAtPoint = VFXControllerModule.RenderAtPoint
@@ -412,39 +401,21 @@ local function ApplyPotato()
             originalRenderInstance = VFXControllerModule.RenderInstance
         end
         
-        -- Block all VFX functions
-        VFXControllerModule.Handle = function(...) 
-            -- Prevent all VFX code from running
-            return nil
-        end
-        
+        VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.RenderAtPoint then
-            VFXControllerModule.RenderAtPoint = function(...) 
-                return nil
-            end
+            VFXControllerModule.RenderAtPoint = function(...) return nil end
         end
-        
         if VFXControllerModule.RenderInstance then
-            VFXControllerModule.RenderInstance = function(...) 
-                return nil
-            end
+            VFXControllerModule.RenderInstance = function(...) return nil end
         end
-        
-        -- Block PlayVFX signal if it exists
         if VFXControllerModule.PlayVFX then
-            VFXControllerModule.PlayVFX.Fire = function(...) 
-                -- Prevent VFX signals from firing
-                return nil
-            end
+            VFXControllerModule.PlayVFX.Fire = function(...) return nil end
         end
-        
         isVFXDisabled = true
     end
     
-    -- FPS Ultra Boost Optimizations
     local Terrain = workspace:FindFirstChildOfClass("Terrain")
     
-    -- Save original lighting values once
     if not next(originalLightingValues) then
         pcall(function()
             originalLightingValues.GlobalShadows = Lighting.GlobalShadows
@@ -457,9 +428,7 @@ local function ApplyPotato()
         end)
     end
     
-    -- Only apply visual effects once (not in a loop)
     pcall(function()
-        -- 1. Clean up existing cosmetic effects ONCE
         local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
         if cosmeticFolder then
             pcall(function() 
@@ -469,9 +438,7 @@ local function ApplyPotato()
             end)
         end
         
-        -- 2. VISUAL & EFFECTS (Apply once)
         for _, v in ipairs(workspace:GetDescendants()) do
-            -- Disable all visual effects
             if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or 
                v:IsA("Fire") or v:IsA("Explosion") or v:IsA("Beam") or v:IsA("Light") then
                 v.Enabled = false
@@ -479,13 +446,11 @@ local function ApplyPotato()
                    v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
                     pcall(function() v:Destroy() end)
                 end
-            -- Hide all textures
             elseif v:IsA("Decal") or v:IsA("Texture") then
                 v.Transparency = 1
                 if v:IsA("Decal") then
                     pcall(function() v:Destroy() end)
                 end
-            -- Extreme part optimization
             elseif v:IsA("BasePart") then
                 v.CastShadow = false
                 v.Material = Enum.Material.Plastic
@@ -493,8 +458,6 @@ local function ApplyPotato()
             end
         end
         
-        -- 3. LIGHTING & ENVIRONMENT (Apply once)
-        -- Disable all post-processing effects
         for _, effect in ipairs(Lighting:GetChildren()) do
             if effect:IsA("PostEffect") then 
                 effect.Enabled = false
@@ -507,7 +470,6 @@ local function ApplyPotato()
             end
         end
         
-        -- Ultra low lighting settings
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.FogStart = 9e9
@@ -520,7 +482,6 @@ local function ApplyPotato()
         Lighting.ExposureCompensation = 0
     end)
     
-    -- 4. TERRAIN & WATER (Apply once)
     if Terrain then
         pcall(function()
             Terrain.WaterWaveSize = 0
@@ -532,7 +493,6 @@ local function ApplyPotato()
         end)
     end
     
-    -- 5. QUALITY & RENDERING SETTINGS (Apply once)
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
@@ -541,7 +501,6 @@ local function ApplyPotato()
         settings().Rendering.RenderCSGTrianglesDebug = false
     end)
     
-    -- 6. Set FPS cap ONCE
     if setfpscap then 
         pcall(function() 
             setfpscap(Config.PotatoFPS or 100)
@@ -549,31 +508,17 @@ local function ApplyPotato()
     end
     
     isBoostActive = true
-    isPotatoApplied = true  -- Mark as applied
-    
-    print("Potato Mode applied successfully")
+    isPotatoApplied = true 
 end
 
 local function TogglePotato(state)
     if state then
-        -- If already active, don't start another loop
-        if isBoostActive then
-            return
-        end
-        
-        -- Reset the flag
+        if isBoostActive then return end
         isPotatoApplied = false
-        
-        -- Apply once immediately
         ApplyPotato()
-        
-        -- Start monitoring loop instead of reapplying
         PotatoLoop = task.spawn(function() 
             while Config.PotatoModeEnabled == 1 do 
-                -- Only monitor for new objects, don't reapply everything
                 task.wait(1)
-                
-                -- Optional: Clean up any new cosmetic effects that appear
                 local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
                 if cosmeticFolder then
                     pcall(function() 
@@ -588,16 +533,11 @@ local function TogglePotato(state)
             end 
         end)
     else
-        -- Stop the monitoring loop
         if PotatoLoop then 
             task.cancel(PotatoLoop) 
             PotatoLoop = nil
         end
-        
-        -- Reset the flag
         isPotatoApplied = false
-        
-        -- Restore VFX functions
         if VFXControllerModule then
             VFXControllerModule.Handle = originalVFXHandle
             if originalPlayVFX then
@@ -612,7 +552,6 @@ local function TogglePotato(state)
             isVFXDisabled = false
         end
         
-        -- RESTORE LIGHTING & SETTINGS
         pcall(function()
             if next(originalLightingValues) then
                 Lighting.GlobalShadows = originalLightingValues.GlobalShadows or false
@@ -623,21 +562,15 @@ local function TogglePotato(state)
                 Lighting.OutdoorAmbient = originalLightingValues.OutdoorAmbient or Color3.new(0.5, 0.5, 0.5)
                 Lighting.ShadowSoftness = originalLightingValues.ShadowSoftness or 0.5
             end
-            
-            -- Restore post-processing effects (they were destroyed, so can't be restored)
-            
-            -- Reset rendering settings
             settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
             settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Automatic
             settings().Rendering.TextureQuality = Enum.TextureQuality.Automatic
         end)
         
-        -- Reset FPS cap
         if setfpscap then 
             pcall(function() setfpscap(60) end) 
         end
         
-        -- Send reset notification
         if WindUI and WindUI.Notify then
             pcall(function()
                 WindUI:Notify({ 
@@ -692,18 +625,18 @@ local TOTEM_DATA = { ["Luck Totem"] = {Id = 1}, ["Mutation Totem"] = {Id = 2}, [
 local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
 
 local REF_SPOTS = {
-    -- Layer 1: 5% lebih dekat
+    -- Layer 1
     Vector3.new(46.799, 9.519, 2731.680),     -- T1
     Vector3.new(158.111, 9.519, 2715.333),    -- T2
     Vector3.new(85.441, 10.219, 2637.854),    -- T3
     
     -- Layer 2
-    Vector3.new(46.799, 113.761, 2731.680),   -- T4: Y = 114.548 → 113.761
+    Vector3.new(46.799, 113.761, 2731.680),   -- T4
     Vector3.new(158.111, 113.761, 2715.333),  -- T5
     Vector3.new(85.441, 114.459, 2637.854),   -- T6
     
     -- Layer 3
-    Vector3.new(46.799, -91.676, 2731.680),   -- T7: Y = -95.468 → -91.676
+    Vector3.new(46.799, -91.676, 2731.680),   -- T7
     Vector3.new(158.111, -91.676, 2715.333),  -- T8
     Vector3.new(85.441, -92.959, 2637.854),   -- T9
 }
