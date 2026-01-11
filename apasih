@@ -959,13 +959,13 @@ if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
 
 -- [[ ------------------------------------------------------- ]]
--- [[  PASTE KODE INI DI BARIS PALING BAWAH SCRIPT UTAMA ANDA ]]
--- [[  FISH IT MONITOR: GUI + SAVER + WEBHOOK (ADD-ON)        ]]
+-- [[  FISH IT MONITOR: GUI + SAVER + WEBHOOK (ADD-ON FIXED)  ]]
+-- [[  FIX: Menghitung Secret Fish dengan Rarity Check Aman   ]]
 -- [[ ------------------------------------------------------- ]]
 
 task.spawn(function()
     -- Tunggu sebentar agar script utama loading duluan
-    task.wait(10)
+    task.wait(2)
 
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -996,9 +996,10 @@ task.spawn(function()
     local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
     local RE_NewFish = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 
-    local ItemUtility, Replion
+    local ItemUtility, Replion, TierUtility
     pcall(function()
         ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+        TierUtility = require(ReplicatedStorage.Shared.TierUtility)
         Replion = require(ReplicatedStorage.Packages.Replion).Client
     end)
 
@@ -1011,7 +1012,6 @@ task.spawn(function()
     ScreenGui.Name = "FishItStandaloneUI"
     ScreenGui.Parent = CoreGui
     ScreenGui.IgnoreGuiInset = true
-    -- ZIndexBehavior untuk memastikan dia di atas UI lain jika perlu
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
     local MainFrame = Instance.new("Frame")
@@ -1101,14 +1101,32 @@ task.spawn(function()
         local name = item.Identifier or "Unknown"
         local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
         local mutation = "None"
+        
+        -- Dapatkan Nama Asli dari ID
         if ItemUtility and item.Id then
-            local d = ItemUtility:GetItemData(item.Id)
-            if d and d.Data then name = d.Data.Name end
+            pcall(function()
+                local d = ItemUtility:GetItemData(item.Id)
+                if d and d.Data then name = d.Data.Name end
+            end)
         end
+        
+        -- Dapatkan Mutation
         if item.Metadata then
             if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then mutation = item.Metadata.VariantId
             elseif item.Metadata.Shiny then mutation = "Shiny" end
         end
+        
+        -- [FIX] Jika Metadata Rarity kosong, coba ambil dari TierUtility
+        if (not item.Metadata or not item.Metadata.Rarity) and ItemUtility and TierUtility then
+             pcall(function()
+                local d = ItemUtility:GetItemData(item.Id)
+                if d and d.Probability then
+                    local tier = TierUtility:GetTierFromRarity(d.Probability.Chance)
+                    if tier and tier.Name then rarity = tier.Name end
+                end
+             end)
+        end
+
         return name, rarity, mutation
     end
 
@@ -1126,10 +1144,12 @@ task.spawn(function()
             if metadata.Weight then show = show .. string.format(" (%.1fkg)", metadata.Weight) end
             LblLast.Text = "Last: " .. show
 
-            if rarity == "SECRET" then
+            -- [FIX] Pakai :upper() agar tidak case sensitive (Secret vs SECRET)
+            if rarity and rarity:upper() == "SECRET" then
                 Stats.Secret = Stats.Secret + 1
                 LblSecret.Text = "Total Secret: " .. Stats.Secret
             end
+            
             if name == "Ruby" and mutation == "Gemstone" then
                 Stats.Ruby = Stats.Ruby + 1
                 LblRuby.Text = "Total Ruby Gems: " .. Stats.Ruby
@@ -1143,29 +1163,36 @@ task.spawn(function()
             if Replion then
                 local r = Replion:WaitReplion("Data", 5)
                 local s, inventory = pcall(function() return r and r:GetExpect("Inventory") end)
+                
                 if s and inventory then
                     local sCount, rCount = 0, 0
                     local summary = {}
 
+                    -- Scan Inventory
                     for _, items in pairs(inventory) do
                         for _, item in ipairs(items) do
                             local name, rarity, mutation = GetDetails(item)
                             
+                            -- [FIX] Pakai :upper() di sini juga
+                            local isSecret = (rarity and rarity:upper() == "SECRET")
+                            local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
+
                             -- Hitung Total untuk GUI
-                            if rarity == "SECRET" then sCount = sCount + 1 end
-                            if name == "Ruby" and mutation == "Gemstone" then rCount = rCount + 1 end
+                            if isSecret then sCount = sCount + 1 end
+                            if isRubyGem then rCount = rCount + 1 end
                             
                             -- Data Webhook
-                            local isS, isR = (rarity == "SECRET"), (name == "Ruby" and mutation == "Gemstone")
-                            if isS or isR then
+                            if isSecret or isRubyGem then
                                 local dName = name
-                                if isR then dName = "[Gemstone] Ruby"
+                                if isRubyGem then dName = "[Gemstone] Ruby"
                                 elseif mutation ~= "None" then dName = "["..mutation.."] "..name end
+                                
                                 summary[dName] = (summary[dName] or 0) + 1
                             end
                         end
                     end
-                    -- Update GUI dari hasil Scan (Biar sinkron kalau ada jual/beli)
+                    
+                    -- Update GUI dari hasil Scan (Biar sinkron)
                     Stats.Secret = sCount
                     Stats.Ruby = rCount
                     LblSecret.Text = "Total Secret: " .. Stats.Secret
@@ -1177,10 +1204,10 @@ task.spawn(function()
                     pcall(function() game:HttpGet(url) end)
                 end
             end
-            task.wait(15)
+            task.wait(15) -- Delay 15 detik
         end
     end)
     
     -- Notif Kecil
-    StarterGui:SetCore("SendNotification", {Title="Monitor Add-on"; Text="Active & Running"; Duration=5;})
+    StarterGui:SetCore("SendNotification", {Title="Monitor Fixed"; Text="Tracking Secret & Ruby Correctly"; Duration=5;})
 end)
