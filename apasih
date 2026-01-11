@@ -891,251 +891,264 @@ if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
 
--- ==========================================================
---  FISH IT MONITOR | WEBHOOK + GUI + RESOURCE SAVER
--- ==========================================================
+-- [[ ------------------------------------------------------- ]]
+-- [[  FISH IT MONITOR: INVENTORY BASED (TAS) + SAVER         ]]
+-- [[  LOGIC: Menghitung TOTAL dari ISI TAS (Replion)         ]]
+-- [[ ------------------------------------------------------- ]]
+
 task.spawn(function()
+    task.wait(2) -- Tunggu script utama load
+
     local Players = game:GetService("Players")
-    local RepStorage = game:GetService("ReplicatedStorage")
-    local HttpService = game:GetService("HttpService")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local CoreGui = game:GetService("CoreGui")
-    local RunService = game:GetService("RunService") -- Service baru
-    local lp = Players.LocalPlayer
+    local RunService = game:GetService("RunService")
+    local HttpService = game:GetService("HttpService")
+    local StarterGui = game:GetService("StarterGui")
+    local LocalPlayer = Players.LocalPlayer
 
-    -- ================= CONFIG =================
-    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local DEBUG = false
-    local LOOP_DELAY = 15 -- Loop per 15 detik
+    -- === CONFIG WEBHOOK ===
+    local WEBHOOK_URL_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    
+    -- === VARIABLES ===
+    local Stats = { 
+        Session = 0,    -- Dihitung dari Notifikasi (Aktifitas saat ini)
+        Secret = 0,     -- Dihitung dari TAS (Real Inventory)
+        Ruby = 0        -- Dihitung dari TAS (Real Inventory)
+    }
+    local FPS_Cap_Active = false
+    local Render_Active = true
 
-    local function dprint(...)
-        if DEBUG then print("[FISH IT][DEBUG]", ...) end
+    -- === SETUP MODULES & REMOTE ===
+    local function GetRemote(path, name)
+        local current = ReplicatedStorage
+        for _, child in ipairs(path) do
+            current = current:WaitForChild(child, 2)
+            if not current then return nil end
+        end
+        return current:FindFirstChild(name)
     end
 
-    -- ================= GUI SETUP =================
-    local guiInstanceName = "FishItMonitorOverlay"
-    
-    if CoreGui:FindFirstChild(guiInstanceName) then
-        CoreGui[guiInstanceName]:Destroy()
+    local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local RE_NewFish = GetRemote(RPath, "RE/ObtainedNewFishNotification")
+
+    local ItemUtility, Replion, TierUtility
+    pcall(function()
+        ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+        TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+        Replion = require(ReplicatedStorage.Packages.Replion).Client
+    end)
+
+    -- === UI CREATION ===
+    if CoreGui:FindFirstChild("FishItStandaloneUI") then
+        CoreGui.FishItStandaloneUI:Destroy()
     end
 
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = guiInstanceName
+    ScreenGui.Name = "FishItStandaloneUI"
     ScreenGui.Parent = CoreGui
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-    -- Container Utama
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 250, 0, 160) -- Sedikit lebih tinggi untuk tombol
-    MainFrame.Position = UDim2.new(0, 20, 0.3, 0)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    MainFrame.BackgroundTransparency = 0.3
+    MainFrame.Size = UDim2.new(0, 240, 0, 160)
+    MainFrame.Position = UDim2.new(0.5, -120, 0.05, 0)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
     MainFrame.Parent = ScreenGui
 
     local UICorner = Instance.new("UICorner")
     UICorner.CornerRadius = UDim.new(0, 8)
     UICorner.Parent = MainFrame
 
-    local UIStroke = Instance.new("UIStroke")
-    UIStroke.Color = Color3.fromRGB(255, 85, 85)
-    UIStroke.Thickness = 2
-    UIStroke.Parent = MainFrame
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0.15, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "Inventory Monitor (Tas)"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 13
+    Title.Parent = MainFrame
 
-    -- Judul
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Text = "FISH IT MONITOR"
-    TitleLabel.Font = Enum.Font.GothamBold
-    TitleLabel.TextSize = 16
-    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Size = UDim2.new(1, 0, 0, 30)
-    TitleLabel.Parent = MainFrame
+    -- Labels
+    local function CreateLabel(text, order, color)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.9, 0, 0.12, 0)
+        lbl.Position = UDim2.new(0.05, 0, 0.15 + (order * 0.13), 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.TextColor3 = color
+        lbl.Font = Enum.Font.GothamSemibold
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = MainFrame
+        return lbl
+    end
 
-    -- Tempat Text List Item
-    local ListLabel = Instance.new("TextLabel")
-    ListLabel.Name = "ListLabel"
-    ListLabel.Text = "Scanning..."
-    ListLabel.Font = Enum.Font.GothamSemibold
-    ListLabel.TextSize = 14
-    ListLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    ListLabel.BackgroundTransparency = 1
-    ListLabel.Size = UDim2.new(1, -20, 1, -80) -- Kurangi tinggi agar tidak menabrak tombol
-    ListLabel.Position = UDim2.new(0, 10, 0, 35)
-    ListLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ListLabel.TextYAlignment = Enum.TextYAlignment.Top
-    ListLabel.TextWrapped = true
-    ListLabel.Parent = MainFrame
+    local LblSession = CreateLabel("Session Catch: 0", 0, Color3.fromRGB(200, 200, 200))
+    local LblSecret = CreateLabel("Total Secret (Tas): 0", 1, Color3.fromRGB(255, 215, 0))
+    local LblRuby = CreateLabel("Total Ruby Gems (Tas): 0", 2, Color3.fromRGB(255, 80, 80))
+    local LblLast = CreateLabel("Last: -", 3, Color3.fromRGB(150, 150, 150))
 
-    -- ================= TOMBOL SETUP =================
-    local ButtonContainer = Instance.new("Frame")
-    ButtonContainer.Name = "ButtonContainer"
-    ButtonContainer.Size = UDim2.new(1, -20, 0, 30)
-    ButtonContainer.Position = UDim2.new(0, 10, 1, -40) -- Posisi selalu di bawah
-    ButtonContainer.BackgroundTransparency = 1
-    ButtonContainer.Parent = MainFrame
-
-    -- Helper Function buat bikin tombol
-    local function CreateToggleButton(name, text, posScale, callback)
+    -- Buttons
+    local function CreateBtn(text, pos, color)
         local btn = Instance.new("TextButton")
-        btn.Name = name
+        btn.Size = UDim2.new(0.42, 0, 0.18, 0)
+        btn.Position = pos
+        btn.BackgroundColor3 = color
         btn.Text = text
-        btn.Size = UDim2.new(0.48, 0, 1, 0)
-        btn.Position = UDim2.new(posScale, 0, 0, 0)
-        btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Default Hijau (Aktif)
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
         btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        btn.Parent = ButtonContainer
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 6)
-        corner.Parent = btn
-
-        btn.MouseButton1Click:Connect(function()
-            callback(btn)
-        end)
+        btn.TextSize = 11
+        btn.Parent = MainFrame
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
         return btn
     end
 
-    -- 1. Tombol 3D Render
-    local isRenderOn = true
-    CreateToggleButton("RenderBtn", "3D: ON", 0, function(btn)
-        isRenderOn = not isRenderOn
-        RunService:Set3dRenderingEnabled(isRenderOn)
-        
-        if isRenderOn then
-            btn.Text = "3D: ON"
-            btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Hijau
-        else
-            btn.Text = "3D: OFF"
-            btn.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Merah
-        end
+    local BtnFPS = CreateBtn("FPS Saver: OFF", UDim2.new(0.05, 0, 0.75, 0), Color3.fromRGB(60, 60, 60))
+    local BtnRender = CreateBtn("3D Render: ON", UDim2.new(0.53, 0, 0.75, 0), Color3.fromRGB(0, 170, 0))
+
+    -- === BUTTON LOGIC ===
+    BtnFPS.MouseButton1Click:Connect(function()
+        FPS_Cap_Active = not FPS_Cap_Active
+        if setfpscap then setfpscap(FPS_Cap_Active and 30 or 120) end
+        BtnFPS.Text = FPS_Cap_Active and "FPS Saver: ON" or "FPS Saver: OFF"
+        BtnFPS.BackgroundColor3 = FPS_Cap_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
     end)
 
-    -- 2. Tombol FPS Cap
-    local isLowFps = false
-    CreateToggleButton("FpsBtn", "FPS: MAX", 0.52, function(btn)
-        isLowFps = not isLowFps
-        
-        -- Cek apakah executor support setfpscap
-        if setfpscap then
-            if isLowFps then
-                setfpscap(30)
-                btn.Text = "FPS: 30"
-                btn.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- Merah (Tanda mode hemat)
-            else
-                setfpscap(360) -- Atau berapapun max fps kamu
-                btn.Text = "FPS: MAX"
-                btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Hijau
-            end
-        else
-            btn.Text = "Not Supp."
-            warn("Executor kamu tidak support 'setfpscap'")
-        end
+    BtnRender.MouseButton1Click:Connect(function()
+        Render_Active = not Render_Active
+        RunService:Set3dRenderingEnabled(Render_Active)
+        BtnRender.Text = Render_Active and "3D Render: ON" or "3D Render: OFF"
+        BtnRender.BackgroundColor3 = Render_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
+    end)
+    
+    ScreenGui.Destroying:Connect(function()
+        RunService:Set3dRenderingEnabled(true)
+        if setfpscap then setfpscap(60) end
     end)
 
-
-    -- Fungsi Update GUI (Updated Size Logic)
-    local function UpdateOverlay(summaryData)
-        local textString = ""
-        local countItems = 0
-
-        for name, count in pairs(summaryData) do
-            textString = textString .. "• " .. name .. ": " .. tostring(count) .. "\n"
-            countItems = countItems + 1
-        end
-
-        local baseHeight = 90 -- Tinggi dasar (Header + Tombol)
-        
-        if textString == "" then
-            ListLabel.Text = "No Secrets/Rubies Found.\nMonitoring..."
-            ListLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-            MainFrame.Size = UDim2.new(0, 250, 0, baseHeight + 40)
-        else
-            ListLabel.Text = textString
-            ListLabel.TextColor3 = Color3.fromRGB(255, 230, 100)
-            -- Resize frame agar tombol tetap terlihat di bawah
-            local newHeight = baseHeight + (countItems * 20)
-            MainFrame.Size = UDim2.new(0, 250, 0, newHeight)
-        end
-    end
-
-    -- ================= MODULES =================
-    local Replion = require(RepStorage.Packages.Replion).Client
-    local ItemUtility = require(RepStorage.Shared.ItemUtility)
-    local TierUtility = require(RepStorage.Shared.TierUtility)
-
-    -- ================= FUNCTIONS =================
-    local function GetFishNameAndRarity(item)
+    -- === HELPER FUNCTIONS (Sama seperti script original) ===
+    local function GetDetails(item)
         local name = item.Identifier or "Unknown"
         local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-        local itemID = item.Id
-        local itemData
-
-        if ItemUtility and itemID then
+        local mutation = "None"
+        
+        -- Ambil Nama via ItemUtility
+        if ItemUtility and item.Id then
             pcall(function()
-                itemData = ItemUtility:GetItemData(itemID)
-                if not itemData then
-                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
-                    if numericID then itemData = ItemUtility:GetItemData(numericID) end
-                end
+                local d = ItemUtility:GetItemData(item.Id)
+                if d and d.Data then name = d.Data.Name end
             end)
         end
-
-        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
-        if item.Metadata and item.Metadata.Rarity then 
-            rarity = item.Metadata.Rarity 
-        elseif itemData and itemData.Probability and TierUtility then 
-            local tier
-            pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
-            if tier and tier.Name then rarity = tier.Name end 
+        
+        -- Ambil Rarity via TierUtility jika Metadata kosong
+        if (not item.Metadata or not item.Metadata.Rarity) and ItemUtility and TierUtility and item.Id then
+             pcall(function()
+                local d = ItemUtility:GetItemData(item.Id)
+                if d and d.Probability then
+                    local tier = TierUtility:GetTierFromRarity(d.Probability.Chance)
+                    if tier and tier.Name then rarity = tier.Name end
+                end
+             end)
         end
-        return name, rarity
-    end
 
-    local function GetMutation(item)
-        if not item.Metadata then return "None" end
-        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
-        if item.Metadata.Shiny == true then return "Shiny" end
-        return "None"
-    end
-
-    local function sendToWebhook(playerName, summary)
-        local json = HttpService:JSONEncode(summary)
-        local encoded = HttpService:UrlEncode(json)
-        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        -- Ambil Mutation
+        if item.Metadata then
+            if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then mutation = item.Metadata.VariantId
+            elseif item.Metadata.Shiny then mutation = "Shiny" end
+        end
         
-        local ok, err = pcall(function() game:HttpGet(url) end)
-        if ok then if DEBUG then print("Webhook SENT") end end
+        return name, rarity, mutation
     end
 
-    -- ================= MAIN LOOP =================
-    dprint("Starting Monitor with Resource Controls...")
-    local dataReplica = Replion:WaitReplion("Data")
+    -- === 1. SESSION CATCH LISTENER (Hanya untuk Visual "Last Caught") ===
+    if RE_NewFish then
+        RE_NewFish.OnClientEvent:Connect(function(itemId, metadata, fullData)
+            Stats.Session = Stats.Session + 1
+            LblSession.Text = "Session Catch: " .. Stats.Session
+            
+            local dummy = {Id = itemId, Metadata = metadata, Identifier = fullData and fullData.Identifier}
+            local name, rarity, mutation = GetDetails(dummy)
+            
+            local show = name
+            if mutation ~= "None" then show = "["..mutation.."] "..name end
+            if metadata.Weight then show = show .. string.format(" (%.1fkg)", metadata.Weight) end
+            LblLast.Text = "Last: " .. show
+            
+            -- Kita TIDAK menambah Secret/Ruby disini, karena akan dihitung ulang oleh Loop Inventory di bawah.
+        end)
+    end
 
-    while true do
-        local inventory = dataReplica:GetExpect("Inventory")
-        local summary = {}
-        
-        for _, items in pairs(inventory) do
-            for _, item in ipairs(items) do
-                local name, rarity = GetFishNameAndRarity(item)
-                local mutation = GetMutation(item)
+    -- === 2. INVENTORY LOOP (LOGIKA UTAMA DARI SCRIPT ORIGINAL) ===
+    task.spawn(function()
+        if not Replion then 
+            WindUI:Notify({Title="Error", Content="Replion Module Not Found!", Duration=5})
+            return 
+        end
 
-                local isSecret = (rarity == "SECRET")
-                local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
+        local dataReplica = Replion:WaitReplion("Data")
+        local WebhookTimer = 0
+        local WEBHOOK_INTERVAL = 15
+        local GUI_SCAN_INTERVAL = 2 -- Scan GUI lebih cepat dari Webhook (2 detik)
 
-                if isSecret or isGemstoneRuby then
-                    local displayName = name
-                    if isGemstoneRuby then displayName = "[Gemstone] Ruby"
-                    elseif mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
-                    summary[displayName] = (summary[displayName] or 0) + 1
+        while true do
+            -- Ambil Data Inventory Terbaru (Persis seperti script original)
+            local success, inventory = pcall(function() return dataReplica:GetExpect("Inventory") end)
+
+            if success and inventory then
+                local sCount = 0
+                local rCount = 0
+                local summary = {} -- Untuk Webhook
+
+                for _, items in pairs(inventory) do
+                    for _, item in ipairs(items) do
+                        local name, rarity, mutation = GetDetails(item)
+                        
+                        -- LOGIKA DETEKSI (Case Insensitive)
+                        local isSecret = (rarity and rarity:upper() == "SECRET")
+                        local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
+
+                        -- 1. Hitung Total untuk GUI
+                        if isSecret then sCount = sCount + 1 end
+                        if isRubyGem then rCount = rCount + 1 end
+
+                        -- 2. Siapkan Data untuk Webhook
+                        if isSecret or isRubyGem then
+                            local displayName = name
+                            if isRubyGem then 
+                                displayName = "[Gemstone] Ruby"
+                            elseif mutation ~= "None" then 
+                                displayName = "[" .. mutation .. "] " .. name 
+                            end
+                            summary[displayName] = (summary[displayName] or 0) + 1
+                        end
+                    end
+                end
+
+                -- UPDATE GUI (Real Data dari Tas)
+                Stats.Secret = sCount
+                Stats.Ruby = rCount
+                LblSecret.Text = "Total Secret (Tas): " .. Stats.Secret
+                LblRuby.Text = "Total Ruby Gems (Tas): " .. Stats.Ruby
+
+                -- KIRIM WEBHOOK (Setiap 15 detik)
+                if os.clock() - WebhookTimer > WEBHOOK_INTERVAL then
+                    local json = HttpService:JSONEncode(summary)
+                    local encoded = HttpService:UrlEncode(json)
+                    local url = WEBHOOK_URL_BASE .. "?player=" .. HttpService:UrlEncode(LocalPlayer.Name) .. "&data=" .. encoded
+                    
+                    pcall(function() game:HttpGet(url) end)
+                    WebhookTimer = os.clock()
                 end
             end
-        end
 
-        UpdateOverlay(summary)
-        sendToWebhook(lp.Name, summary)
-        task.wait(LOOP_DELAY)
-    end
+            task.wait(GUI_SCAN_INTERVAL) -- Loop Scan Tas
+        end
+    end)
+
+    StarterGui:SetCore("SendNotification", {Title="Inventory Monitor", Text="Reading data from Bag...", Duration=5})
 end)
