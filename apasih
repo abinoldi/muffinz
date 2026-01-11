@@ -957,6 +957,7 @@ if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
+
 -- [[ ------------------------------------------------------- ]]
 -- [[  PASTE KODE INI DI BARIS PALING BAWAH SCRIPT UTAMA ANDA ]]
 -- [[  FISH IT MONITOR: GUI + SAVER + WEBHOOK (ADD-ON)        ]]
@@ -964,7 +965,7 @@ WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Dura
 
 task.spawn(function()
     -- Tunggu sebentar agar script utama loading duluan
-    task.wait(2)
+    task.wait(10)
 
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
