@@ -958,255 +958,126 @@ if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
 
--- [[ ------------------------------------------------------- ]]
--- [[  FISH IT MONITOR: GUI + SAVER + WEBHOOK (ADD-ON FIXED)  ]]
--- [[  FIX: Menghitung Secret Fish dengan Rarity Check Aman   ]]
--- [[ ------------------------------------------------------- ]]
-
+-- ==========================================================
+--  FISH IT MONITOR | SECRET + GEMSTONE RUBY (ALWAYS SEND MODE)
+-- ==========================================================
 task.spawn(function()
-    -- Tunggu sebentar agar script utama loading duluan
-    task.wait(2)
-
     local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local CoreGui = game:GetService("CoreGui")
-    local RunService = game:GetService("RunService")
+    local RepStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
-    local StarterGui = game:GetService("StarterGui")
-    local LocalPlayer = Players.LocalPlayer
+    local lp = Players.LocalPlayer
 
-    -- === CONFIG WEBHOOK ===
-    local WEBHOOK_URL_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    -- ================= CONFIG =================
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local DEBUG = false
+    local LOOP_DELAY = 15 -- Loop per 15 detik
 
-    -- === VARIABLES ===
-    local Stats = { Session = 0, Secret = 0, Ruby = 0 }
-    local FPS_Cap_Active = false
-    local Render_Active = true
-
-    -- === SETUP MODULES & REMOTE ===
-    local function GetRemote(path, name)
-        local current = ReplicatedStorage
-        for _, child in ipairs(path) do
-            current = current:WaitForChild(child, 2)
-            if not current then return nil end
-        end
-        return current:FindFirstChild(name)
+    local function dprint(...)
+        if DEBUG then print("[FISH IT][DEBUG]", ...) end
     end
 
-    local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local RE_NewFish = GetRemote(RPath, "RE/ObtainedNewFishNotification")
+    -- ================= MODULES =================
+    -- Kita load ulang module di sini agar aman dan terpisah dari script Hub utama
+    local Replion = require(RepStorage.Packages.Replion).Client
+    local ItemUtility = require(RepStorage.Shared.ItemUtility)
+    local TierUtility = require(RepStorage.Shared.TierUtility)
 
-    local ItemUtility, Replion, TierUtility
-    pcall(function()
-        ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
-        TierUtility = require(ReplicatedStorage.Shared.TierUtility)
-        Replion = require(ReplicatedStorage.Packages.Replion).Client
-    end)
-
-    -- === UI CREATION (SAFE MODE) ===
-    if CoreGui:FindFirstChild("FishItStandaloneUI") then
-        CoreGui.FishItStandaloneUI:Destroy()
-    end
-
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "FishItStandaloneUI"
-    ScreenGui.Parent = CoreGui
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 240, 0, 160)
-    MainFrame.Position = UDim2.new(0.5, -120, 0.05, 0) -- Posisi Sedikit Lebih Atas
-    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Active = true
-    MainFrame.Draggable = true
-    MainFrame.Parent = ScreenGui
-
-    local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(0, 8)
-    UICorner.Parent = MainFrame
-
-    -- Title
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0.15, 0)
-    Title.BackgroundTransparency = 1
-    Title.Text = "Monitor & Saver Add-on"
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 13
-    Title.Parent = MainFrame
-
-    -- Labels
-    local function CreateLabel(text, order, color)
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(0.9, 0, 0.12, 0)
-        lbl.Position = UDim2.new(0.05, 0, 0.15 + (order * 0.13), 0)
-        lbl.BackgroundTransparency = 1
-        lbl.Text = text
-        lbl.TextColor3 = color
-        lbl.Font = Enum.Font.GothamSemibold
-        lbl.TextSize = 12
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.Parent = MainFrame
-        return lbl
-    end
-
-    local LblSession = CreateLabel("Session Catch: 0", 0, Color3.fromRGB(200, 200, 200))
-    local LblSecret = CreateLabel("Total Secret: 0", 1, Color3.fromRGB(255, 215, 0))
-    local LblRuby = CreateLabel("Total Ruby Gems: 0", 2, Color3.fromRGB(255, 80, 80))
-    local LblLast = CreateLabel("Last: -", 3, Color3.fromRGB(150, 150, 150))
-
-    -- Buttons
-    local function CreateBtn(text, pos, color)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.42, 0, 0.18, 0)
-        btn.Position = pos
-        btn.BackgroundColor3 = color
-        btn.Text = text
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 11
-        btn.Parent = MainFrame
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
-        return btn
-    end
-
-    local BtnFPS = CreateBtn("FPS Saver: OFF", UDim2.new(0.05, 0, 0.75, 0), Color3.fromRGB(60, 60, 60))
-    local BtnRender = CreateBtn("3D Render: ON", UDim2.new(0.53, 0, 0.75, 0), Color3.fromRGB(0, 170, 0))
-
-    -- === BUTTON FUNCTIONS ===
-    BtnFPS.MouseButton1Click:Connect(function()
-        FPS_Cap_Active = not FPS_Cap_Active
-        if setfpscap then setfpscap(FPS_Cap_Active and 30 or 120) end
-        BtnFPS.Text = FPS_Cap_Active and "FPS Saver: ON" or "FPS Saver: OFF"
-        BtnFPS.BackgroundColor3 = FPS_Cap_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
-    end)
-
-    BtnRender.MouseButton1Click:Connect(function()
-        Render_Active = not Render_Active
-        RunService:Set3dRenderingEnabled(Render_Active)
-        BtnRender.Text = Render_Active and "3D Render: ON" or "3D Render: OFF"
-        BtnRender.BackgroundColor3 = Render_Active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
-    end)
-
-    ScreenGui.Destroying:Connect(function()
-        RunService:Set3dRenderingEnabled(true)
-        if setfpscap then setfpscap(60) end
-    end)
-
-    -- === LOGIC FUNCTIONS ===
-    local function GetDetails(item)
+    -- ================= FUNCTIONS =================
+    local function GetFishNameAndRarity(item)
         local name = item.Identifier or "Unknown"
         local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-        local mutation = "None"
-        
-        -- Dapatkan Nama Asli dari ID
-        if ItemUtility and item.Id then
+        local itemID = item.Id
+        local itemData
+
+        if ItemUtility and itemID then
             pcall(function()
-                local d = ItemUtility:GetItemData(item.Id)
-                if d and d.Data then name = d.Data.Name end
+                itemData = ItemUtility:GetItemData(itemID)
+                if not itemData then
+                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                    if numericID then itemData = ItemUtility:GetItemData(numericID) end
+                end
             end)
         end
-        
-        -- Dapatkan Mutation
-        if item.Metadata then
-            if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then mutation = item.Metadata.VariantId
-            elseif item.Metadata.Shiny then mutation = "Shiny" end
-        end
-        
-        -- [FIX] Jika Metadata Rarity kosong, coba ambil dari TierUtility
-        if (not item.Metadata or not item.Metadata.Rarity) and ItemUtility and TierUtility then
-             pcall(function()
-                local d = ItemUtility:GetItemData(item.Id)
-                if d and d.Probability then
-                    local tier = TierUtility:GetTierFromRarity(d.Probability.Chance)
-                    if tier and tier.Name then rarity = tier.Name end
-                end
-             end)
-        end
 
-        return name, rarity, mutation
+        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        if item.Metadata and item.Metadata.Rarity then 
+            rarity = item.Metadata.Rarity 
+        elseif itemData and itemData.Probability and TierUtility then 
+            local tier
+            pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
+            if tier and tier.Name then rarity = tier.Name end 
+        end
+        return name, rarity
     end
 
-    -- Listener Realtime
-    if RE_NewFish then
-        RE_NewFish.OnClientEvent:Connect(function(itemId, metadata, fullData)
-            Stats.Session = Stats.Session + 1
-            LblSession.Text = "Session Catch: " .. Stats.Session
-            
-            local dummy = {Id = itemId, Metadata = metadata, Identifier = fullData and fullData.Identifier}
-            local name, rarity, mutation = GetDetails(dummy)
-            
-            local show = name
-            if mutation ~= "None" then show = "["..mutation.."] "..name end
-            if metadata.Weight then show = show .. string.format(" (%.1fkg)", metadata.Weight) end
-            LblLast.Text = "Last: " .. show
-
-            -- [FIX] Pakai :upper() agar tidak case sensitive (Secret vs SECRET)
-            if rarity and rarity:upper() == "SECRET" then
-                Stats.Secret = Stats.Secret + 1
-                LblSecret.Text = "Total Secret: " .. Stats.Secret
-            end
-            
-            if name == "Ruby" and mutation == "Gemstone" then
-                Stats.Ruby = Stats.Ruby + 1
-                LblRuby.Text = "Total Ruby Gems: " .. Stats.Ruby
-            end
-        end)
+    local function GetMutation(item)
+        if not item.Metadata then return "None" end
+        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+        if item.Metadata.Shiny == true then return "Shiny" end
+        return "None"
     end
 
-    -- Loop Background: Scan Inventory + Webhook
-    task.spawn(function()
-        while true do
-            if Replion then
-                local r = Replion:WaitReplion("Data", 5)
-                local s, inventory = pcall(function() return r and r:GetExpect("Inventory") end)
-                
-                if s and inventory then
-                    local sCount, rCount = 0, 0
-                    local summary = {}
+    local function sendToWebhook(playerName, summary)
+        -- dprint("Preparing payload...") -- Debugging opsional
+        local json = HttpService:JSONEncode(summary)
+        local encoded = HttpService:UrlEncode(json)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        
+        -- MENGGUNAKAN GAME:HTTPGET (OG METHOD)
+        local ok, err = pcall(function() game:HttpGet(url) end)
+        
+        if ok then 
+            if DEBUG then print("Webhook SENT for " .. playerName) end
+        else 
+            warn("[FISH IT] Webhook Failed: " .. tostring(err)) 
+        end
+    end
 
-                    -- Scan Inventory
-                    for _, items in pairs(inventory) do
-                        for _, item in ipairs(items) do
-                            local name, rarity, mutation = GetDetails(item)
-                            
-                            -- [FIX] Pakai :upper() di sini juga
-                            local isSecret = (rarity and rarity:upper() == "SECRET")
-                            local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
+    -- ================= MAIN LOOP =================
+    dprint("Starting Monitor (Always Send Mode)...")
+    local dataReplica = Replion:WaitReplion("Data")
 
-                            -- Hitung Total untuk GUI
-                            if isSecret then sCount = sCount + 1 end
-                            if isRubyGem then rCount = rCount + 1 end
-                            
-                            -- Data Webhook
-                            if isSecret or isRubyGem then
-                                local dName = name
-                                if isRubyGem then dName = "[Gemstone] Ruby"
-                                elseif mutation ~= "None" then dName = "["..mutation.."] "..name end
-                                
-                                summary[dName] = (summary[dName] or 0) + 1
-                            end
-                        end
-                    end
+    while true do
+        dprint("Scanning inventory...")
+        local inventory = dataReplica:GetExpect("Inventory")
+        local summary = {}
+        
+        -- Kita tidak lagi pakai variabel 'shouldSend'. Kita akan kirim apapun hasilnya.
+
+        for _, items in pairs(inventory) do
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+
+                -- FILTER ITEM YANG AKAN DITAMPILKAN DI WEB
+                local isSecret = (rarity == "SECRET")
+                local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
+
+                if isSecret or isGemstoneRuby then
+                    local displayName = name
                     
-                    -- Update GUI dari hasil Scan (Biar sinkron)
-                    Stats.Secret = sCount
-                    Stats.Ruby = rCount
-                    LblSecret.Text = "Total Secret: " .. Stats.Secret
-                    LblRuby.Text = "Total Ruby Gems: " .. Stats.Ruby
+                    if isGemstoneRuby then
+                        displayName = "[Gemstone] Ruby"
+                    elseif mutation ~= "None" then
+                        displayName = "[" .. mutation .. "] " .. name
+                    end
 
-                    -- Kirim Webhook
-                    local json = HttpService:JSONEncode(summary)
-                    local url = WEBHOOK_URL_BASE .. "?player=" .. HttpService:UrlEncode(LocalPlayer.Name) .. "&data=" .. HttpService:UrlEncode(json)
-                    pcall(function() game:HttpGet(url) end)
+                    summary[displayName] = (summary[displayName] or 0) + 1
+                    dprint("FOUND:", displayName)
                 end
             end
-            task.wait(15) -- Delay 15 detik
         end
-    end)
+
+        -- PERUBAHAN DI SINI:
+        -- Script ini sekarang SELALU mengirim data ke webhook setiap 15 detik.
+        -- Jika tidak ada secret/gemstone, dia akan mengirim JSON kosong "{}" 
+        -- Ini memastikan kamu tahu scriptnya berjalan (status Online di dashboard).
+        
+        sendToWebhook(lp.Name, summary)
+        
+        task.wait(LOOP_DELAY)
+    end
+end)
     
     -- Notif Kecil
     StarterGui:SetCore("SendNotification", {Title="Monitor Fixed"; Text="Tracking Secret & Ruby Correctly"; Duration=5;})
