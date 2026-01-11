@@ -959,8 +959,7 @@ if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.7 (AutoSell Fix)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
---  FISH IT ULTIMATE MONITOR & SAVER
---  [Features]: GUI Counter + FPS/Render Saver + Webhook Monitor
+--  FISH IT ULTIMATE | INVENTORY COUNT + REALTIME + SAVER
 -- ==========================================================
 
 -- Services
@@ -986,37 +985,109 @@ local function GetRemote(remotePath, name, timeout)
     return currentInstance:FindFirstChild(name)
 end
 
--- Remote Notification (Untuk GUI Realtime)
+-- Remote Notification
 local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification", 10)
 
--- Modules (Untuk Webhook & GUI)
+-- Load Modules (PENTING untuk baca Inventory)
 local ItemUtility, TierUtility, Replion
+local ModulesLoaded = false
+
 pcall(function()
     ItemUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemUtility", 5))
     TierUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("TierUtility", 5))
     Replion = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Replion")).Client
+    ModulesLoaded = true
 end)
 
-if not RE_ObtainedNewFishNotification then
-    warn("Remote RE/ObtainedNewFishNotification tidak ditemukan!")
+if not ModulesLoaded then
+    warn("Gagal load modules (ItemUtility/Replion). Script mungkin tidak akurat membaca inventory awal.")
 end
 
 -- ==========================================
--- 2. GUI VARIABLES & SETTINGS
+-- 2. HELPER FUNCTIONS (IDENTIFIKASI ITEM)
+-- ==========================================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+
+    -- Coba ambil data dari ItemUtility jika ada ID
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+            end
+        end)
+    end
+
+    -- Pastikan nama dan rarity akurat
+    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        local tier
+        pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
+        if tier and tier.Name then rarity = tier.Name end 
+    end
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+    if item.Metadata.Shiny == true then return "Shiny" end
+    return "None"
+end
+
+-- ==========================================
+-- 3. CALCULATE INITIAL INVENTORY
 -- ==========================================
 local stats = {
-    Total = 0,
-    Secret = 0,
-    RubyGemstone = 0
+    SessionCatch = 0, -- Ikan yang ditangkap sesi ini
+    TotalSecret = 0,  -- Total Secret di Inventory
+    TotalRuby = 0     -- Total Ruby Gemstone di Inventory
 }
-local lastFishText = "-"
 
--- State Toggles
-local isFpsCapActive = false
-local isRenderingEnabled = true
+local function ScanInventory()
+    if not Replion then return end
+    
+    local dataReplica = Replion:WaitReplion("Data")
+    local success, inventory = pcall(function() return dataReplica:GetExpect("Inventory") end)
+    
+    if success and inventory then
+        local sCount = 0
+        local rCount = 0
+        
+        for _, items in pairs(inventory) do
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+                
+                -- Cek Secret
+                if rarity == "SECRET" then
+                    sCount = sCount + 1
+                end
+                
+                -- Cek Ruby Gemstone
+                if name == "Ruby" and mutation == "Gemstone" then
+                    rCount = rCount + 1
+                end
+            end
+        end
+        
+        stats.TotalSecret = sCount
+        stats.TotalRuby = rCount
+    end
+end
+
+-- Jalankan scan awal
+ScanInventory()
 
 -- ==========================================
--- 3. GUI SETUP
+-- 4. GUI SETUP
 -- ==========================================
 if CoreGui:FindFirstChild("FishItMonitorStats") then
     CoreGui.FishItMonitorStats:Destroy()
@@ -1031,7 +1102,7 @@ local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 240, 0, 180) 
 MainFrame.Position = UDim2.new(0.5, -120, 0.1, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -1045,7 +1116,7 @@ UICorner.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0.15, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Fish It Monitor & Saver"
+TitleLabel.Text = "Inventory Monitor & Saver"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextSize = 14
@@ -1088,7 +1159,7 @@ LastLabel.TextTruncate = Enum.TextTruncate.AtEnd
 LastLabel.Parent = MainFrame
 
 -- ==========================================
--- 4. BUTTONS (FPS & RENDER)
+-- 5. BUTTONS (FPS & RENDER)
 -- ==========================================
 local ButtonContainer = Instance.new("Frame")
 ButtonContainer.Size = UDim2.new(1, -20, 0.25, 0)
@@ -1110,6 +1181,9 @@ local function CreateButton(name, text, color, pos)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
     return btn
 end
+
+local isFpsCapActive = false
+local isRenderingEnabled = true
 
 local FPSButton = CreateButton("FPSBtn", "FPS Saver: OFF", Color3.fromRGB(60, 60, 60), UDim2.new(0, 0, 0, 0))
 local RenderButton = CreateButton("RenderBtn", "3D Render: ON", Color3.fromRGB(0, 170, 0), UDim2.new(0.52, 0, 0, 0))
@@ -1140,50 +1214,48 @@ RenderButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 5. GUI REALTIME UPDATER
+-- 6. GUI UPDATER & REALTIME LISTENER
 -- ==========================================
 local function UpdateStatsGUI()
-    TotalLabel.Text  = "Total Caught: " .. stats.Total
-    SecretLabel.Text = "Secrets: " .. stats.Secret
-    RubyLabel.Text   = "Ruby Gemstones: " .. stats.RubyGemstone
-    LastLabel.Text   = "Last: " .. lastFishText
-end
-
-local function GetFishDetails(itemId, metadata, fullData)
-    local name = "Unknown"
-    local rarity = metadata and metadata.Rarity or "COMMON"
-    local mutation = "None"
-    
-    if ItemUtility then
-        local data = ItemUtility:GetItemData(itemId)
-        if data and data.Data then name = data.Data.Name end
-    end
-    if name == "Unknown" and fullData and fullData.Identifier then name = fullData.Identifier end
-
-    if metadata then
-        if metadata.VariantId and metadata.VariantId ~= "" then mutation = metadata.VariantId
-        elseif metadata.Shiny then mutation = "Shiny" end
-    end
-    return name, rarity, mutation
+    TotalLabel.Text  = "Session Catch: " .. stats.SessionCatch
+    SecretLabel.Text = "Total Secrets: " .. stats.TotalSecret
+    RubyLabel.Text   = "Total Ruby Gems: " .. stats.TotalRuby
+    LastLabel.Text   = "Last: " .. (stats.lastFishText or "-")
 end
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(itemId, metadata, fullData)
-        stats.Total = stats.Total + 1
-        local name, rarity, mutation = GetFishDetails(itemId, metadata, fullData)
+        stats.SessionCatch = stats.SessionCatch + 1
         
+        -- Simulasi item object untuk fungsi helper
+        local dummyItem = {
+            Id = itemId,
+            Identifier = fullData and fullData.Identifier,
+            Metadata = metadata
+        }
+        
+        local name, rarity = GetFishNameAndRarity(dummyItem)
+        local mutation = GetMutation(dummyItem)
+        
+        -- Update Teks Terakhir
         local displayStr = name
         if mutation ~= "None" then displayStr = "[" .. mutation .. "] " .. name end
         if metadata and metadata.Weight then displayStr = displayStr .. string.format(" (%.1fkg)", metadata.Weight) end
-        lastFishText = displayStr
+        stats.lastFishText = displayStr
         
-        if rarity:upper() == "SECRET" then stats.Secret = stats.Secret + 1 end
-        if name == "Ruby" and mutation == "Gemstone" then stats.RubyGemstone = stats.RubyGemstone + 1 end
+        -- Tambah Total jika dapat baru
+        if rarity == "SECRET" then 
+            stats.TotalSecret = stats.TotalSecret + 1 
+        end
+        if name == "Ruby" and mutation == "Gemstone" then 
+            stats.TotalRuby = stats.TotalRuby + 1 
+        end
 
         UpdateStatsGUI()
     end)
 end
 
+-- Update awal biar angka inventory langsung muncul
 UpdateStatsGUI()
 
 -- Cleanup Safety
@@ -1193,86 +1265,38 @@ ScreenGui.Destroying:Connect(function()
 end)
 
 -- ==========================================================
--- 6. WEBHOOK MONITOR BACKGROUND TASK
+-- 7. WEBHOOK MONITOR (BACKGROUND)
 -- ==========================================================
 task.spawn(function()
-    -- Config Webhook
     local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local DEBUG = false
     local LOOP_DELAY = 15 
-
-    local function dprint(...) if DEBUG then print("[FISH IT][DEBUG]", ...) end end
-
-    local function GetFishNameAndRarity_Monitor(item)
-        local name = item.Identifier or "Unknown"
-        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-        local itemID = item.Id
-        local itemData
-
-        if ItemUtility and itemID then
-            pcall(function()
-                itemData = ItemUtility:GetItemData(itemID)
-                if not itemData then
-                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
-                    if numericID then itemData = ItemUtility:GetItemData(numericID) end
-                end
-            end)
-        end
-
-        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
-        if item.Metadata and item.Metadata.Rarity then 
-            rarity = item.Metadata.Rarity 
-        elseif itemData and itemData.Probability and TierUtility then 
-            local tier
-            pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
-            if tier and tier.Name then rarity = tier.Name end 
-        end
-        return name, rarity
-    end
-
-    local function GetMutation_Monitor(item)
-        if not item.Metadata then return "None" end
-        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
-        if item.Metadata.Shiny == true then return "Shiny" end
-        return "None"
-    end
 
     local function sendToWebhook(playerName, summary)
         local json = HttpService:JSONEncode(summary)
         local encoded = HttpService:UrlEncode(json)
         local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
-        
-        local ok, err = pcall(function() game:HttpGet(url) end)
-        if ok then 
-            dprint("Webhook SENT") 
-        else 
-            warn("[FISH IT] Webhook Failed: " .. tostring(err)) 
-        end
+        pcall(function() game:HttpGet(url) end)
     end
 
-    -- Monitor Loop
     if Replion then
         local dataReplica = Replion:WaitReplion("Data")
         while true do
             local success, inventory = pcall(function() return dataReplica:GetExpect("Inventory") end)
-            
             if success and inventory then
                 local summary = {}
+                -- Kita scan lagi untuk Webhook agar data selalu fresh dari server
                 for _, items in pairs(inventory) do
                     for _, item in ipairs(items) do
-                        local name, rarity = GetFishNameAndRarity_Monitor(item)
-                        local mutation = GetMutation_Monitor(item)
+                        local name, rarity = GetFishNameAndRarity(item)
+                        local mutation = GetMutation(item)
 
                         local isSecret = (rarity == "SECRET")
                         local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
 
                         if isSecret or isGemstoneRuby then
                             local displayName = name
-                            if isGemstoneRuby then
-                                displayName = "[Gemstone] Ruby"
-                            elseif mutation ~= "None" then
-                                displayName = "[" .. mutation .. "] " .. name
-                            end
+                            if isGemstoneRuby then displayName = "[Gemstone] Ruby"
+                            elseif mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
                             summary[displayName] = (summary[displayName] or 0) + 1
                         end
                     end
@@ -1281,14 +1305,11 @@ task.spawn(function()
             end
             task.wait(LOOP_DELAY)
         end
-    else
-        warn("Replion Module not found - Webhook Monitor disabled.")
     end
 end)
 
--- Final Notification
 game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "Ultimate Monitor Active";
-    Text = "GUI + Saver + Webhook Running.";
+    Title = "Inventory Loaded";
+    Text = "Monitoring Total Secrets & Rubies";
     Duration = 5;
 })
