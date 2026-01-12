@@ -1,8 +1,9 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.8 (V3 INTEGRATED)
-    - [NEW] Fishing V3: BindToRenderStep (Priority 2001) + Full Localization.
-    - [OPTIMIZED] Logic Killer now uses O(1) Dictionary Lookup.
-    - [UPDATED] Auto-Sell supports V3 resuming.
+    ENOCHHUB ULTIMATE - V5.9 (V3 FULL INTEGRATION)
+    - [NEW] Fishing V3: BindToRenderStep (Priority 2001).
+    - [NEW] V3 UI: Added Delay Inputs & Auto Equip support.
+    - [OPTIMIZED] Logic Killer: O(1) Dictionary Lookup.
+    - [UPDATED] Auto-Sell: Supports V3 resuming.
 ]]
 
 local Players = game:GetService("Players")
@@ -31,10 +32,10 @@ local ipairs = ipairs
 -- ==========================================================
 --  CONFIG & SAVE SYSTEM (BINARY)
 -- ==========================================================
-local FileName = "EnochHub_V5_8_Config.json"
+local FileName = "EnochHub_V5_9_Config.json"
 
 local DefaultConfig = {
-    -- Blatant V1
+    -- Blatant V1 / V3 (Shared Delays)
     BlatantEnabled = 0,
     AutoEquip = 1,
     CompleteDelay = 1.53, 
@@ -94,7 +95,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.8 (V3 Optimized)",
+    Title = "EnochHub | V5.9 (V3 + AutoEquip)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Standalone",
     Folder = "EnochHub",
@@ -111,7 +112,7 @@ local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" })
 
 _G.EnochHub_BlatantActive = false
 _G.EnochHub_FishingV2Active = false
-_G.EnochHub_FishingV3Active = false -- [NEW]
+_G.EnochHub_FishingV3Active = false
 _G.EnochHub_IsSelling = false 
 
 -- ==========================================================
@@ -463,6 +464,7 @@ local function ToggleFishingV3(state)
             end
         end)
         
+        -- [FIXED] AUTO EQUIP LOGIC FOR V3
         if not EquipThread or coroutine.status(EquipThread) == "dead" then
             EquipThread = task_spawn(function()
                 while (Config.FishingV3Enabled == 1 or Config.BlatantEnabled == 1 or Config.FishingV2Enabled == 1) do
@@ -789,7 +791,30 @@ local ToggleV3 = SectFishV3:Toggle({
     Callback = function(v) 
         Config.FishingV3Enabled = v and 1 or 0
         if v and ToggleV1 then ToggleV1:Set(false) end
+        if v and ToggleV2 then ToggleV2:Set(false) end
         ToggleFishingV3(v)
+    end 
+})
+
+SectFishV3:Input({ 
+    Title = "Complete Delay", 
+    Value = tostring(Config.CompleteDelay), 
+    Placeholder = "1.53", 
+    Numeric = true, 
+    Callback = function(text) 
+        local n = tonumber(text)
+        if n then Config.CompleteDelay = n end 
+    end 
+})
+
+SectFishV3:Input({ 
+    Title = "Cancel Delay", 
+    Value = tostring(Config.CancelDelay), 
+    Placeholder = "0.38", 
+    Numeric = true, 
+    Callback = function(text) 
+        local n = tonumber(text)
+        if n then Config.CancelDelay = n end 
     end 
 })
 
@@ -928,14 +953,14 @@ SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Preci
 -- [INITIALIZATION CHECKS]
 if Config.BlatantEnabled == 1 then ToggleBlatant(true) end
 if Config.FishingV2Enabled == 1 then ToggleFishingV2(true) end
-if Config.FishingV3Enabled == 1 then ToggleFishingV3(true) end -- [NEW]
+if Config.FishingV3Enabled == 1 then ToggleFishingV3(true) end 
 if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoFavRubyEnabled == 1 then ToggleAutoRuby(true) end
 
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.8 (V3 Active)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.9 (V3 + AutoEquip)", Duration = 4, Icon = "check" })
 
 -- [[ ------------------------------------------------------- ]]
 -- [[  FISH IT MONITOR: INVENTORY BASED (TAS) + SAVER         ]]
