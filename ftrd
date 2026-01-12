@@ -1,0 +1,486 @@
+-- ======================================================
+-- FISH IT | SECRET + RUBY GEMSTONE AUTO TRADE (BUTTON FIX)
+-- ======================================================
+
+print("========== [BUTTON FIX APPLIED] START ==========")
+
+-- ================= SERVICES =================
+local Players = game:GetService("Players")
+local RepStorage = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local lp = Players.LocalPlayer
+
+-- ================= CONFIG =================
+local TRADE_DELAY = 6.5
+local RETRY_DELAY = 2.0
+
+-- ================= STATE =================
+local autoTrade = false
+local tradeThread
+local targetUserId
+local guiVisible = true
+local tradingMode = "SECRETS_FIRST" 
+
+-- ======================================================
+-- 🔵 MODULES
+-- ======================================================
+local Replion = require(RepStorage.Packages.Replion).Client
+local ItemUtility = require(RepStorage.Shared.ItemUtility)
+local TierUtility = require(RepStorage.Shared.TierUtility)
+
+local PlayerData = Replion:WaitReplion("Data",10)
+if not PlayerData then
+    warn("[DEBUG] PlayerData not found")
+    return
+end
+
+-- ======================================================
+-- 🔵 DETECTION
+-- ======================================================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then 
+                    itemData = ItemUtility:GetItemData(numericID) 
+                end
+            end
+        end)
+    end
+
+    if itemData and itemData.Data and itemData.Data.Name then 
+        name = itemData.Data.Name 
+    end
+    
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        local tier
+        pcall(function() 
+            tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) 
+        end) 
+        if tier and tier.Name then 
+            rarity = tier.Name 
+        end 
+    end
+    
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then 
+        return item.Metadata.VariantId 
+    end
+    if item.Metadata.Shiny == true then 
+        return "Shiny" 
+    end
+    return "None"
+end
+
+local function IsSecretFish(item)
+    if not item.UUID then return false end
+    local _, rarity = GetFishNameAndRarity(item)
+    return string.upper(tostring(rarity)) == "SECRET"
+end
+
+local function IsRubyGemstoneFish(item)
+    if not item.UUID then return false end
+    local fishName, _ = GetFishNameAndRarity(item)
+    local mutation = GetMutation(item)
+    
+    local isRuby = string.upper(tostring(fishName)) == "RUBY"
+    local isGemstone = string.upper(tostring(mutation)) == "GEMSTONE"
+    
+    if isRuby and isGemstone then
+        return true, fishName, mutation
+    end
+    return false, fishName, mutation
+end
+
+local function GetSecretUUIDs()
+    local uuids = {}
+    local fishInfo = {}
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return uuids, fishInfo end
+    for _, items in pairs(inv) do
+        if type(items) == "table" then
+            for _, item in ipairs(items) do
+                if item and IsSecretFish(item) then
+                    table.insert(uuids, item.UUID)
+                    local fishName, rarity = GetFishNameAndRarity(item)
+                    table.insert(fishInfo, {uuid = item.UUID, name = fishName, rarity = rarity})
+                end
+            end
+        end
+    end
+    return uuids, fishInfo
+end
+
+local function GetRubyGemstoneUUIDs()
+    local uuids = {}
+    local fishInfo = {}
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return uuids, fishInfo end
+    for _, items in pairs(inv) do
+        if type(items) == "table" then
+            for _, item in ipairs(items) do
+                if item then
+                    local isRubyGemstone, fishName, mutation = IsRubyGemstoneFish(item)
+                    if isRubyGemstone then
+                        table.insert(uuids, item.UUID)
+                        table.insert(fishInfo, {uuid = item.UUID, name = fishName, mutation = mutation})
+                    end
+                end
+            end
+        end
+    end
+    return uuids, fishInfo
+end
+
+local function GetRemote(name)
+    local obj = RepStorage
+    for _,v in ipairs({"Packages","_Index","sleitnick_net@0.2.0","net"}) do
+        obj = obj:WaitForChild(v)
+    end
+    return obj:FindFirstChild(name)
+end
+
+local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
+local function IsItemStillInInventory(uuid)
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return false end
+    for _, items in pairs(inv) do
+        if type(items) == "table" then
+            for _, item in ipairs(items) do
+                if item and item.UUID == uuid then return true end
+            end
+        end
+    end
+    return false
+end
+
+-- ======================================================
+-- 🔵 GUI SETUP (PRESERVED)
+-- ======================================================
+local gui = Instance.new("ScreenGui", lp.PlayerGui)
+gui.ResetOnSpawn = false
+gui.Name = "SecretRubyTraderGUI"
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromOffset(320,260)
+frame.Position = UDim2.new(0,20,0.5,-130)
+frame.BackgroundColor3 = Color3.fromRGB(25,25,35)
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(100,0,150)
+frame.Active = true
+frame.Draggable = true
+
+local titleBar = Instance.new("Frame", frame)
+titleBar.Size = UDim2.new(1,0,0,30)
+titleBar.BackgroundColor3 = Color3.fromRGB(40,40,50)
+titleBar.BorderSizePixel = 0
+
+local title = Instance.new("TextLabel", titleBar)
+title.Size = UDim2.new(1,-60,1,0)
+title.Position = UDim2.new(0,5,0,0)
+title.Text = "🎣 SECRET + RUBY GEMSTONE 🎣"
+title.TextColor3 = Color3.fromRGB(255,215,0)
+title.TextScaled = true
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local minimizeBtn = Instance.new("TextButton", titleBar)
+minimizeBtn.Size = UDim2.fromOffset(20,20)
+minimizeBtn.Position = UDim2.new(1,-45,0.5,-10)
+minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(80,80,100)
+
+local closeBtn = Instance.new("TextButton", titleBar)
+closeBtn.Size = UDim2.fromOffset(20,20)
+closeBtn.Position = UDim2.new(1,-20,0.5,-10)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180,60,60)
+
+local showBtn = Instance.new("TextButton", gui)
+showBtn.Size = UDim2.fromOffset(40,40)
+showBtn.Position = UDim2.new(0,20,0,20)
+showBtn.Text = "+"
+showBtn.TextColor3 = Color3.fromRGB(255,255,255)
+showBtn.BackgroundColor3 = Color3.fromRGB(100,0,150)
+showBtn.Visible = false
+
+local divider = Instance.new("Frame", frame)
+divider.Size = UDim2.new(0.9,0,0,2)
+divider.Position = UDim2.new(0.05,0,0,35)
+divider.BackgroundColor3 = Color3.fromRGB(100,0,150)
+
+local inputLabel = Instance.new("TextLabel", frame)
+inputLabel.Size = UDim2.new(1,-20,0,20)
+inputLabel.Position = UDim2.new(0,10,0,45)
+inputLabel.Text = "Target Username:"
+inputLabel.TextColor3 = Color3.fromRGB(200,200,200)
+inputLabel.BackgroundTransparency = 1
+inputLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local input = Instance.new("TextBox", frame)
+input.Size = UDim2.new(1,-20,0,30)
+input.Position = UDim2.new(0,10,0,65)
+input.PlaceholderText = "Enter username here"
+input.Text = "mm3kenak"
+input.ClearTextOnFocus = false
+input.BackgroundColor3 = Color3.fromRGB(40,40,50)
+input.TextColor3 = Color3.fromRGB(255,255,255)
+
+local secretCountLabel = Instance.new("TextLabel", frame)
+secretCountLabel.Size = UDim2.new(1,-20,0,20)
+secretCountLabel.Position = UDim2.new(0,10,0,105)
+secretCountLabel.Text = "Secret Fish: 0"
+secretCountLabel.TextColor3 = Color3.fromRGB(255,215,0)
+secretCountLabel.BackgroundTransparency = 1
+secretCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local rubyCountLabel = Instance.new("TextLabel", frame)
+rubyCountLabel.Size = UDim2.new(1,-20,0,20)
+rubyCountLabel.Position = UDim2.new(0,10,0,125)
+rubyCountLabel.Text = "Ruby Gemstone: 0"
+rubyCountLabel.TextColor3 = Color3.fromRGB(255,100,100)
+rubyCountLabel.BackgroundTransparency = 1
+rubyCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local modeLabel = Instance.new("TextLabel", frame)
+modeLabel.Size = UDim2.new(1,-20,0,20)
+modeLabel.Position = UDim2.new(0,10,0,150)
+modeLabel.Text = "Trading Mode:"
+modeLabel.TextColor3 = Color3.fromRGB(200,200,200)
+modeLabel.BackgroundTransparency = 1
+modeLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local modeContainer = Instance.new("Frame", frame)
+modeContainer.Size = UDim2.new(1,-20,0,25)
+modeContainer.Position = UDim2.new(0,10,0,170)
+modeContainer.BackgroundTransparency = 1
+
+local secretsFirstBtn = Instance.new("TextButton", modeContainer)
+secretsFirstBtn.Size = UDim2.fromOffset(100,25)
+secretsFirstBtn.Text = "Secrets First"
+secretsFirstBtn.TextColor3 = Color3.fromRGB(255,255,255)
+secretsFirstBtn.Font = Enum.Font.Gotham
+
+local rubyOnlyBtn = Instance.new("TextButton", modeContainer)
+rubyOnlyBtn.Size = UDim2.fromOffset(100,25)
+rubyOnlyBtn.Position = UDim2.new(0,105,0,0)
+rubyOnlyBtn.Text = "Ruby Only"
+rubyOnlyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+rubyOnlyBtn.Font = Enum.Font.Gotham
+
+local allBtn = Instance.new("TextButton", modeContainer)
+allBtn.Size = UDim2.fromOffset(90,25)
+allBtn.Position = UDim2.new(0,210,0,0)
+allBtn.Text = "All"
+allBtn.TextColor3 = Color3.fromRGB(255,255,255)
+allBtn.Font = Enum.Font.Gotham
+
+local statusLabel = Instance.new("TextLabel", frame)
+statusLabel.Size = UDim2.new(1,-20,0,25)
+statusLabel.Position = UDim2.new(0,10,0,200)
+statusLabel.Text = "🟢 Ready - Enter target username"
+statusLabel.TextColor3 = Color3.fromRGB(100,255,100)
+statusLabel.BackgroundTransparency = 1
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local toggle = Instance.new("TextButton", frame)
+toggle.Size = UDim2.new(1,-20,0,40)
+toggle.Position = UDim2.new(0,10,1,-55)
+toggle.Text = "▶ START AUTO TRADE"
+toggle.BackgroundColor3 = Color3.fromRGB(40,150,40)
+toggle.TextColor3 = Color3.fromRGB(255,255,255)
+toggle.Font = Enum.Font.GothamBold
+toggle.TextSize = 16
+
+-- ======================================================
+-- 🔵 FUNCTIONS
+-- ======================================================
+local function updateFishCounts()
+    local secretCount = #GetSecretUUIDs()
+    local rubyGemstoneCount = #GetRubyGemstoneUUIDs()
+    secretCountLabel.Text = string.format("Secret Fish: %d", secretCount)
+    rubyCountLabel.Text = string.format("Ruby Gemstone: %d", rubyGemstoneCount)
+    return secretCount, rubyGemstoneCount
+end
+
+local function UpdateStatus(message, color)
+    statusLabel.Text = message
+    statusLabel.TextColor3 = color
+end
+
+local function UpdateModeButtons()
+    secretsFirstBtn.BackgroundColor3 = tradingMode == "SECRETS_FIRST" and Color3.fromRGB(80,180,80) or Color3.fromRGB(60,150,60)
+    rubyOnlyBtn.BackgroundColor3 = tradingMode == "RUBY_GEMSTONE" and Color3.fromRGB(180,80,80) or Color3.fromRGB(150,60,60)
+    allBtn.BackgroundColor3 = tradingMode == "ALL" and Color3.fromRGB(100,100,180) or Color3.fromRGB(80,80,150)
+end
+
+-- Forward declaration of StopTrading
+local StopTrading 
+
+local function RunAutoTrade()
+    if tradeThread then task.cancel(tradeThread) end
+
+    tradeThread = task.spawn(function()
+        local targetPlayer = Players:GetPlayerByUserId(targetUserId)
+        if not targetPlayer then return end
+
+        while autoTrade do
+            local success, err = pcall(function()
+                -- 1. Scan Inventory
+                local secretUUIDs, secretInfo = GetSecretUUIDs()
+                local rubyGemstoneUUIDs, rubyInfo = GetRubyGemstoneUUIDs()
+
+                -- 🔵 CHECK AUTO STOP CONDITION
+                if #secretUUIDs == 0 and #rubyGemstoneUUIDs == 0 then
+                    print("[DEBUG] ZERO FISH LEFT - STOPPING SCRIPT")
+                    autoTrade = false -- Set flag to false
+                    return -- Exit pcall
+                end
+
+                -- 2. Select Fish
+                local uuidToTrade = nil
+                local fishDetails = "Unknown"
+
+                if tradingMode == "SECRETS_FIRST" then
+                    if #secretUUIDs > 0 then
+                        uuidToTrade = secretUUIDs[1]
+                        fishDetails = secretInfo[1].name
+                    elseif #rubyGemstoneUUIDs > 0 then
+                        uuidToTrade = rubyGemstoneUUIDs[1]
+                        fishDetails = rubyInfo[1].name
+                    end
+                elseif tradingMode == "RUBY_GEMSTONE" then
+                    if #rubyGemstoneUUIDs > 0 then
+                        uuidToTrade = rubyGemstoneUUIDs[1]
+                        fishDetails = rubyInfo[1].name
+                    end
+                elseif tradingMode == "ALL" then
+                    if #secretUUIDs > 0 then
+                        uuidToTrade = secretUUIDs[1]
+                        fishDetails = secretInfo[1].name
+                    elseif #rubyGemstoneUUIDs > 0 then
+                        uuidToTrade = rubyGemstoneUUIDs[1]
+                        fishDetails = rubyInfo[1].name
+                    end
+                end
+
+                -- 3. If no fish found for current mode (but total might not be 0)
+                if not uuidToTrade then
+                    task.wait(2)
+                    return
+                end
+
+                -- 4. Trade
+                print("[DEBUG] Trading: " .. fishDetails)
+                RF_InitiateTrade:InvokeServer(targetUserId, uuidToTrade)
+                
+                -- 5. Wait for removal
+                local start = os.clock()
+                local done = false
+                repeat
+                    task.wait(0.5)
+                    done = not IsItemStillInInventory(uuidToTrade)
+                until done or (os.clock() - start) > 10
+
+                if done then
+                    task.wait(TRADE_DELAY)
+                else
+                    task.wait(RETRY_DELAY)
+                end
+            end)
+            
+            if not success then warn("Error: "..tostring(err)) task.wait(2) end
+            
+            -- Break loop immediately if autoTrade was set to false inside pcall
+            if not autoTrade then break end
+            
+            task.wait(0.1)
+        end
+        
+        -- Loop Ended: Call StopTrading to update UI
+        StopTrading()
+    end)
+end
+
+StopTrading = function()
+    autoTrade = false
+    
+    -- 🟢 FIX: Update GUI FIRST before checking thread
+    toggle.Text = "▶ START AUTO TRADE"
+    toggle.BackgroundColor3 = Color3.fromRGB(40,150,40)
+    
+    local s, r = updateFishCounts()
+    if s == 0 and r == 0 then
+        UpdateStatus("🏁 DONE! Inventory Empty.", Color3.fromRGB(100,255,100))
+    else
+        UpdateStatus("🔴 Stopped Manually.", Color3.fromRGB(255,100,100))
+    end
+    print("[DEBUG] Auto trade stopped.")
+
+    -- 🟢 FIX: Only cancel thread if we are NOT inside the thread
+    -- This allows the loop to finish naturally without crashing the UI update
+    if tradeThread and coroutine.running() ~= tradeThread then
+        task.cancel(tradeThread)
+        tradeThread = nil
+    end
+end
+
+local function StartTrading()
+    local name = input.Text
+    if name == "" then name = "mm3kenak" input.Text = name end
+    
+    local success, result = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
+    if not success then UpdateStatus("Error finding player", Color3.fromRGB(255,100,100)) return end
+    
+    local targetPlayer = Players:GetPlayerByUserId(result)
+    if not targetPlayer then UpdateStatus("Player not in server", Color3.fromRGB(255,100,100)) return end
+    
+    targetUserId = result
+    autoTrade = true
+    toggle.Text = "⏹ STOP TRADING"
+    toggle.BackgroundColor3 = Color3.fromRGB(180,60,60)
+    UpdateStatus("♻️ Trading Started...", Color3.fromRGB(255,255,0))
+    
+    RunAutoTrade()
+end
+
+-- Events
+toggle.MouseButton1Click:Connect(function()
+    if autoTrade then StopTrading() else StartTrading() end
+end)
+
+secretsFirstBtn.MouseButton1Click:Connect(function() tradingMode="SECRETS_FIRST" UpdateModeButtons() end)
+rubyOnlyBtn.MouseButton1Click:Connect(function() tradingMode="RUBY_GEMSTONE" UpdateModeButtons() end)
+allBtn.MouseButton1Click:Connect(function() tradingMode="ALL" UpdateModeButtons() end)
+
+minimizeBtn.MouseButton1Click:Connect(function() frame.Visible=false showBtn.Visible=true end)
+showBtn.MouseButton1Click:Connect(function() frame.Visible=true showBtn.Visible=false end)
+closeBtn.MouseButton1Click:Connect(function() StopTrading() gui:Destroy() end)
+
+-- Init
+UpdateModeButtons()
+updateFishCounts()
+task.spawn(function()
+    while gui.Parent do
+        if not autoTrade then updateFishCounts() end
+        task.wait(3)
+    end
+end)
