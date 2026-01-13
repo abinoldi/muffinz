@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.21 (WEATHER MACHINE DEFAULT)
-    - [UPDATE] Default Saved Position sekarang adalah "Weather Machine".
-    - [AUTO] Script akan langsung teleport ke Weather Machine saat pertama kali dijalankan (jika belum ada config lain).
-    - [MAINTAINED] Safe Start (Anti 279), Network Guard, & Crash Guard tetap aktif.
+    ENOCHHUB ULTIMATE - V5.24 (FULL AUTO-START EDITION)
+    - [CONFIG] Updated Default: Blatant, AutoSell, Potato, Weather Machine active by default.
+    - [FIX] Teleport menggunakan 'PivotTo' (Posisi + Arah Pandang Presisi).
+    - [SAFE] Safe Start (Anti 279), Network Guard, & Crash Guard Included.
 ]]
 
 -- ==========================================================
@@ -11,7 +11,7 @@
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
-task.wait(3) 
+task.wait(3) -- Buffer waktu agar ping stabil sebelum script jalan
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,6 +29,7 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 _G.LastActiveMode = "None"
 _G.IsNetworkPaused = false 
+_G.OriginalJobId = game.JobId 
 
 -- ==========================================================
 --  GARBAGE COLLECTOR
@@ -61,10 +62,13 @@ local ipairs = ipairs
 -- ==========================================================
 --  CONFIG
 -- ==========================================================
-local FileName = "EnochHub_V5_21_WeatherMachine.json"
+local FileName = "EnochHub_V5_24_AutoStart.json"
+
+-- Menghitung Rotasi Default Weather Machine (Agar hadapnya benar)
+local DefaultRot = math.atan2(0.042, 0.999) 
 
 local DefaultConfig = {
-    BlatantEnabled = 1,
+    BlatantEnabled = 1,      -- [ON] Sesuai Request
     AutoEquip = 1,
     CompleteDelay = 1.53, 
     CancelDelay = 0.38, 
@@ -73,31 +77,37 @@ local DefaultConfig = {
     V2DelayReset = 0.1,
     V2AutoGreat = 1,
     FishingV3Enabled = 0,
-    AutoSellEnabled = 1,
+    AutoSellEnabled = 1,     -- [ON] Sesuai Request
     AutoUnfavRubySmart = 0,
     AutoAcceptTrade = 0,
     AntiAfkEnabled = 1,
-    PotatoModeEnabled = 1,
+    PotatoModeEnabled = 1,   -- [ON] Sesuai Request
     PotatoFPS = 60,
     TotemType = "Luck Totem",
     CrashGuardEnabled = 1,
     NetworkGuardEnabled = 1,
     AutoRejoinEnabled = 1,
     AutoTotemSingle = 0,
+    RejoinSameServer = 1,
     
-    -- [UPDATED] Default Position: Weather Machine
-    -- Koordinat: -1518.550, 2.875, 1916.148 | Rotasi (r): 0 (Menghadap Z+ sesuai Look Vector)
-    SavedPosition = {x = -1518.550, y = 2.875, z = 1916.148, r = 0}, 
+    -- [DEFAULT] Weather Machine + Rotasi Presisi
+    SavedPosition = {x = -1518.550, y = 2.875, z = 1916.148, r = DefaultRot}, 
     AutoLoadPosition = 1
 }
 
 local Config = {}
 for k,v in pairs(DefaultConfig) do Config[k] = v end
 
+-- Load Config (Dengan Auto-Repair jika file lama rusak)
 if isfile and isfile(FileName) then
     pcall(function()
         local decoded = HttpService:JSONDecode(readfile(FileName))
         for k, v in pairs(decoded) do Config[k] = v end
+        
+        -- Repair: Jika config lama tidak punya 'r' (rotasi), reset ke default Weather Machine
+        if Config.SavedPosition and Config.SavedPosition.r == nil then
+            Config.SavedPosition = DefaultConfig.SavedPosition
+        end
     end)
 end
 
@@ -116,7 +126,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.21 (Weather Default)",
+    Title = "EnochHub | V5.24 (Auto Start)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Optimized",
     Folder = "EnochHub",
@@ -137,7 +147,7 @@ _G.EnochHub_FishingV3Active = false
 _G.EnochHub_IsSelling = false 
 
 -- ==========================================================
---  REMOTES
+--  REMOTES & MODULES
 -- ==========================================================
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = ReplicatedStorage:WaitForChild("Packages")
@@ -167,7 +177,7 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- ==========================================================
---  LOGIC KILLER
+--  LOGIC KILLER (OPTIMIZED)
 -- ==========================================================
 local BLOCKED_REMOTES = {
     ["RequestFishingMinigameStarted"] = true,
@@ -208,20 +218,6 @@ end)
 setreadonly(mt, true)
 
 local function SuppressGameVisuals(active)
-    local Succ, TextController = pcall(function() return require(game.ReplicatedStorage.Controllers.TextNotificationController) end)
-    if Succ and TextController then
-        if active then
-            if not TextController._OldDeliver then TextController._OldDeliver = TextController.DeliverNotification end
-            TextController.DeliverNotification = function(self, data)
-                if data and data.Text and (string_find(tostring(data.Text), "Auto Fishing") or string_find(tostring(data.Text), "Reach Level")) then return end
-                return TextController._OldDeliver(self, data)
-            end
-        elseif TextController._OldDeliver then
-            TextController.DeliverNotification = TextController._OldDeliver
-            TextController._OldDeliver = nil
-        end
-    end
-    
     if active then
         RegisterConnection("VisualSuppress", RunService.Stepped:Connect(function()
             if not (_G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active) then
@@ -616,7 +612,7 @@ TotemToggleUI = SectTotem:Toggle({ Title = "Start Formation (Fly)", Callback = f
 local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
 local Coords = {["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)}}
 local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
-SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) local d = Coords[n]; if d and LocalPlayer.Character then if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end; task_wait(0.3); local look = Vector3.new(d.Look.X, 0, d.Look.Z); LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look) end end})
+SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) local d = Coords[n]; if d and LocalPlayer.Character then if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end; task_wait(0.3); local look = Vector3.new(d.Look.X, 0, d.Look.Z); LocalPlayer.Character:PivotTo(CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look)) end end})
 
 -- [UPDATED] CUSTOM LOCATION WITH ROTATION
 local SectCustomTp = TabTp:Section({ Title = "Last Location", TextSize = 17 })
@@ -630,7 +626,7 @@ local function TeleportToSaved()
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             -- Create CFrame from Position and Orientation (Y-axis rotation)
             local newCFrame = CFrame.new(targetPos) * CFrame.fromOrientation(0, rotY, 0)
-            LocalPlayer.Character.HumanoidRootPart.CFrame = newCFrame + Vector3.new(0,2,0)
+            LocalPlayer.Character:PivotTo(newCFrame + Vector3.new(0,2,0))
             
             WindUI:Notify({Title="Teleport", Content="Loaded saved position!", Icon="map-pin"})
         end
@@ -822,6 +818,7 @@ SectGfx:Toggle({ Title="Extreme Potato", Value=(Config.PotatoModeEnabled == 1), 
 SectGfx:Toggle({ Title="Anti-Crash Guard", Value=(Config.CrashGuardEnabled == 1), Callback = function(s) Config.CrashGuardEnabled = s and 1 or 0 end })
 SectGfx:Toggle({ Title="Network Guard (Ping)", Value=(Config.NetworkGuardEnabled == 1), Callback = function(s) Config.NetworkGuardEnabled = s and 1 or 0 end })
 SectGfx:Toggle({ Title="Auto Rejoin", Value=(Config.AutoRejoinEnabled == 1), Callback = function(s) Config.AutoRejoinEnabled = s and 1 or 0 end })
+SectGfx:Toggle({ Title="Prioritize Same Server", Value=(Config.RejoinSameServer == 1), Callback = function(s) Config.RejoinSameServer = s and 1 or 0 end })
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v end })
 
 -- [NEW] AUTO RESUME CRASH GUARD + NETWORK GUARD
@@ -876,15 +873,25 @@ task_spawn(function()
     if not PromptGui then return end
     
     if Config.AutoLoadPosition == 1 then
-        task_wait(2) 
+        task_wait(1.5) 
         TeleportToSaved()
     end
 
     PromptGui.DescendantAdded:Connect(function(child)
         if Config.AutoRejoinEnabled == 1 then
             if child.Name == "ErrorTitle" or child.Name == "ErrorPrompt" or child:FindFirstChild("Button") then
-                 WindUI:Notify({Title="Auto Rejoin", Content="Disconnect detected! Rejoining...", Icon="refresh-cw", Duration=5})
+                 WindUI:Notify({Title="Auto Rejoin", Content="Disconnect! Attempting Rejoin...", Icon="refresh-cw", Duration=5})
                  task_wait(2)
+                 
+                 -- SMART REJOIN LOGIC
+                 if Config.RejoinSameServer == 1 and _G.OriginalJobId ~= "" then
+                     local success, err = pcall(function()
+                         TeleportService:TeleportToPlaceInstance(game.PlaceId, _G.OriginalJobId, LocalPlayer)
+                     end)
+                     if success then return end -- If successful, stop here
+                 end
+                 
+                 -- Fallback to Random Server if Same Server fails or is disabled
                  TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end
         end
@@ -901,7 +908,7 @@ if Config.AutoAcceptTrade == 1 then ToggleAutoTrade(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 if Config.AutoTotemSingle == 1 then ToggleSingleTotem(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.21 (Weather Default)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.24 (Auto Start)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  FISH IT ULTIMATE | MONITOR
