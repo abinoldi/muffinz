@@ -92,7 +92,7 @@ local DefaultConfig = {
     
     -- [DEFAULT] Weather Machine + Rotasi Presisi
     SavedPosition = {x = -1518.550, y = 2.875, z = 1916.148, r = DefaultRot}, 
-    AutoLoadPosition = 1
+    AutoLoadPosition = 0
 }
 
 local Config = {}
