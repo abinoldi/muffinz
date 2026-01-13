@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.16 (AUTO RESUME GUARD)
-    - [UPGRADE] Crash Guard sekarang memiliki "Smart Resume".
-    - [LOGIC] Jika freeze, script mati -> Tunggu 8 detik -> Nyala sendiri.
-    - [FIX] Totem Timer 60 Menit tetap berjalan.
+    ENOCHHUB ULTIMATE - V5.18 (AUTO SAVE & LOAD POSITION)
+    - [NEW] Save Position: Simpan koordinat tempat berdiri (Tab Teleport).
+    - [NEW] Auto Load Pos: Script otomatis teleport ke lokasi simpanan saat dijalankan.
+    - [MAINTAINED] Network Guard & Crash Guard V5.17.
 ]]
 
 local Players = game:GetService("Players")
@@ -12,13 +12,15 @@ local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local VirtualUser = game:GetService("VirtualUser")
-local CollectionService = game:GetService("CollectionService")
+local TeleportService = game:GetService("TeleportService")
+local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
---  STATE TRACKER (Untuk Auto Resume)
+--  STATE TRACKER
 -- ==========================================================
-_G.LastActiveMode = "None" -- Menyimpan mode terakhir (V1/V2/V3)
+_G.LastActiveMode = "None"
+_G.IsNetworkPaused = false 
 
 -- ==========================================================
 --  GARBAGE COLLECTOR
@@ -51,7 +53,7 @@ local ipairs = ipairs
 -- ==========================================================
 --  CONFIG
 -- ==========================================================
-local FileName = "EnochHub_V5_16_AutoResume.json"
+local FileName = "EnochHub_V5_18_PosSaver.json"
 
 local DefaultConfig = {
     BlatantEnabled = 0,
@@ -71,7 +73,12 @@ local DefaultConfig = {
     PotatoFPS = 60,
     TotemType = "Luck Totem",
     CrashGuardEnabled = 1,
-    AutoTotemSingle = 0
+    NetworkGuardEnabled = 1,
+    AutoRejoinEnabled = 1,
+    AutoTotemSingle = 0,
+    -- [NEW] Position Saving
+    SavedPosition = nil, -- Format: {x=0, y=0, z=0}
+    AutoLoadPosition = 1 -- Enabled by default
 }
 
 local Config = {}
@@ -99,7 +106,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.16 (Auto Resume)",
+    Title = "EnochHub | V5.18 (Pos Saver)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Optimized",
     Folder = "EnochHub",
@@ -249,7 +256,7 @@ local function ToggleBlatant(state)
     ClearConnection("BlatantLoop")
     
     if state then
-        _G.LastActiveMode = "V1" -- TRACK STATE
+        _G.LastActiveMode = "V1" 
         if _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then 
             _G.EnochHub_FishingV2Active=false; _G.EnochHub_FishingV3Active=false; 
             Config.FishingV2Enabled=0; Config.FishingV3Enabled=0 
@@ -258,6 +265,9 @@ local function ToggleBlatant(state)
         phase = "INIT23"; lastStepTime = os_clock()
         RegisterConnection("BlatantLoop", RunService.Heartbeat:Connect(function()
             if Config.BlatantEnabled ~= 1 then return end
+            -- NETWORK PAUSE LOGIC
+            if _G.IsNetworkPaused then return end 
+            
             if _G.EnochHub_IsSelling then phase = "WAIT_STOP"; lastStepTime = os_clock(); return end
             local now = os_clock()
             if phase == "WAIT_STOP" and (now - lastStepTime) >= Config.CancelDelay then phase = "STEP123" end
@@ -268,7 +278,7 @@ local function ToggleBlatant(state)
         if not EquipThread then
             EquipThread = task_spawn(function() 
                 while Config.BlatantEnabled == 1 do 
-                    if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+                    if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then 
                         pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
                     end
                     task_wait(0.5) 
@@ -309,7 +319,7 @@ local function ToggleFishingV3(state)
     pcall(function() RunService:UnbindFromRenderStep(V3_LOOP_NAME) end)
     
     if state then
-        _G.LastActiveMode = "V3" -- TRACK STATE
+        _G.LastActiveMode = "V3" 
         if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active then
             _G.EnochHub_BlatantActive = false; _G.EnochHub_FishingV2Active = false
             Config.BlatantEnabled = 0; Config.FishingV2Enabled = 0
@@ -322,6 +332,9 @@ local function ToggleFishingV3(state)
         lastStepTime = os_clock()
         RunService:BindToRenderStep(V3_LOOP_NAME, 2001, function()
             if Config.FishingV3Enabled ~= 1 then return end
+            -- NETWORK PAUSE LOGIC
+            if _G.IsNetworkPaused then return end
+
             if _G.EnochHub_IsSelling then phase = "WAIT_STOP"; lastStepTime = os_clock(); return end
             local now = os_clock()
             if (now - lastStepTime) < 0.01 and phase ~= "STEP4" then return end
@@ -333,7 +346,7 @@ local function ToggleFishingV3(state)
         if not EquipThread then
             EquipThread = task_spawn(function()
                 while (Config.FishingV3Enabled == 1 or Config.BlatantEnabled == 1 or Config.FishingV2Enabled == 1) do
-                    if (Config.AutoEquip == 1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+                    if (Config.AutoEquip == 1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then 
                         pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
                     end
                     task_wait(0.5)
@@ -360,7 +373,7 @@ local function ToggleFishingV2(state)
     SuppressGameVisuals(state or _G.EnochHub_BlatantActive or _G.EnochHub_FishingV3Active)
     ClearConnection("V2Thread")
     if state then
-        _G.LastActiveMode = "V2" -- TRACK STATE
+        _G.LastActiveMode = "V2" 
         if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV3Active then 
             _G.EnochHub_BlatantActive=false; _G.EnochHub_FishingV3Active=false; 
             Config.BlatantEnabled=0; Config.FishingV3Enabled=0; 
@@ -371,6 +384,9 @@ local function ToggleFishingV2(state)
         pcall(function() RF_CancelFishingInputs:InvokeServer() end); task_wait(0.005)
         local thread = task_spawn(function()
             while Config.FishingV2Enabled == 1 do
+                -- NETWORK PAUSE LOGIC
+                if _G.IsNetworkPaused then task_wait(1); continue end
+
                 if _G.EnochHub_IsSelling then task_wait(0.5); continue end
                 task_spawn(function() pcall(function() RF_ChargeFishingRod:InvokeServer() end) end)
                 task_spawn(function() pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(V2_FishArgs)) end) end)
@@ -385,7 +401,7 @@ local function ToggleFishingV2(state)
         if not EquipThread then 
             EquipThread = task_spawn(function() 
                 while (Config.FishingV2Enabled==1 or Config.BlatantEnabled==1 or Config.FishingV3Enabled==1) do 
-                    if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling then 
+                    if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then 
                         pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
                     end; 
                     task_wait(0.5) 
@@ -559,6 +575,8 @@ local function ToggleSingleTotem(state)
     if state then
         RegisterConnection("OneSpotTotem", task_spawn(function()
             while Config.AutoTotemSingle == 1 do
+                if _G.IsNetworkPaused then task_wait(1); continue end -- Network Safe
+
                 if not Config.TotemType then task_wait(1); continue end
                 local uuid = GetTotemUUID(Config.TotemType)
                 if uuid then
@@ -571,8 +589,7 @@ local function ToggleSingleTotem(state)
                     end)
                     WindUI:Notify({ Title = "Totem", Content = "Placed! Next in 60m", Duration = 3 })
                     
-                    -- Smart Wait Loop (Breakable)
-                    for i = 1, 3660 do -- 3660 seconds = 60 minutes
+                    for i = 1, 3660 do 
                         if Config.AutoTotemSingle == 0 then break end
                         task_wait(1)
                     end
@@ -593,6 +610,46 @@ local SectTp = TabTp:Section({ Title = "Locations", TextSize = 17 })
 local Coords = {["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)}}
 local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
 SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) local d = Coords[n]; if d and LocalPlayer.Character then if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end; task_wait(0.3); local look = Vector3.new(d.Look.X, 0, d.Look.Z); LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look) end end})
+
+-- [NEW] CUSTOM LOCATION & SAVE
+local SectCustomTp = TabTp:Section({ Title = "Last Location", TextSize = 17 })
+
+local function TeleportToSaved()
+    if Config.SavedPosition and Config.SavedPosition.x then
+        local target = Vector3.new(Config.SavedPosition.x, Config.SavedPosition.y, Config.SavedPosition.z)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target + Vector3.new(0,2,0))
+            WindUI:Notify({Title="Teleport", Content="Loaded saved position!", Icon="map-pin"})
+        end
+    else
+        WindUI:Notify({Title="Error", Content="No position saved.", Icon="alert-triangle"})
+    end
+end
+
+SectCustomTp:Button({
+    Title = "Save Current Position",
+    Icon = "save",
+    Callback = function()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            Config.SavedPosition = {x = root.Position.X, y = root.Position.Y, z = root.Position.Z}
+            SaveSettings()
+            WindUI:Notify({Title="Saved", Content="Position stored.", Icon="check"})
+        end
+    end
+})
+
+SectCustomTp:Toggle({
+    Title = "Auto Load on Start",
+    Value = (Config.AutoLoadPosition == 1),
+    Callback = function(v) Config.AutoLoadPosition = v and 1 or 0 end
+})
+
+SectCustomTp:Button({
+    Title = "Teleport to Saved",
+    Icon = "arrow-right",
+    Callback = function() TeleportToSaved() end
+})
 
 local SectPlayerTp = TabTp:Section({ Title = "Teleport to Player", TextSize = 17 })
 local SelectedPlayer = nil
@@ -747,71 +804,73 @@ SectUtil:Button({ Title="Reset Config", Icon="trash", Callback=function() ResetC
 local SectGfx = TabUtil:Section({ Title = "Graphics & Stability", TextSize = 17 })
 SectGfx:Toggle({ Title="Extreme Potato", Value=(Config.PotatoModeEnabled == 1), Callback = function(s) Config.PotatoModeEnabled = s and 1 or 0; TogglePotato(s) end })
 SectGfx:Toggle({ Title="Anti-Crash Guard", Value=(Config.CrashGuardEnabled == 1), Callback = function(s) Config.CrashGuardEnabled = s and 1 or 0 end })
+SectGfx:Toggle({ Title="Network Guard (Ping)", Value=(Config.NetworkGuardEnabled == 1), Callback = function(s) Config.NetworkGuardEnabled = s and 1 or 0 end })
+SectGfx:Toggle({ Title="Auto Rejoin", Value=(Config.AutoRejoinEnabled == 1), Callback = function(s) Config.AutoRejoinEnabled = s and 1 or 0 end })
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v end })
 
--- [NEW] AUTO RESUME CRASH GUARD
+-- [NEW] AUTO RESUME CRASH GUARD + NETWORK GUARD
 task_spawn(function()
     local lastFrame = os_clock()
+    local lastPingCheck = os_clock()
+    
     RunService.Heartbeat:Connect(function()
         local now = os_clock()
         local delta = now - lastFrame
         lastFrame = now
         
-        -- Jika Freeze > 3 detik dan Guard Aktif
+        -- 1. CRASH GUARD (FPS Freeze)
         if delta > 3 and Config.CrashGuardEnabled == 1 then
             if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then
-                
-                -- 1. Simpan State Terakhir
                 local savedMode = _G.LastActiveMode
-                
-                -- 2. Kill Switch (Stop Semua)
-                Config.BlatantEnabled = 0
-                Config.FishingV2Enabled = 0
-                Config.FishingV3Enabled = 0
-                _G.EnochHub_BlatantActive = false
-                _G.EnochHub_FishingV2Active = false
-                _G.EnochHub_FishingV3Active = false
-                
+                Config.BlatantEnabled = 0; Config.FishingV2Enabled = 0; Config.FishingV3Enabled = 0
+                _G.EnochHub_BlatantActive = false; _G.EnochHub_FishingV2Active = false; _G.EnochHub_FishingV3Active = false
                 pcall(function() RunService:UnbindFromRenderStep(V3_LOOP_NAME) end)
-                ClearConnection("BlatantLoop")
-                ClearConnection("V2Thread")
-                
-                -- Update Toggle UI secara visual (opsional, tapi bagus buat feedback)
-                if ToggleV1 then ToggleV1:Set(false) end
-                if ToggleV2 then ToggleV2:Set(false) end
-                if ToggleV3 then ToggleV3:Set(false) end
-                
+                ClearConnection("BlatantLoop"); ClearConnection("V2Thread")
+                if ToggleV1 then ToggleV1:Set(false) end; if ToggleV2 then ToggleV2:Set(false) end; if ToggleV3 then ToggleV3:Set(false) end
                 RunService:Set3dRenderingEnabled(true)
-                
-                WindUI:Notify({
-                    Title = "CRASH GUARD ACTIVATED",
-                    Content = "Game Froze! Restarting in 8s...",
-                    Icon = "shield-alert",
-                    Duration = 8
-                })
-                
-                -- 3. AUTO RESUME LOGIC (Di Thread Terpisah)
+                WindUI:Notify({Title = "CRASH GUARD", Content = "Restarting in 8s...", Icon = "shield-alert", Duration = 8})
                 task_spawn(function()
-                    task_wait(8) -- Tunggu 8 detik untuk "Bernapas"
-                    
-                    if savedMode == "V1" then
-                        Config.BlatantEnabled = 1
-                        ToggleV1:Set(true) -- Ini akan memicu ToggleBlatant(true)
-                    elseif savedMode == "V2" then
-                        Config.FishingV2Enabled = 1
-                        ToggleV2:Set(true)
-                    elseif savedMode == "V3" then
-                        Config.FishingV3Enabled = 1
-                        ToggleV3:Set(true)
-                    end
-                    
-                    WindUI:Notify({
-                        Title = "AUTO RESUME",
-                        Content = "Restoring Session...",
-                        Icon = "check-circle",
-                        Duration = 3
-                    })
+                    task_wait(8)
+                    if savedMode == "V1" then Config.BlatantEnabled = 1; ToggleV1:Set(true)
+                    elseif savedMode == "V2" then Config.FishingV2Enabled = 1; ToggleV2:Set(true)
+                    elseif savedMode == "V3" then Config.FishingV3Enabled = 1; ToggleV3:Set(true) end
                 end)
+            end
+        end
+
+        -- 2. NETWORK GUARD (High Ping Pause)
+        if Config.NetworkGuardEnabled == 1 and (now - lastPingCheck > 1) then
+            lastPingCheck = now
+            local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+            if ping > 200 and not _G.IsNetworkPaused then
+                _G.IsNetworkPaused = true
+                WindUI:Notify({Title="Network Guard", Content="High Ping! Pausing...", Icon="wifi-off", Duration=2})
+            elseif ping < 150 and _G.IsNetworkPaused then
+                _G.IsNetworkPaused = false
+                WindUI:Notify({Title="Network Guard", Content="Stabilized. Resuming.", Icon="wifi", Duration=2})
+            end
+        end
+    end)
+end)
+
+-- [NEW] AUTO REJOIN & AUTO LOAD POS
+task_spawn(function()
+    local CoreGui = game:GetService("CoreGui")
+    local PromptGui = CoreGui:WaitForChild("RobloxPromptGui", 10)
+    if not PromptGui then return end
+    
+    -- Auto Load Position on Start
+    if Config.AutoLoadPosition == 1 then
+        task_wait(2) -- Wait for character load
+        TeleportToSaved()
+    end
+
+    PromptGui.DescendantAdded:Connect(function(child)
+        if Config.AutoRejoinEnabled == 1 then
+            if child.Name == "ErrorTitle" or child.Name == "ErrorPrompt" or child:FindFirstChild("Button") then
+                 WindUI:Notify({Title="Auto Rejoin", Content="Disconnect detected! Rejoining...", Icon="refresh-cw", Duration=5})
+                 task_wait(2)
+                 TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end
         end
     end)
@@ -827,7 +886,7 @@ if Config.AutoAcceptTrade == 1 then ToggleAutoTrade(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 if Config.AutoTotemSingle == 1 then ToggleSingleTotem(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.16 (Auto Resume)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.18 (Pos Saver)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  FISH IT ULTIMATE | MONITOR
