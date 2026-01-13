@@ -1,9 +1,17 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.19 (POS + LOOK SAVER)
-    - [FIX] Save Position sekarang menyimpan arah hadap (Rotasi).
-    - [NEW] Teleport akan mengembalikan sudut pandang karakter persis seperti semula.
-    - [MAINTAINED] Semua fitur keamanan (Anti-Crash, Network Guard) tetap aktif.
+    ENOCHHUB ULTIMATE - V5.21 (WEATHER MACHINE DEFAULT)
+    - [UPDATE] Default Saved Position sekarang adalah "Weather Machine".
+    - [AUTO] Script akan langsung teleport ke Weather Machine saat pertama kali dijalankan (jika belum ada config lain).
+    - [MAINTAINED] Safe Start (Anti 279), Network Guard, & Crash Guard tetap aktif.
 ]]
+
+-- ==========================================================
+--  SAFE START (ANTI ERROR 279)
+-- ==========================================================
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+task.wait(3) 
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -53,7 +61,7 @@ local ipairs = ipairs
 -- ==========================================================
 --  CONFIG
 -- ==========================================================
-local FileName = "EnochHub_V5_19_RotationSaver.json"
+local FileName = "EnochHub_V5_21_WeatherMachine.json"
 
 local DefaultConfig = {
     BlatantEnabled = 0,
@@ -76,8 +84,10 @@ local DefaultConfig = {
     NetworkGuardEnabled = 1,
     AutoRejoinEnabled = 1,
     AutoTotemSingle = 0,
-    -- [UPDATED] Saved Position with Rotation
-    SavedPosition = nil, -- Format: {x=0, y=0, z=0, r=0}
+    
+    -- [UPDATED] Default Position: Weather Machine
+    -- Koordinat: -1518.550, 2.875, 1916.148 | Rotasi (r): 0 (Menghadap Z+ sesuai Look Vector)
+    SavedPosition = {x = -1518.550, y = 2.875, z = 1916.148, r = 0}, 
     AutoLoadPosition = 1
 }
 
@@ -106,7 +116,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.19 (Pos+Look)",
+    Title = "EnochHub | V5.21 (Weather Default)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Optimized",
     Folder = "EnochHub",
@@ -265,7 +275,6 @@ local function ToggleBlatant(state)
         phase = "INIT23"; lastStepTime = os_clock()
         RegisterConnection("BlatantLoop", RunService.Heartbeat:Connect(function()
             if Config.BlatantEnabled ~= 1 then return end
-            -- NETWORK PAUSE LOGIC
             if _G.IsNetworkPaused then return end 
             
             if _G.EnochHub_IsSelling then phase = "WAIT_STOP"; lastStepTime = os_clock(); return end
@@ -332,7 +341,6 @@ local function ToggleFishingV3(state)
         lastStepTime = os_clock()
         RunService:BindToRenderStep(V3_LOOP_NAME, 2001, function()
             if Config.FishingV3Enabled ~= 1 then return end
-            -- NETWORK PAUSE LOGIC
             if _G.IsNetworkPaused then return end
 
             if _G.EnochHub_IsSelling then phase = "WAIT_STOP"; lastStepTime = os_clock(); return end
@@ -384,7 +392,6 @@ local function ToggleFishingV2(state)
         pcall(function() RF_CancelFishingInputs:InvokeServer() end); task_wait(0.005)
         local thread = task_spawn(function()
             while Config.FishingV2Enabled == 1 do
-                -- NETWORK PAUSE LOGIC
                 if _G.IsNetworkPaused then task_wait(1); continue end
 
                 if _G.EnochHub_IsSelling then task_wait(0.5); continue end
@@ -589,7 +596,7 @@ local function ToggleSingleTotem(state)
                     end)
                     WindUI:Notify({ Title = "Totem", Content = "Placed! Next in 60m", Duration = 3 })
                     
-                    for i = 1, 3600 do 
+                    for i = 1, 3660 do 
                         if Config.AutoTotemSingle == 0 then break end
                         task_wait(1)
                     end
@@ -618,7 +625,7 @@ local function TeleportToSaved()
     if Config.SavedPosition and Config.SavedPosition.x then
         local saved = Config.SavedPosition
         local targetPos = Vector3.new(saved.x, saved.y, saved.z)
-        local rotY = saved.r or 0 -- Default to 0 if not saved previously
+        local rotY = saved.r or 0 
         
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             -- Create CFrame from Position and Orientation (Y-axis rotation)
@@ -894,7 +901,7 @@ if Config.AutoAcceptTrade == 1 then ToggleAutoTrade(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 if Config.AutoTotemSingle == 1 then ToggleSingleTotem(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.19 (Pos+Look)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.21 (Weather Default)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  FISH IT ULTIMATE | MONITOR
