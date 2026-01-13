@@ -1,7 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.15 (60 MINUTE TOTEM TIMER)
-    - [FIXED] Auto Totem (Current Pos) sekarang menunggu 60 Menit (3600 Detik).
-    - [LOGIC] Menggunakan "Breakable Wait" agar timer bisa distop kapan saja.
+    ENOCHHUB ULTIMATE - V5.16 (AUTO RESUME GUARD)
+    - [UPGRADE] Crash Guard sekarang memiliki "Smart Resume".
+    - [LOGIC] Jika freeze, script mati -> Tunggu 8 detik -> Nyala sendiri.
+    - [FIX] Totem Timer 60 Menit tetap berjalan.
 ]]
 
 local Players = game:GetService("Players")
@@ -15,7 +16,12 @@ local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
---  GARBAGE COLLECTOR & CRASH GUARD
+--  STATE TRACKER (Untuk Auto Resume)
+-- ==========================================================
+_G.LastActiveMode = "None" -- Menyimpan mode terakhir (V1/V2/V3)
+
+-- ==========================================================
+--  GARBAGE COLLECTOR
 -- ==========================================================
 local ActiveConnections = {}
 local function ClearConnection(name)
@@ -45,7 +51,7 @@ local ipairs = ipairs
 -- ==========================================================
 --  CONFIG
 -- ==========================================================
-local FileName = "EnochHub_V5_15_TotemTimer.json"
+local FileName = "EnochHub_V5_16_AutoResume.json"
 
 local DefaultConfig = {
     BlatantEnabled = 0,
@@ -93,7 +99,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.15 (60m Timer)",
+    Title = "EnochHub | V5.16 (Auto Resume)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Optimized",
     Folder = "EnochHub",
@@ -241,7 +247,9 @@ local function ToggleBlatant(state)
     _G.EnochHub_BlatantActive = state
     SuppressGameVisuals(state or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active)
     ClearConnection("BlatantLoop")
+    
     if state then
+        _G.LastActiveMode = "V1" -- TRACK STATE
         if _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then 
             _G.EnochHub_FishingV2Active=false; _G.EnochHub_FishingV3Active=false; 
             Config.FishingV2Enabled=0; Config.FishingV3Enabled=0 
@@ -270,6 +278,7 @@ local function ToggleBlatant(state)
         end
         WindUI:Notify({ Title = "Blatant V1", Content = "Enabled", Icon = "zap" })
     else
+        if _G.LastActiveMode == "V1" then _G.LastActiveMode = "None" end
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
@@ -298,7 +307,9 @@ local function ToggleFishingV3(state)
     _G.EnochHub_FishingV3Active = state
     SuppressGameVisuals(state or _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active)
     pcall(function() RunService:UnbindFromRenderStep(V3_LOOP_NAME) end)
+    
     if state then
+        _G.LastActiveMode = "V3" -- TRACK STATE
         if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active then
             _G.EnochHub_BlatantActive = false; _G.EnochHub_FishingV2Active = false
             Config.BlatantEnabled = 0; Config.FishingV2Enabled = 0
@@ -332,6 +343,7 @@ local function ToggleFishingV3(state)
         end
         WindUI:Notify({ Title = "Fishing V3", Content = "High Priority Active", Icon = "zap" })
     else
+        if _G.LastActiveMode == "V3" then _G.LastActiveMode = "None" end
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
         WindUI:Notify({ Title = "Fishing V3", Content = "Disabled", Icon = "x" })
@@ -348,6 +360,7 @@ local function ToggleFishingV2(state)
     SuppressGameVisuals(state or _G.EnochHub_BlatantActive or _G.EnochHub_FishingV3Active)
     ClearConnection("V2Thread")
     if state then
+        _G.LastActiveMode = "V2" -- TRACK STATE
         if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV3Active then 
             _G.EnochHub_BlatantActive=false; _G.EnochHub_FishingV3Active=false; 
             Config.BlatantEnabled=0; Config.FishingV3Enabled=0; 
@@ -382,6 +395,7 @@ local function ToggleFishingV2(state)
         end
         WindUI:Notify({ Title = "Fishing V2", Content = "Hyper Loop Started", Icon = "zap" })
     else
+        if _G.LastActiveMode == "V2" then _G.LastActiveMode = "None" end
         ClearConnection("V2Thread")
         pcall(function() RF_CancelFishingInputs:InvokeServer() end)
     end
@@ -735,33 +749,69 @@ SectGfx:Toggle({ Title="Extreme Potato", Value=(Config.PotatoModeEnabled == 1), 
 SectGfx:Toggle({ Title="Anti-Crash Guard", Value=(Config.CrashGuardEnabled == 1), Callback = function(s) Config.CrashGuardEnabled = s and 1 or 0 end })
 SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v end })
 
+-- [NEW] AUTO RESUME CRASH GUARD
 task_spawn(function()
     local lastFrame = os_clock()
     RunService.Heartbeat:Connect(function()
         local now = os_clock()
         local delta = now - lastFrame
         lastFrame = now
+        
+        -- Jika Freeze > 3 detik dan Guard Aktif
         if delta > 3 and Config.CrashGuardEnabled == 1 then
             if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then
+                
+                -- 1. Simpan State Terakhir
+                local savedMode = _G.LastActiveMode
+                
+                -- 2. Kill Switch (Stop Semua)
                 Config.BlatantEnabled = 0
                 Config.FishingV2Enabled = 0
                 Config.FishingV3Enabled = 0
                 _G.EnochHub_BlatantActive = false
                 _G.EnochHub_FishingV2Active = false
                 _G.EnochHub_FishingV3Active = false
+                
                 pcall(function() RunService:UnbindFromRenderStep(V3_LOOP_NAME) end)
                 ClearConnection("BlatantLoop")
                 ClearConnection("V2Thread")
+                
+                -- Update Toggle UI secara visual (opsional, tapi bagus buat feedback)
                 if ToggleV1 then ToggleV1:Set(false) end
                 if ToggleV2 then ToggleV2:Set(false) end
                 if ToggleV3 then ToggleV3:Set(false) end
+                
                 RunService:Set3dRenderingEnabled(true)
+                
                 WindUI:Notify({
-                    Title = "CRASH GUARD",
-                    Content = "Game Freeze Detected! Auto-disabled features.",
+                    Title = "CRASH GUARD ACTIVATED",
+                    Content = "Game Froze! Restarting in 8s...",
                     Icon = "shield-alert",
-                    Duration = 10
+                    Duration = 8
                 })
+                
+                -- 3. AUTO RESUME LOGIC (Di Thread Terpisah)
+                task_spawn(function()
+                    task_wait(8) -- Tunggu 8 detik untuk "Bernapas"
+                    
+                    if savedMode == "V1" then
+                        Config.BlatantEnabled = 1
+                        ToggleV1:Set(true) -- Ini akan memicu ToggleBlatant(true)
+                    elseif savedMode == "V2" then
+                        Config.FishingV2Enabled = 1
+                        ToggleV2:Set(true)
+                    elseif savedMode == "V3" then
+                        Config.FishingV3Enabled = 1
+                        ToggleV3:Set(true)
+                    end
+                    
+                    WindUI:Notify({
+                        Title = "AUTO RESUME",
+                        Content = "Restoring Session...",
+                        Icon = "check-circle",
+                        Duration = 3
+                    })
+                end)
             end
         end
     end)
@@ -777,7 +827,7 @@ if Config.AutoAcceptTrade == 1 then ToggleAutoTrade(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 if Config.AutoTotemSingle == 1 then ToggleSingleTotem(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.15 (60m Timer)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.16 (Auto Resume)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  FISH IT ULTIMATE | MONITOR
