@@ -1,8 +1,8 @@
 --[[
-    ENOCHHUB ULTIMATE - V5.18 (AUTO SAVE & LOAD POSITION)
-    - [NEW] Save Position: Simpan koordinat tempat berdiri (Tab Teleport).
-    - [NEW] Auto Load Pos: Script otomatis teleport ke lokasi simpanan saat dijalankan.
-    - [MAINTAINED] Network Guard & Crash Guard V5.17.
+    ENOCHHUB ULTIMATE - V5.19 (POS + LOOK SAVER)
+    - [FIX] Save Position sekarang menyimpan arah hadap (Rotasi).
+    - [NEW] Teleport akan mengembalikan sudut pandang karakter persis seperti semula.
+    - [MAINTAINED] Semua fitur keamanan (Anti-Crash, Network Guard) tetap aktif.
 ]]
 
 local Players = game:GetService("Players")
@@ -53,7 +53,7 @@ local ipairs = ipairs
 -- ==========================================================
 --  CONFIG
 -- ==========================================================
-local FileName = "EnochHub_V5_18_PosSaver.json"
+local FileName = "EnochHub_V5_19_RotationSaver.json"
 
 local DefaultConfig = {
     BlatantEnabled = 0,
@@ -76,9 +76,9 @@ local DefaultConfig = {
     NetworkGuardEnabled = 1,
     AutoRejoinEnabled = 1,
     AutoTotemSingle = 0,
-    -- [NEW] Position Saving
-    SavedPosition = nil, -- Format: {x=0, y=0, z=0}
-    AutoLoadPosition = 1 -- Enabled by default
+    -- [UPDATED] Saved Position with Rotation
+    SavedPosition = nil, -- Format: {x=0, y=0, z=0, r=0}
+    AutoLoadPosition = 1
 }
 
 local Config = {}
@@ -106,7 +106,7 @@ end
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.18 (Pos Saver)",
+    Title = "EnochHub | V5.19 (Pos+Look)",
     Icon = "rbxassetid://130348378128532",
     Author = "EnochHub Optimized",
     Folder = "EnochHub",
@@ -589,7 +589,7 @@ local function ToggleSingleTotem(state)
                     end)
                     WindUI:Notify({ Title = "Totem", Content = "Placed! Next in 60m", Duration = 3 })
                     
-                    for i = 1, 3660 do 
+                    for i = 1, 3600 do 
                         if Config.AutoTotemSingle == 0 then break end
                         task_wait(1)
                     end
@@ -611,14 +611,20 @@ local Coords = {["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.64
 local AreaList = {} for n in pairs(Coords) do table.insert(AreaList, n) end table.sort(AreaList)
 SectTp:Dropdown({ Title = "Select", Values = AreaList, Callback = function(n) local d = Coords[n]; if d and LocalPlayer.Character then if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end; task_wait(0.3); local look = Vector3.new(d.Look.X, 0, d.Look.Z); LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(d.Pos + Vector3.new(0,3,0), d.Pos + Vector3.new(0,3,0) + look) end end})
 
--- [NEW] CUSTOM LOCATION & SAVE
+-- [UPDATED] CUSTOM LOCATION WITH ROTATION
 local SectCustomTp = TabTp:Section({ Title = "Last Location", TextSize = 17 })
 
 local function TeleportToSaved()
     if Config.SavedPosition and Config.SavedPosition.x then
-        local target = Vector3.new(Config.SavedPosition.x, Config.SavedPosition.y, Config.SavedPosition.z)
+        local saved = Config.SavedPosition
+        local targetPos = Vector3.new(saved.x, saved.y, saved.z)
+        local rotY = saved.r or 0 -- Default to 0 if not saved previously
+        
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target + Vector3.new(0,2,0))
+            -- Create CFrame from Position and Orientation (Y-axis rotation)
+            local newCFrame = CFrame.new(targetPos) * CFrame.fromOrientation(0, rotY, 0)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = newCFrame + Vector3.new(0,2,0)
+            
             WindUI:Notify({Title="Teleport", Content="Loaded saved position!", Icon="map-pin"})
         end
     else
@@ -632,9 +638,12 @@ SectCustomTp:Button({
     Callback = function()
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if root then
-            Config.SavedPosition = {x = root.Position.X, y = root.Position.Y, z = root.Position.Z}
+            local x, y, z = root.Position.X, root.Position.Y, root.Position.Z
+            local _, rotY, _ = root.CFrame:ToOrientation() -- Get Y-Axis Rotation
+            
+            Config.SavedPosition = {x = x, y = y, z = z, r = rotY}
             SaveSettings()
-            WindUI:Notify({Title="Saved", Content="Position stored.", Icon="check"})
+            WindUI:Notify({Title="Saved", Content="Pos + Rotation stored.", Icon="check"})
         end
     end
 })
@@ -859,9 +868,8 @@ task_spawn(function()
     local PromptGui = CoreGui:WaitForChild("RobloxPromptGui", 10)
     if not PromptGui then return end
     
-    -- Auto Load Position on Start
     if Config.AutoLoadPosition == 1 then
-        task_wait(2) -- Wait for character load
+        task_wait(2) 
         TeleportToSaved()
     end
 
@@ -886,7 +894,7 @@ if Config.AutoAcceptTrade == 1 then ToggleAutoTrade(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 if Config.AutoTotemSingle == 1 then ToggleSingleTotem(true) end
 
-WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.18 (Pos Saver)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.19 (Pos+Look)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
 --  FISH IT ULTIMATE | MONITOR
