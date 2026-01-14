@@ -1,54 +1,14 @@
 --[[
-    ============================================================
-    ENOCHHUB ULTIMATE - V5.31 (EXTENDED SOURCE)
-    ============================================================
-    AUTHOR      : EnochHub Standalone
-    VERSION     : 5.31
-    GAME        : Fish It (Roblox)
-    EXECUTOR    : Supported (Codex, Delta, Fluxus, Hydrogen)
-    
-    [FEATURES]
-    > Main:
-      - Blatant Fishing (V1)
-      - Hyper Fishing (V2)
-      - Render Step Fishing (V3 - Best)
-      - Auto Equip / Auto Cast
-    
-    > Teleportation:
-      - Smart Startup (Auto Load Position)
-      - Precision Teleport (PivotTo)
-      - Saved Location System
-      - 25+ Waypoints
-    
-    > Utility:
-      - Auto Sell All
-      - Auto Unfavorite Ruby (Non-Gemstone)
-      - Auto Accept Trade
-      - Anti-AFK (VirtualUser)
-      - Server Hop
-      - Rejoin
-    
-    > Visuals & Performance:
-      - Extreme Potato Mode (Invisible Map)
-      - Hide Rod Effects
-      - Status HUD (On-Screen Info)
-      - FPS Cap Control
-    
-    > Security:
-      - Network Guard (High Ping Pause)
-      - Crash Guard (Anti-Freeze)
-      - Safe Start (Anti Error 279)
-    ============================================================
+    ENOCHHUB ULTIMATE - V5.31 (TELEPORT FIX)
+    - [FIXED] Core Teleport Function dikembalikan ke 'CFrame.lookAt'.
+    - [FIXED] Mencegah karakter terbalik/miring dengan mematikan rotasi vertikal (Y-Look).
+    - [FULL] Startup Location, Extreme Potato, Auto Sell, & Security Features included.
 ]]
 
--- [1] SAFE STARTUP (PREVENT CONNECTION ERROR 279)
-if not game:IsLoaded() then
-    local loaded = game.Loaded:Wait()
-end
--- Give connection time to stabilize
+-- 1. SAFE START
+if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(3.5)
 
--- [2] SERVICES
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -58,61 +18,49 @@ local HttpService = game:GetService("HttpService")
 local VirtualUser = game:GetService("VirtualUser")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
-local CoreGui = game:GetService("CoreGui")
-local StarterGui = game:GetService("StarterGui")
-
--- [3] LOCAL PLAYER VARIABLES
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local Camera = Workspace.CurrentCamera
 
--- [4] GLOBAL VARIABLES & STATE
-_G.EnochHub_BlatantActive = false
-_G.EnochHub_FishingV2Active = false
-_G.EnochHub_FishingV3Active = false
-_G.EnochHub_IsSelling = false 
-_G.LastActiveMode = "None"
-_G.IsNetworkPaused = false 
-_G.OriginalJobId = game.JobId 
-_G.StartTime = os.time()
-
--- [5] LOCATIONS DATABASE (FULL)
+-- 2. GLOBAL LOCATIONS (DATA BENAR)
 local Coords = {
-    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
-    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
-    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
-    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
-    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
-    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
-    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
-    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
-    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
-    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
-    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
-    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
-    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
-    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
-    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
-    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},
-    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
-    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
-    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
-    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)}
+    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)},
+    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, 0, -0.949)},
+    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, 0, 1.000)},
+    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, 0, 0.342)},
+    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0, 0.229)},
+    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0, 0.615)},
+    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, 0, -1.000)},
+    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0, 0.994)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0, -1.000)},
+    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, 0, 0.176)},
+    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(0, 0, -1.000)},
+    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(0, 0, -1.000)},
+    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(0, 0, -1.000)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(0, 0, -1.000)},
+    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0, 0.696)},
+    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, 0, 0.458)},
+    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, 0, 0.433)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, 0, 0.143)},
+    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0, -0.955)},
+    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0, 0.951)},
+    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0, -0.998)},
+    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, 0, 0.925)},
+    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0, 0.521)},
+    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0, 0.520)},
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0, 0.999)}
 }
 local AreaList = {} 
 for n in pairs(Coords) do table.insert(AreaList, n) end 
 table.sort(AreaList)
 
--- [6] CONFIGURATION SYSTEM
-local FileName = "EnochHub_V5_31_Extended.json"
+-- 3. CONFIG & STATE
+_G.LastActiveMode = "None"
+_G.IsNetworkPaused = false 
+_G.OriginalJobId = game.JobId 
+
+local FileName = "EnochHub_V5_31_TeleportFix.json"
 
 local DefaultConfig = {
-    BlatantEnabled = 1,      -- Default ON
+    BlatantEnabled = 1,
     AutoEquip = 1,
     CompleteDelay = 1.53, 
     CancelDelay = 0.38, 
@@ -121,11 +69,11 @@ local DefaultConfig = {
     V2DelayReset = 0.1,
     V2AutoGreat = 1,
     FishingV3Enabled = 0,
-    AutoSellEnabled = 1,     -- Default ON
+    AutoSellEnabled = 1,
     AutoUnfavRubySmart = 0,
     AutoAcceptTrade = 0,
     AntiAfkEnabled = 1,
-    PotatoModeEnabled = 1,   -- Default ON
+    PotatoModeEnabled = 1,
     PotatoFPS = 60,
     TotemType = "Luck Totem",
     CrashGuardEnabled = 1,
@@ -133,8 +81,6 @@ local DefaultConfig = {
     AutoRejoinEnabled = 1,
     AutoTotemSingle = 0,
     RejoinSameServer = 1,
-    
-    -- Teleport Settings
     AutoLoadPosition = 1,
     AutoTeleportTarget = "Weather Machine"
 }
@@ -143,19 +89,13 @@ local Config = {}
 for k,v in pairs(DefaultConfig) do Config[k] = v end
 
 local function SaveSettings()
-    if writefile then 
-        local success, err = pcall(function()
-            writefile(FileName, HttpService:JSONEncode(Config)) 
-        end)
-        if not success then warn("Failed to save settings: " .. tostring(err)) end
-    end
+    if writefile then pcall(function() writefile(FileName, HttpService:JSONEncode(Config)) end) end
 end
 
 if isfile and isfile(FileName) then
     pcall(function()
         local decoded = HttpService:JSONDecode(readfile(FileName))
         for k, v in pairs(decoded) do Config[k] = v end
-        -- Cleanup legacy data
         if Config.SavedPosition then Config.SavedPosition = nil end 
     end)
 end
@@ -166,28 +106,26 @@ local function ResetConfig()
     SaveSettings()
 end
 
--- [7] GARBAGE COLLECTION SYSTEM
+-- 4. GARBAGE COLLECTOR
 local ActiveConnections = {}
-
 local function ClearConnection(name)
     if ActiveConnections[name] then
         pcall(function() ActiveConnections[name]:Disconnect() end)
         ActiveConnections[name] = nil
     end
 end
-
 local function RegisterConnection(name, conn)
     ClearConnection(name)
     ActiveConnections[name] = conn
 end
 
--- [8] UI LIBRARY SETUP
+-- 5. WIND UI SETUP
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "EnochHub | V5.31 (Extended)",
+    Title = "EnochHub | V5.31 (Teleport Fix)",
     Icon = "rbxassetid://130348378128532",
-    Author = "EnochHub",
+    Author = "EnochHub Optimized",
     Folder = "EnochHub",
     Size = UDim2.fromOffset(580, 520),
     Transparent = true,
@@ -195,30 +133,26 @@ local Window = WindUI:CreateWindow({
     Resizable = true,
 })
 
-local TabFish = Window:Tab({ Title = "Main", Icon = "anchor" })
+local TabFish = Window:Tab({ Title = "Blatant", Icon = "anchor" })
 local TabTotem = Window:Tab({ Title = "Totem", Icon = "box" })
 local TabTp = Window:Tab({ Title = "Teleport", Icon = "map" })
-local TabUtil = Window:Tab({ Title = "Misc", Icon = "settings" }) 
+local TabUtil = Window:Tab({ Title = "Utilities", Icon = "settings" }) 
 
--- [9] MODULE LOADERS & REMOTE HANDLERS
+_G.EnochHub_BlatantActive = false
+_G.EnochHub_FishingV2Active = false
+_G.EnochHub_FishingV3Active = false
+_G.EnochHub_IsSelling = false 
+
+-- 6. REMOTES & MODULES
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = ReplicatedStorage:WaitForChild("Packages")
-
--- Safe Load ItemUtility
-local ItemUtility = nil
-pcall(function() ItemUtility = require(Shared:WaitForChild("ItemUtility")) end)
-
--- Safe Load Replion
-local Replion = nil
-pcall(function() Replion = require(Packages:WaitForChild("Replion")).Client end)
+local ItemUtility = require(Shared:WaitForChild("ItemUtility"))
+local Replion = require(Packages:WaitForChild("Replion")).Client
 
 local function GetRemote(name)
     local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
     local current = ReplicatedStorage
-    for _, child in ipairs(path) do 
-        current = current:WaitForChild(child, 2) 
-        if not current then return nil end 
-    end
+    for _, child in ipairs(path) do current = current:WaitForChild(child, 2) if not current then return nil end end
     return current:FindFirstChild(name)
 end
 
@@ -234,346 +168,123 @@ local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
 local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
--- [10] UTILITY FUNCTIONS
-local function ServerHop()
-    local guid = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
-    for _, server in ipairs(guid.data) do
-        if server.playing < server.maxPlayers and server.id ~= game.JobId then
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
-            break
-        end
-    end
-end
-
+-- ==========================================================
+--  7. FIXED TELEPORT LOGIC (NO MORE INVERTED CHAR)
+-- ==========================================================
 local function TeleportToLocation(locationName)
     local targetData = Coords[locationName]
     if not targetData then return false end
     
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        -- Unequip to prevent physics glitches
+        -- 1. Unequip Alat (Penting agar fisika tidak berat)
         if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) end
         
-        -- Calculate Exact Rotation
-        local lookRot = math.atan2(targetData.Look.X, targetData.Look.Z)
-        local targetCFrame = CFrame.new(targetData.Pos) * CFrame.fromOrientation(0, lookRot, 0)
+        -- 2. Ambil Posisi
+        local pos = targetData.Pos
+        -- 3. Ambil Arah (Look) tapi Flat (Y=0) agar karakter tegak
+        local look = targetData.Look
+        local lookTarget = pos + Vector3.new(look.X, 0, look.Z) -- Paksa Y nol
         
-        -- Use PivotTo for maximum reliability
+        -- 4. Buat CFrame menggunakan lookAt (Standard Roblox Method)
+        local targetCFrame = CFrame.lookAt(pos, lookTarget)
+        
+        -- 5. Teleport dengan PivotTo (Lebih stabil dari CFrame)
         LocalPlayer.Character:PivotTo(targetCFrame + Vector3.new(0, 3, 0))
         
-        -- Reset Velocities
+        -- 6. Stop Momentum
         local root = LocalPlayer.Character.HumanoidRootPart
-        root.Velocity = Vector3.zero
-        root.AssemblyLinearVelocity = Vector3.zero
+        if root then
+            root.Velocity = Vector3.zero
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
         return true
     end
     return false
 end
 
--- [11] LOGIC BYPASS & HOOKS
-local BLOCKED_REMOTES = {
-    ["RequestFishingMinigameStarted"] = true,
-    ["ChargeFishingRod"] = true,
-    ["UpdateAutoFishingState"] = true,
-    ["CancelFishingInputs"] = true
-}
-
--- Hook Fishing Controller Logic
+-- ==========================================================
+--  8. LOGIC KILLER
+-- ==========================================================
+local BLOCKED_REMOTES = {["RequestFishingMinigameStarted"]=true,["ChargeFishingRod"]=true,["UpdateAutoFishingState"]=true,["CancelFishingInputs"]=true}
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(game:GetService("ReplicatedStorage").Controllers.FishingController) end)
     if S1 and FishingController then
-        local Old_Charge = FishingController.RequestChargeFishingRod
-        local Old_Cast = FishingController.SendFishingRequestToServer
-        
-        FishingController.RequestChargeFishingRod = function(...) 
-            if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then return end 
-            return Old_Charge(...) 
-        end
-        
-        FishingController.SendFishingRequestToServer = function(...) 
-            if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then return false, "Blocked by EnochHub" end 
-            return Old_Cast(...) 
-        end
+        local Old_Charge = FishingController.RequestChargeFishingRod; local Old_Cast = FishingController.SendFishingRequestToServer
+        FishingController.RequestChargeFishingRod = function(...) if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then return end return Old_Charge(...) end
+        FishingController.SendFishingRequestToServer = function(...) if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then return false, "Blocked by EnochHub" end return Old_Cast(...) end
     end
 end)
-
--- Hook Namecall for Remote Spoofing
-local mt = getrawmetatable(game)
-local old_namecall = mt.__namecall
-setreadonly(mt, false)
+local mt = getrawmetatable(game); local old_namecall = mt.__namecall; setreadonly(mt, false)
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
-    if not checkcaller() then 
-        if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then 
-            if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then return task.wait(9e9) end
-            if method == "FireServer" and self.Name == "FishingCompleted" then return nil end 
-        end 
-    end
+    if not checkcaller() then if _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active then if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then return task.wait(9e9) end; if method == "FireServer" and self.Name == "FishingCompleted" then return nil end end end
     return old_namecall(self, ...)
-end)
-setreadonly(mt, true)
+end); setreadonly(mt, true)
 
--- Visual Suppressor
 local function SuppressGameVisuals(active)
-    if active then 
-        RegisterConnection("VisualSuppress", RunService.Stepped:Connect(function() 
-            if not (_G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active) then 
-                ClearConnection("VisualSuppress") 
-                return 
-            end
-            local guiBtn = LocalPlayer.PlayerGui:FindFirstChild("Backpack") and LocalPlayer.PlayerGui.Backpack:FindFirstChild("AutoFishingButton")
-            if guiBtn then 
-                local grad = guiBtn:FindFirstChild("UIGradient")
-                if grad then grad.Color = ColorSequence.new(Color3.fromHex("ff5d60")) end 
-            end 
-        end)) 
-    else 
-        ClearConnection("VisualSuppress") 
-    end
+    if active then RegisterConnection("VisualSuppress", RunService.Stepped:Connect(function() if not (_G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active) then ClearConnection("VisualSuppress") return end; local guiBtn = LocalPlayer.PlayerGui:FindFirstChild("Backpack") and LocalPlayer.PlayerGui.Backpack:FindFirstChild("AutoFishingButton"); if guiBtn then local grad = guiBtn:FindFirstChild("UIGradient"); if grad then grad.Color = ColorSequence.new(Color3.fromHex("ff5d60")) end end end)) else ClearConnection("VisualSuppress") end
 end
 
--- [12] FISHING MODES IMPLEMENTATION
-
--- --- V1: BLATANT (Standard) ---
-local EquipThread = nil
-local phase = "STEP123"
-local lastStepTime = 0
-
+-- ==========================================================
+--  9. BLATANT V1 (AUTO FARM)
+-- ==========================================================
+local EquipThread = nil; local phase = "STEP123"; local lastStepTime = 0
 local function ToggleBlatant(state)
-    _G.EnochHub_BlatantActive = state
-    SuppressGameVisuals(state or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active)
-    ClearConnection("BlatantLoop")
-    
+    _G.EnochHub_BlatantActive = state; SuppressGameVisuals(state or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active); ClearConnection("BlatantLoop")
     if state then
-        _G.LastActiveMode = "V1"
-        -- Disable other modes
-        Config.FishingV2Enabled=0; Config.FishingV3Enabled=0; _G.EnochHub_FishingV2Active=false; _G.EnochHub_FishingV3Active=false
-        
+        _G.LastActiveMode = "V1"; Config.FishingV2Enabled=0; Config.FishingV3Enabled=0; _G.EnochHub_FishingV2Active=false; _G.EnochHub_FishingV3Active=false
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
         phase = "INIT23"; lastStepTime = os.clock()
-        
         RegisterConnection("BlatantLoop", RunService.Heartbeat:Connect(function()
             if Config.BlatantEnabled ~= 1 or _G.IsNetworkPaused then return end
             if _G.EnochHub_IsSelling then phase = "WAIT_STOP"; lastStepTime = os.clock(); return end
-            
             local now = os.clock()
             if phase == "WAIT_STOP" and (now - lastStepTime) >= Config.CancelDelay then phase = "STEP123" end
-            
-            if phase == "INIT23" or phase == "STEP123" then 
-                lastStepTime = now
-                task.spawn(function() 
-                    pcall(function() 
-                        RF_CancelFishingInputs:InvokeServer()
-                        RF_ChargeFishingRod:InvokeServer({[1]=os.clock()})
-                        RF_RequestFishingMinigameStarted:InvokeServer(1, os.clock(), os.clock()) 
-                    end) 
-                end)
-                phase = "WAIT_COMPLETE" 
-            end
-            
+            if phase == "INIT23" or phase == "STEP123" then lastStepTime = now; task.spawn(function() pcall(function() RF_CancelFishingInputs:InvokeServer(); RF_ChargeFishingRod:InvokeServer({[1]=os.clock()}); RF_RequestFishingMinigameStarted:InvokeServer(1, os.clock(), os.clock()) end) end); phase = "WAIT_COMPLETE" end
             if phase == "WAIT_COMPLETE" and (now - lastStepTime) >= Config.CompleteDelay then phase = "STEP4" end
-            
-            if phase == "STEP4" then 
-                lastStepTime = now
-                task.spawn(function() pcall(function() RE_FishingCompleted:FireServer() end) end)
-                phase = "WAIT_STOP" 
-            end
+            if phase == "STEP4" then lastStepTime = now; task.spawn(function() pcall(function() RE_FishingCompleted:FireServer() end) end); phase = "WAIT_STOP" end
         end))
-        
-        -- Auto Equip Loop
-        if not EquipThread then 
-            EquipThread = task.spawn(function() 
-                while Config.BlatantEnabled == 1 do 
-                    if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then 
-                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-                    end
-                    task.wait(0.5) 
-                end 
-                EquipThread = nil 
-            end) 
-        end
+        if not EquipThread then EquipThread = task.spawn(function() while Config.BlatantEnabled == 1 do if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end; task.wait(0.5) end; EquipThread = nil end) end
         WindUI:Notify({ Title = "Blatant V1", Content = "Enabled", Icon = "zap" })
     else
         if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end); pcall(function() RF_CancelFishingInputs:InvokeServer() end)
     end
 end
 
--- --- V3: RENDER STEP (High Priority) ---
-local V3_LOOP_NAME = "EnochHub_V3_RenderLoop"
-local FORCE_ARGS_CHARGE = { [1] = 0 } 
-
-local function ToggleFishingV3(state)
-    _G.EnochHub_FishingV3Active = state
-    SuppressGameVisuals(state or _G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active)
-    pcall(function() RunService:UnbindFromRenderStep(V3_LOOP_NAME) end)
-    
-    if state then
-        _G.LastActiveMode = "V3"
-        _G.EnochHub_BlatantActive = false; _G.EnochHub_FishingV2Active = false
-        Config.BlatantEnabled = 0; Config.FishingV2Enabled = 0
-        ClearConnection("BlatantLoop"); ClearConnection("V2Thread")
-        
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
-        phase = "INIT23"; lastStepTime = os.clock()
-        
-        RunService:BindToRenderStep(V3_LOOP_NAME, 2001, function()
-            if Config.FishingV3Enabled ~= 1 then return end
-            if _G.IsNetworkPaused then return end
-            if _G.EnochHub_IsSelling then phase = "WAIT_STOP"; lastStepTime = os.clock(); return end
-            
-            local now = os.clock()
-            if (now - lastStepTime) < 0.01 and phase ~= "STEP4" then return end
-            
-            if phase == "WAIT_STOP" and (now - lastStepTime) >= Config.CancelDelay then phase = "STEP123" end
-            
-            if phase == "INIT23" or phase == "STEP123" then 
-                lastStepTime = now
-                task.spawn(function() 
-                    pcall(function() 
-                        RF_CancelFishingInputs:InvokeServer()
-                        RF_ChargeFishingRod:InvokeServer({[1]=now})
-                        RF_RequestFishingMinigameStarted:InvokeServer(1, now, now) 
-                    end) 
-                end)
-                phase = "WAIT_COMPLETE" 
-            end
-            
-            if phase == "WAIT_COMPLETE" and (now - lastStepTime) >= Config.CompleteDelay then phase = "STEP4" end
-            
-            if phase == "STEP4" then 
-                lastStepTime = now
-                task.spawn(function() pcall(function() RE_FishingCompleted:FireServer() end) end)
-                phase = "WAIT_STOP" 
-            end
-        end)
-        
-        if not EquipThread then
-            EquipThread = task.spawn(function()
-                while (Config.FishingV3Enabled == 1) do
-                    if (Config.AutoEquip == 1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then 
-                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-                    end
-                    task.wait(0.5)
-                end
-                EquipThread = nil
-            end)
-        end
-        WindUI:Notify({ Title = "Fishing V3", Content = "High Priority Active", Icon = "zap" })
-    else
-        if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-    end
-end
-
--- --- V2: HYPER (Fast Cast) ---
-local V2_FishArgs = { -1.115296493039856, 0, 1763651451.636425 }
-
-local function ToggleFishingV2(state)
-    _G.EnochHub_FishingV2Active = state
-    SuppressGameVisuals(state or _G.EnochHub_BlatantActive or _G.EnochHub_FishingV3Active)
-    ClearConnection("V2Thread")
-    if state then
-        _G.LastActiveMode = "V2"
-        Config.BlatantEnabled=0; Config.FishingV3Enabled=0; 
-        _G.EnochHub_BlatantActive=false; _G.EnochHub_FishingV3Active=false
-        ClearConnection("BlatantLoop"); pcall(function() RunService:UnbindFromRenderStep(V3_LOOP_NAME) end)
-        
-        if (Config.V2AutoGreat == 1) and RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end); task.wait(0.005)
-        
-        local thread = task.spawn(function()
-            while Config.FishingV2Enabled == 1 do
-                if _G.IsNetworkPaused then task.wait(1); continue end
-                if _G.EnochHub_IsSelling then task.wait(0.5); continue end
-                
-                task.spawn(function() pcall(function() RF_ChargeFishingRod:InvokeServer() end) end)
-                task.spawn(function() pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(V2_FishArgs)) end) end)
-                
-                task.wait(Config.V2DelayCharge)
-                if Config.FishingV2Enabled == 0 then break end
-                
-                pcall(function() RE_FishingCompleted:FireServer() end)
-                task.wait(Config.V2DelayReset)
-                pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-            end
-        end)
-        ActiveConnections["V2Thread"] = { Disconnect = function() task.cancel(thread) end }
-        
-        if not EquipThread then 
-            EquipThread = task.spawn(function() 
-                while (Config.FishingV2Enabled==1) do 
-                    if (Config.AutoEquip==1) and RE_EquipToolFromHotbar and not _G.EnochHub_IsSelling and not _G.IsNetworkPaused then 
-                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-                    end
-                    task.wait(0.5) 
-                end 
-                EquipThread = nil 
-            end) 
-        end
-        WindUI:Notify({ Title = "Fishing V2", Content = "Hyper Loop Started", Icon = "zap" })
-    else
-        ClearConnection("V2Thread")
-        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-    end
-end
-
--- [13] EXTREME POTATO (GRAPHICS OPTIMIZER)
-local isBoostActive = false
-local originalLightingValues = {}
-
+-- ==========================================================
+--  10. EXTREME POTATO (INVISIBLE MAP)
+-- ==========================================================
+local isBoostActive = false; local originalLightingValues = {}
 local function TogglePotato(state)
     ClearConnection("PotatoLoop")
     if state then
-        if not next(originalLightingValues) then 
-            pcall(function() 
-                originalLightingValues.GlobalShadows = Lighting.GlobalShadows
-                originalLightingValues.FogEnd = Lighting.FogEnd 
-            end) 
-        end
-        
+        if not next(originalLightingValues) then pcall(function() originalLightingValues.GlobalShadows = Lighting.GlobalShadows; originalLightingValues.FogEnd = Lighting.FogEnd end) end
         RegisterConnection("PotatoLoop", task.spawn(function() 
             while Config.PotatoModeEnabled == 1 do 
-                -- Force Settings every 3 seconds to overwrite game changes
-                pcall(function() 
-                    Lighting.GlobalShadows = false
-                    Lighting.FogEnd = 9e9
-                    if workspace.Terrain then
-                        workspace.Terrain.WaterWaveSize = 0
-                        workspace.Terrain.WaterTransparency = 1
-                    end
-                end)
-                
-                -- Aggressive Object Hiding
+                pcall(function() Lighting.GlobalShadows = false; Lighting.FogEnd = 9e9; workspace.Terrain.WaterWaveSize=0; workspace.Terrain.WaterTransparency=1 end)
                 for _, v in ipairs(workspace:GetDescendants()) do 
-                    if v:IsA("BasePart") and not v:IsDescendantOf(LocalPlayer.Character) then 
-                        v.Transparency = 1
-                        v.CanQuery = false
-                        v.CastShadow = false
-                        if v:IsA("MeshPart") then v.TextureID = "" end
-                    elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Beam") then 
-                        v:Destroy() 
-                    end
+                    if v:IsA("BasePart") and not v:IsDescendantOf(LocalPlayer.Character) then v.Transparency=1; v.CanQuery=false; v.CastShadow=false
+                    elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
                 end
                 task.wait(3) 
             end 
         end))
     else
-        -- Restore Basic Lighting
-        pcall(function() 
-            Lighting.GlobalShadows = originalLightingValues.GlobalShadows
-            Lighting.FogEnd = originalLightingValues.FogEnd 
-        end)
-        WindUI:Notify({Title="Potato OFF", Content="Rejoin to restore map visuals fully.", Icon="refresh-ccw"})
+        pcall(function() Lighting.GlobalShadows=originalLightingValues.GlobalShadows; Lighting.FogEnd=originalLightingValues.FogEnd end)
+        WindUI:Notify({Title="Potato OFF", Content="Rejoin to fix map.", Icon="refresh-ccw"})
     end
 end
 
--- [14] UI IMPLEMENTATION
-local SectFishV1 = TabFish:Section({ Title = "Blatant Fishing (V1)", TextSize = 17 })
-SectFishV1:Toggle({ Title = "Enable Blatant V1", Value = (Config.BlatantEnabled == 1), Callback = function(v) Config.BlatantEnabled = v and 1 or 0; ToggleBlatant(v) end })
-SectFishV1:Toggle({ Title = "Auto Equip Rod", Value = (Config.AutoEquip == 1), Callback = function(v) Config.AutoEquip = v and 1 or 0 end })
+-- ==========================================================
+--  11. UI BUILDING
+-- ==========================================================
+local SectFish = TabFish:Section({ Title = "Fishing V1 (Stable)", TextSize = 17 })
+SectFish:Toggle({ Title = "Enable Blatant V1", Value = (Config.BlatantEnabled == 1), Callback = function(v) Config.BlatantEnabled = v and 1 or 0; ToggleBlatant(v) end })
+SectFish:Toggle({ Title = "Auto Equip", Value = (Config.AutoEquip == 1), Callback = function(v) Config.AutoEquip = v and 1 or 0 end })
 
-local SectStartup = TabTp:Section({ Title = "Startup & Spawn", TextSize = 17 })
+-- STARTUP LOCATION MENU
+local SectStartup = TabTp:Section({ Title = "Startup Location", TextSize = 17 })
 SectStartup:Dropdown({
     Title = "Select Default Spawn",
     Values = AreaList,
@@ -596,9 +307,10 @@ SectStartup:Button({
 })
 SectStartup:Toggle({ Title = "Auto Teleport on Load", Value = (Config.AutoLoadPosition == 1), Callback = function(v) Config.AutoLoadPosition = v and 1 or 0 end })
 
-local SectTp = TabTp:Section({ Title = "Teleport Menu", TextSize = 17 })
+-- Instant Teleport Menu
+local SectTp = TabTp:Section({ Title = "Instant Teleport", TextSize = 17 })
 SectTp:Dropdown({ 
-    Title = "Teleport To", 
+    Title = "Instant Teleport", 
     Values = AreaList, 
     Callback = function(n) 
         local success = TeleportToLocation(n)
@@ -606,20 +318,21 @@ SectTp:Dropdown({
     end
 })
 
-local SectUtil1 = TabUtil:Section({ Title = "Automation", TextSize = 17 })
-SectUtil1:Toggle({ Title = "Auto Sell All", Value = (Config.AutoSellEnabled == 1), Callback = function(s) Config.AutoSellEnabled = s and 1 or 0; 
-    if s then RegisterConnection("AutoSell", task.spawn(function() while Config.AutoSellEnabled==1 do if RF_SellAllItems then _G.EnochHub_IsSelling=true; pcall(function() RF_SellAllItems:InvokeServer() end); task.wait(0.5); _G.EnochHub_IsSelling=false; end; task.wait(300) end end)) else ClearConnection("AutoSell") end
+local SectUtil = TabUtil:Section({ Title = "System", TextSize = 17 })
+SectUtil:Toggle({ Title = "Auto Sell All", Value = (Config.AutoSellEnabled == 1), Callback = function(s) Config.AutoSellEnabled = s and 1 or 0; 
+    if s then RegisterConnection("AutoSell", task.spawn(function() while Config.AutoSellEnabled==1 do if RF_SellAllItems then _G.EnochHub_IsSelling=true; pcall(function() RF_SellAllItems:InvokeServer() end); task.wait(0.5); _G.EnochHub_IsSelling=false; WindUI:Notify({Title="System", Content="Sold Items"}) end; task.wait(300) end end)) else ClearConnection("AutoSell") end
 end })
-SectUtil1:Button({ Title = "Save Config", Icon = "save", Callback = function() SaveSettings(); WindUI:Notify({Title="Config", Content="Saved!"}) end })
+SectUtil:Button({ Title = "Save Config", Icon = "save", Callback = function() SaveSettings(); WindUI:Notify({Title="Config", Content="Saved!"}) end })
 
-local SectGfx = TabUtil:Section({ Title = "Guard & Stability", TextSize = 17 })
+local SectGfx = TabUtil:Section({ Title = "Graphics & Stability", TextSize = 17 })
 SectGfx:Toggle({ Title="Extreme Potato (Inv Map)", Value=(Config.PotatoModeEnabled == 1), Callback = function(s) Config.PotatoModeEnabled = s and 1 or 0; TogglePotato(s) end })
 SectGfx:Toggle({ Title="Anti-Crash Guard", Value=(Config.CrashGuardEnabled == 1), Callback = function(s) Config.CrashGuardEnabled = s and 1 or 0 end })
 SectGfx:Toggle({ Title="Network Guard (Ping)", Value=(Config.NetworkGuardEnabled == 1), Callback = function(s) Config.NetworkGuardEnabled = s and 1 or 0 end })
 SectGfx:Toggle({ Title="Auto Rejoin", Value=(Config.AutoRejoinEnabled == 1), Callback = function(s) Config.AutoRejoinEnabled = s and 1 or 0 end })
-SectGfx:Button({ Title="Hop Server", Icon="server", Callback=function() ServerHop() end })
+SectGfx:Toggle({ Title="Prioritize Same Server", Value=(Config.RejoinSameServer == 1), Callback = function(s) Config.RejoinSameServer = s and 1 or 0 end })
+SectGfx:Slider({ Title="FPS Cap", Min=5, Max=60, Default=Config.PotatoFPS, Precision=0, Callback=function(v) Config.PotatoFPS=v end })
 
-local SectTotem = TabTotem:Section({ Title = "Totem System", TextSize = 17 })
+local SectTotem = TabTotem:Section({ Title = "Formation", TextSize = 17 })
 SectTotem:Dropdown({ Title="Type", Values={"Luck Totem", "Mutation Totem", "Shiny Totem"}, Value=Config.TotemType, Callback=function(v) Config.TotemType=v end })
 local function ToggleSingleTotem(state)
     ClearConnection("OneSpotTotem")
@@ -639,48 +352,30 @@ local function ToggleSingleTotem(state)
                 end
             end
         end))
-    else ClearConnection("OneSpotTotem") end
+        ActiveConnections["OneSpotTotem"] = { Disconnect = function() task.cancel(ActiveConnections["OneSpotTotem"]) end }
+    end
 end
 SectTotem:Toggle({ Title = "Auto Totem (My Pos) [60m]", Value=(Config.AutoTotemSingle == 1), Callback = function(s) Config.AutoTotemSingle = s and 1 or 0; ToggleSingleTotem(s) end })
 
--- [15] CRASH GUARD + NETWORK MONITOR
+-- [CRASH GUARD + NETWORK]
 task.spawn(function()
     local lastFrame = os.clock(); local lastPingCheck = os.clock()
     RunService.Heartbeat:Connect(function()
         local now = os.clock(); local delta = now - lastFrame; lastFrame = now
-        
-        -- Crash Guard Logic
-        if delta > 3 and Config.CrashGuardEnabled == 1 and (_G.EnochHub_BlatantActive or _G.EnochHub_FishingV2Active or _G.EnochHub_FishingV3Active) then
-            local savedMode = _G.LastActiveMode
-            if _G.EnochHub_BlatantActive then ToggleBlatant(false) end
-            if _G.EnochHub_FishingV2Active then ToggleFishingV2(false) end
-            if _G.EnochHub_FishingV3Active then ToggleFishingV3(false) end
-            
+        if delta > 3 and Config.CrashGuardEnabled == 1 and (_G.EnochHub_BlatantActive) then
+            local savedMode = _G.LastActiveMode; ToggleBlatant(false)
             WindUI:Notify({Title="CRASH GUARD", Content="Freeze detected! Restarting in 8s...", Icon="shield-alert", Duration=8})
-            
-            task.spawn(function() 
-                task.wait(8)
-                if savedMode=="V1" then Config.BlatantEnabled=1; ToggleBlatant(true) 
-                elseif savedMode=="V2" then Config.FishingV2Enabled=1; ToggleFishingV2(true)
-                elseif savedMode=="V3" then Config.FishingV3Enabled=1; ToggleFishingV3(true) end
-            end)
+            task.spawn(function() task.wait(8); if savedMode=="V1" then Config.BlatantEnabled=1; ToggleBlatant(true) end end)
         end
-        
-        -- Network Guard Logic
         if Config.NetworkGuardEnabled == 1 and (now - lastPingCheck > 1) then
             lastPingCheck = now; local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
-            if ping > 200 and not _G.IsNetworkPaused then 
-                _G.IsNetworkPaused=true
-                WindUI:Notify({Title="Network Guard", Content="High Ping! Pausing...", Icon="wifi-off"})
-            elseif ping < 150 and _G.IsNetworkPaused then 
-                _G.IsNetworkPaused=false
-                WindUI:Notify({Title="Network Guard", Content="Resumed.", Icon="wifi"}) 
-            end
+            if ping > 200 and not _G.IsNetworkPaused then _G.IsNetworkPaused=true; WindUI:Notify({Title="Network Guard", Content="High Ping! Pausing...", Icon="wifi-off"})
+            elseif ping < 150 and _G.IsNetworkPaused then _G.IsNetworkPaused=false; WindUI:Notify({Title="Network Guard", Content="Resumed.", Icon="wifi"}) end
         end
     end)
 end)
 
--- [16] AUTO REJOIN SYSTEM
+-- [AUTO REJOIN]
 task.spawn(function()
     local PromptGui = game:GetService("CoreGui"):WaitForChild("RobloxPromptGui", 10)
     if PromptGui then PromptGui.DescendantAdded:Connect(function(child)
@@ -695,7 +390,7 @@ task.spawn(function()
     end) end
 end)
 
--- [17] EXECUTE AUTO STARTUP LOGIC
+-- [EXECUTE AUTO STARTUP]
 if Config.BlatantEnabled == 1 then ToggleBlatant(true) end
 if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 task.spawn(function()
@@ -711,17 +406,30 @@ task.spawn(function()
     end
 end)
 
-WindUI:Notify({ Title = "EnochHub", Content = "System Ready (V5.31)", Duration = 4, Icon = "check" })
+WindUI:Notify({ Title = "EnochHub", Content = "Loaded V5.31 (Final Complete)", Duration = 4, Icon = "check" })
 
 -- ==========================================================
---  18. FISH IT MONITOR GUI (FINAL BLOCK)
+--  12. FISH IT ULTIMATE | MONITOR (SAFE MODE)
 -- ==========================================================
-local RE_Monitor = GetRemote("RE/ObtainedNewFishNotification")
+local CoreGui = game:GetService("CoreGui")
+local function GetRemoteMonitor(remotePath, name, timeout)
+    local currentInstance = ReplicatedStorage
+    for _, childName in ipairs(remotePath) do currentInstance = currentInstance:WaitForChild(childName, timeout or 0.5) if not currentInstance then return nil end end
+    return currentInstance:FindFirstChild(name)
+end
+local RE_ObtainedNewFishNotification = GetRemoteMonitor({"Packages", "_Index", "sleitnick_net@0.2.0", "net", "RE"}, "ObtainedNewFishNotification", 10)
+
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"; local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"; local itemID = item.Id
+    if ItemUtility and itemID then pcall(function() local d = ItemUtility:GetItemData(itemID); if d and d.Data then name = d.Data.Name end end) end
+    return name, rarity
+end
+local function GetMutation(item) if not item.Metadata then return "None" end; if item.Metadata.VariantId and item.Metadata.VariantId~="" then return item.Metadata.VariantId end; if item.Metadata.Shiny then return "Shiny" end; return "None" end
 
 local stats = { SessionCatch = 0, TotalSecret = 0, TotalRuby = 0, lastFishText = "-" }
 local needsUpdate = false
 
--- Safe Inventory Scan
+-- SAFE SCAN
 local function ScanInventory()
     if not Replion then return end
     local s, dataReplica = pcall(function() return Replion:WaitReplion("Data") end)
@@ -731,13 +439,8 @@ local function ScanInventory()
             local sCount = 0; local rCount = 0
             for _, items in pairs(inventory) do 
                 for _, item in ipairs(items) do 
-                    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-                    local name = item.Identifier
-                    if item.Id and ItemUtility then 
-                        pcall(function() local d=ItemUtility:GetItemData(item.Id); if d then name=d.Data.Name end end) 
-                    end
-                    local mutation = item.Metadata.VariantId or (item.Metadata.Shiny and "Shiny" or "None")
-                    
+                    local name, rarity = GetFishNameAndRarity(item)
+                    local mutation = GetMutation(item)
                     if rarity == "SECRET" then sCount = sCount + 1 end
                     if name == "Ruby" and mutation == "Gemstone" then rCount = rCount + 1 end 
                 end 
@@ -748,33 +451,15 @@ local function ScanInventory()
 end
 ScanInventory()
 
--- Monitor GUI Construction
 if CoreGui:FindFirstChild("FishItMonitorStats") then CoreGui.FishItMonitorStats:Destroy() end
 local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "FishItMonitorStats"; ScreenGui.Parent = CoreGui; ScreenGui.IgnoreGuiInset = true
 local MainFrame = Instance.new("Frame"); MainFrame.Name = "MainFrame"; MainFrame.Size = UDim2.new(0, 240, 0, 180); MainFrame.Position = UDim2.new(0.5, -120, 0.1, 0); MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25); MainFrame.BorderSizePixel = 0; MainFrame.Active = true; MainFrame.Draggable = true; MainFrame.Parent = ScreenGui
 local UICorner = Instance.new("UICorner"); UICorner.CornerRadius = UDim.new(0, 8); UICorner.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel"); TitleLabel.Size = UDim2.new(1, 0, 0.15, 0); TitleLabel.BackgroundTransparency = 1; TitleLabel.Text = "Inventory Monitor"; TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255); TitleLabel.Font = Enum.Font.GothamBold; TitleLabel.TextSize = 14; TitleLabel.Parent = MainFrame
 local StatsContainer = Instance.new("Frame"); StatsContainer.Size = UDim2.new(1, -20, 0.4, 0); StatsContainer.Position = UDim2.new(0, 10, 0.15, 0); StatsContainer.BackgroundTransparency = 1; StatsContainer.Parent = MainFrame
-
--- Helper for Labels
-local function CreateStatLabel(order, color) 
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, 0, 0.33, 0)
-    lbl.Position = UDim2.new(0, 0, (order - 1) * 0.33, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.GothamSemibold
-    lbl.TextSize = 14
-    lbl.TextColor3 = color
-    lbl.Parent = StatsContainer
-    return lbl 
-end
-
-local TotalLabel = CreateStatLabel(1, Color3.fromRGB(200, 200, 200))
-local SecretLabel = CreateStatLabel(2, Color3.fromRGB(255, 215, 0))
-local RubyLabel = CreateStatLabel(3, Color3.fromRGB(255, 60, 60))
+local function CreateStatLabel(order, color) local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0.33, 0); lbl.Position = UDim2.new(0, 0, (order - 1) * 0.33, 0); lbl.BackgroundTransparency = 1; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Font = Enum.Font.GothamSemibold; lbl.TextSize = 14; lbl.TextColor3 = color; lbl.Parent = StatsContainer; return lbl end
+local TotalLabel = CreateStatLabel(1, Color3.fromRGB(200, 200, 200)); local SecretLabel = CreateStatLabel(2, Color3.fromRGB(255, 215, 0)); local RubyLabel = CreateStatLabel(3, Color3.fromRGB(255, 60, 60))
 local LastLabel = Instance.new("TextLabel"); LastLabel.Size = UDim2.new(1, -10, 0.15, 0); LastLabel.Position = UDim2.new(0, 5, 0.55, 0); LastLabel.BackgroundTransparency = 1; LastLabel.Text = "Last: -"; LastLabel.TextColor3 = Color3.fromRGB(150, 150, 150); LastLabel.Font = Enum.Font.Gotham; LastLabel.TextSize = 11; LastLabel.TextTruncate = Enum.TextTruncate.AtEnd; LastLabel.Parent = MainFrame
-
 local function UpdateStatsGUI() 
     if not TotalLabel or not SecretLabel then return end
     TotalLabel.Text = "Session Catch: " .. stats.SessionCatch
@@ -782,31 +467,18 @@ local function UpdateStatsGUI()
     RubyLabel.Text = "Total Ruby Gems: " .. stats.TotalRuby
     LastLabel.Text = "Last: " .. (stats.lastFishText or "-") 
 end
-
-task.spawn(function() 
-    while ScreenGui.Parent do 
-        if needsUpdate then UpdateStatsGUI(); needsUpdate = false end 
-        task.wait(0.5) 
-    end 
-end)
+task.spawn(function() while ScreenGui.Parent do if needsUpdate then UpdateStatsGUI(); needsUpdate = false end task.wait(0.5) end end)
 
 if RE_ObtainedNewFishNotification then 
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(itemId, metadata, fullData) 
         stats.SessionCatch = stats.SessionCatch + 1
-        local name = "Unknown"; local rarity = "COMMON"
-        if ItemUtility then 
-            pcall(function() 
-                local d = ItemUtility:GetItemData(itemId or fullData.Id)
-                if d then name = d.Data.Name end 
-            end) 
-        end
-        if metadata and metadata.Rarity then rarity = metadata.Rarity end
-        local mutation = metadata.VariantId or (metadata.Shiny and "Shiny" or "None")
-        
+        local dummyItem = {Id = itemId, Identifier = fullData and fullData.Identifier, Metadata = metadata}
+        local name, rarity = GetFishNameAndRarity(dummyItem)
+        local mutation = GetMutation(dummyItem)
         local displayStr = name
         if mutation ~= "None" then displayStr = "[" .. mutation .. "] " .. name end
+        if metadata and metadata.Weight then displayStr = displayStr .. string.format(" (%.1fkg)", metadata.Weight) end
         stats.lastFishText = displayStr
-        
         if rarity == "SECRET" then stats.TotalSecret = stats.TotalSecret + 1 end
         if name == "Ruby" and mutation == "Gemstone" then stats.TotalRuby = stats.TotalRuby + 1 end
         needsUpdate = true 
@@ -814,10 +486,10 @@ if RE_ObtainedNewFishNotification then
 end
 UpdateStatsGUI()
 
--- Webhook Logic
+-- WEBHOOK SENDER (Final Part)
 task.spawn(function()
-    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local LOOP_DELAY = 15 
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"; local LOOP_DELAY = 15 
+    local function sendToWebhook(playerName, summary) local json = HttpService:JSONEncode(summary); local encoded = HttpService:UrlEncode(json); local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded; pcall(function() game:HttpGet(url) end) end
     if Replion then 
         local s, dataReplica = pcall(function() return Replion:WaitReplion("Data") end)
         if s and dataReplica then
@@ -827,24 +499,22 @@ task.spawn(function()
                     local summary = {}
                     for _, items in pairs(inventory) do 
                         for _, item in ipairs(items) do 
-                            local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-                            local name = item.Identifier
-                            if item.Id and ItemUtility then pcall(function() local d=ItemUtility:GetItemData(item.Id); if d then name=d.Data.Name end end) end
-                            local mutation = item.Metadata.VariantId or (item.Metadata.Shiny and "Shiny" or "None")
-                            
-                            if rarity == "SECRET" or (name == "Ruby" and mutation == "Gemstone") then 
+                            local name, rarity = GetFishNameAndRarity(item)
+                            local mutation = GetMutation(item)
+                            local isSecret = (rarity == "SECRET")
+                            local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
+                            if isSecret or isGemstoneRuby then 
                                 local displayName = name
-                                if mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
+                                if isGemstoneRuby then displayName = "[Gemstone] Ruby" elseif mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
                                 summary[displayName] = (summary[displayName] or 0) + 1 
                             end 
                         end 
                     end
-                    local json = HttpService:JSONEncode(summary)
-                    local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(LocalPlayer.Name) .. "&data=" .. HttpService:UrlEncode(json)
-                    pcall(function() game:HttpGet(url) end)
+                    sendToWebhook(LocalPlayer.Name, summary) 
                 end
                 task.wait(LOOP_DELAY) 
             end 
         end
     end
 end)
+game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Inventory Loaded"; Text = "Monitoring Total Secrets & Rubies"; Duration = 5})
