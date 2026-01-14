@@ -77,6 +77,7 @@ local DefaultConfig = {
     FishingV3Enabled = 0,
     AutoSellEnabled = 1,
     AutoUnfavRubySmart = 0,
+    AutoFavRubyGemEnabled = 1, -- [NEW] Add this line
     AutoAcceptTrade = 0,
     AntiAfkEnabled = 1,
     PotatoModeEnabled = 1, 
@@ -821,6 +822,40 @@ local function ToggleUnfavRuby(state)
     end
 end
 
+local function ToggleFavRuby(state)
+    ClearConnection("FavRubyGem")
+    if state then
+        RegisterConnection("FavRubyGem", task_spawn(function()
+            while Config.AutoFavRubyGemEnabled == 1 do
+                local r = Replion:WaitReplion("Data", 5)
+                if r then
+                    local success, inventory = pcall(function() return r:GetExpect("Inventory") end)
+                    if success and inventory then
+                        for _, items in pairs(inventory) do
+                            for _, item in ipairs(items) do
+                                local name = GetItemName(item)
+                                if name == "Ruby" then
+                                    local mutation = GetItemMutation(item)
+                                    -- Only Favorite if it is a GEMSTONE and NOT already favorited
+                                    if mutation == "Gemstone" then
+                                        if not (item.IsFavorite or item.Favorited or item.Locked) then
+                                            pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                            WindUI:Notify({ Title="Auto Favorite", Content="Protected: Ruby (Gemstone)", Icon="shield" })
+                                            task_wait(0.3)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                task_wait(2)
+            end
+        end))
+        ActiveConnections["FavRubyGem"] = { Disconnect = function() task.cancel(ActiveConnections["FavRubyGem"]) end }
+    end
+end
+
 local function ToggleAntiAfk(state)
     ClearConnection("AntiAFK")
     if state then
@@ -859,6 +894,14 @@ end
 
 SectUtil:Toggle({ Title = "Auto Sell All", Value = (Config.AutoSellEnabled == 1), Callback = function(s) Config.AutoSellEnabled = s and 1 or 0; ToggleAutoSell(s) end })
 SectUtil:Toggle({ Title = "Auto Unfav Ruby (Not Gem)", Value = (Config.AutoUnfavRubySmart == 1), Callback = function(s) Config.AutoUnfavRubySmart = s and 1 or 0; ToggleUnfavRuby(s) end })
+SectUtil:Toggle({ 
+    Title = "Auto Fav Ruby (Gemstone)", 
+    Value = (Config.AutoFavRubyGemEnabled == 1), 
+    Callback = function(s) 
+        Config.AutoFavRubyGemEnabled = s and 1 or 0
+        ToggleFavRuby(s) 
+    end 
+})
 SectUtil:Toggle({ Title = "Auto Accept Trade", Value = (Config.AutoAcceptTrade == 1), Callback = function(s) Config.AutoAcceptTrade = s and 1 or 0; ToggleAutoTrade(s) end })
 SectUtil:Toggle({ Title="Anti-AFK", Value=(Config.AntiAfkEnabled == 1), Callback = function(s) Config.AntiAfkEnabled = s and 1 or 0; ToggleAntiAfk(s) end })
 -- [NEW] Freeze Character Toggle
@@ -948,6 +991,7 @@ if Config.FishingV3Enabled == 1 then ToggleFishingV3(true) end
 if Config.PotatoModeEnabled == 1 then TogglePotato(true) end
 if Config.AntiAfkEnabled == 1 then ToggleAntiAfk(true) end
 if Config.AutoUnfavRubySmart == 1 then ToggleUnfavRuby(true) end
+if Config.AutoFavRubyGemEnabled == 1 then ToggleFavRuby(true) end
 if Config.AutoAcceptTrade == 1 then ToggleAutoTrade(true) end
 if Config.AutoSellEnabled == 1 then ToggleAutoSell(true) end
 if Config.AutoTotemSingle == 1 then ToggleSingleTotem(true) end
