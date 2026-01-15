@@ -75,8 +75,37 @@ pcall(function()
     originalPlayVFX = VFXControllerModule.PlayVFX.Fire 
 end)
 
-local PotatoLoop = nil
+-- ADD: Cutscene Controller bypass
+local originalCutscenePlay = nil
+pcall(function()
+    local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+    if CutsceneController and CutsceneController.Play then
+        originalCutscenePlay = CutsceneController.Play
+    end
+end)
 
+-- ADD: Animation disable function
+local function DisableAnimations()
+    local character = lp.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    -- 1. Block the default 'Animate' script
+    local animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then
+        animateScript.Enabled = false
+    end
+
+    -- 2. Destroy the Animator
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if animator then
+        animator:Destroy()
+    end
+end
+
+-- MODIFY: ApplyExtremePotato function to include new features
 local function ApplyExtremePotato()
     -- 1. Block VFX
     if VFXControllerModule then
@@ -86,7 +115,18 @@ local function ApplyExtremePotato()
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
     end
 
-    -- 2. Remove Environmental Effects
+    -- 2. Disable Cutscenes
+    pcall(function()
+        local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+        if CutsceneController and CutsceneController.Play then
+            CutsceneController.Play = function() return end
+        end
+    end)
+
+    -- 3. Disable Animations
+    DisableAnimations()
+
+    -- 4. Remove Environmental Effects
     pcall(function()
         local Lighting = game:GetService("Lighting")
         Lighting.GlobalShadows = false
@@ -101,7 +141,7 @@ local function ApplyExtremePotato()
         end
     end)
 
-    -- 3. Make Map & Objects Invisible
+    -- 5. Make Map & Objects Invisible
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then
             v.Transparency = 1 -- Invisible
@@ -112,7 +152,7 @@ local function ApplyExtremePotato()
         end
     end
 
-    -- 4. Make Character & Rod Invisible
+    -- 6. Make Character & Rod Invisible
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
             if v:IsA("BasePart") then
@@ -129,6 +169,16 @@ local function ApplyExtremePotato()
     if setfpscap then pcall(function() setfpscap(30) end) end
 end
 
+-- ADD: Character respawn handler for animations
+if not PotatoLoop then
+    lp.CharacterAdded:Connect(function(newCharacter)
+        if PotatoLoop then -- Only apply if potato mode is active
+            task.wait(0.2)
+            DisableAnimations()
+        end
+    end)
+end
+
 local function StartPotatoLoop()
     if PotatoLoop then return end
     ApplyExtremePotato()
@@ -141,10 +191,37 @@ end
 
 local function StopPotato()
     if PotatoLoop then task.cancel(PotatoLoop); PotatoLoop = nil end
+    
+    -- Restore VFX
     if VFXControllerModule then
         VFXControllerModule.Handle = originalVFXHandle
         if originalPlayVFX then VFXControllerModule.PlayVFX.Fire = originalPlayVFX end
     end
+    
+    -- Restore Cutscenes
+    pcall(function()
+        local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+        if CutsceneController and originalCutscenePlay then
+            CutsceneController.Play = originalCutscenePlay
+        end
+    end)
+    
+    -- Restore Animations
+    pcall(function()
+        local character = lp.Character
+        if character then
+            local animateScript = character:FindFirstChild("Animate")
+            if animateScript and animateScript:IsA("LocalScript") and not animateScript.Enabled then
+                animateScript.Enabled = true
+            end
+            
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid and not humanoid:FindFirstChildOfClass("Animator") then
+                Instance.new("Animator", humanoid)
+            end
+        end
+    end)
+    
     if setfpscap then pcall(function() setfpscap(60) end) end
 end
 
