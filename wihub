@@ -36,9 +36,9 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Auto Sell Every"] = 100,
     },
     ["Doing Quest"] = {
-        ["Auto Ghostfinn Rod"] = true,
-        ["Auto Element Rod"] = false,
-        ["Unlock Ancient Ruin"] = false,
+        ["Auto Ghostfinn Rod"] = false,
+        ["Auto Element Rod"] = true,
+        ["Unlock Ancient Ruin"] = true,
         ["Allowed Sacrifice"] = {
             "Ghost Shark",
             "Cryoshade Glider",
@@ -96,6 +96,7 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Evolved Roll Enchant"] = true,
         ["Enchant List"] = {
             "Reeler II",
+            "Reeler I",
             "SECRET Hunter",
             "Shark Hunter",
             "Mutation Hunter III",
