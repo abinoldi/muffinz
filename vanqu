@@ -151,7 +151,7 @@ end
 -- ===============================
 -- 4. FISHER V1 LOGIC
 -- ===============================
-local FishingConfig = { Enabled = false, AutoEquip = true, CompleteDelay = 1.53, CancelDelay = 0.38 }
+local FishingConfig = { Enabled = false, AutoEquip = true, CompleteDelay = 0.8, CancelDelay = 0.35 }
 local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0, CurrentLocation = "Idle" }
 local FishingThreads = {}
 local FishingConnection = nil
