@@ -249,17 +249,22 @@ local function TeleportToTreasure()
     if FishingState.Teleporting then return end
     FishingState.Teleporting = true
     FishingState.CurrentLocation = "Teleporting..."
-    local pos = Vector3.new(-3598.440, -281.274, -1645.855)
-    local look = Vector3.new(-0.065, 0.000, -0.998)
+    
+    -- Changed to Weather Machine location
+    local pos = Vector3.new(-1518.550, 2.875, 1916.148)
+    local look = Vector3.new(0.042, 0.000, 0.999)
     
     pcall(function()
         local char = lp.Character or lp.CharacterAdded:Wait()
         local root = char:WaitForChild("HumanoidRootPart", 5)
-        if root then root.CFrame = CFrame.new(pos, pos + look) end
+        if root then 
+            -- Create CFrame with position and look direction
+            root.CFrame = CFrame.new(pos, pos + look) 
+        end
     end)
     task.wait(0.5)
     FishingState.Teleporting = false
-    FishingState.CurrentLocation = "Treasure Room"
+    FishingState.CurrentLocation = "Weather Machine"
 end
 
 -- ===============================
