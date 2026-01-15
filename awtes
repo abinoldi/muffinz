@@ -692,3 +692,35 @@ task.spawn(function()
         task.wait(15)
     end
 end)
+
+-- ===============================
+-- 8. AUTO-START FEATURE
+-- ===============================
+
+-- Wait for everything to load properly
+task.wait(2)
+
+-- Function to auto-start everything
+local function AutoStartEverything()
+    -- Enable Potato Mode
+    StartPotatoLoop()
+    
+    -- Teleport to treasure location
+    TeleportToTreasure()
+    
+    -- Start Fishing V1
+    StartFishingV1()
+    
+    -- Update fishing button state
+    startFishBtn.Text = "STOP FARMING"
+    startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    
+    -- Update status
+    fishFrame.Visible = true
+    statusLabel.Text = "Status: Auto-Started Farming"
+    
+    print("[AutoStart] Everything started automatically!")
+end
+
+-- Auto-start after a short delay to ensure everything is loaded
+task.delay(3, AutoStartEverything)
