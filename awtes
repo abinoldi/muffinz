@@ -1,5 +1,5 @@
 -- ======================================================
--- COMBINED SCRIPT: AUTO TRADER + FISHER V1 (RUBY MGR)
+-- COMBINED SCRIPT: TRADER + FISHER V1 + EXTREME POTATO
 -- ======================================================
 
 -- ===============================
@@ -19,7 +19,6 @@ pcall(function()
 end)
 
 -- CLIENT BYPASSES (REQUIRED FOR V1 FISHING)
--- This must run immediately for Fishing V1 to work later
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
     if S1 and FishingController then
@@ -67,7 +66,7 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 3. FISHER V1 LOGIC & POTATO MODE
+-- 3. EXTREME INVISIBLE POTATO MODE
 -- ===============================
 local VFXControllerModule, originalVFXHandle, originalPlayVFX
 pcall(function()
@@ -77,34 +76,67 @@ pcall(function()
 end)
 
 local PotatoLoop = nil
-local function ApplyPotato()
+
+local function ApplyExtremePotato()
+    -- 1. Block VFX
     if VFXControllerModule then
         VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
     end
+
+    -- 2. Remove Environmental Effects
     pcall(function()
         local Lighting = game:GetService("Lighting")
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
+        
+        -- Invisible Water
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
-            workspace.Terrain.WaterTransparency = 1
-        end
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v:Destroy() end
-            if v:IsA("BasePart") then v.Material = Enum.Material.Plastic; v.CastShadow = false end
+            workspace.Terrain.WaterTransparency = 1 
+            workspace.Terrain.WaterReflectance = 0
         end
     end)
+
+    -- 3. Make Map & Objects Invisible
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Transparency = 1 -- Invisible
+            v.Reflectance = 0
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+            v:Destroy()
+        end
+    end
+
+    -- 4. Make Character & Rod Invisible
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.Transparency = 1 -- Invisible Body/Rod parts
+                v.Reflectance = 0
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("MeshPart") then
+                -- Hide faces and meshes on tools
+                if v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
+                if v:IsA("MeshPart") then v.Transparency = 1 end
+            end
+        end
+    end
+
     if setfpscap then pcall(function() setfpscap(30) end) end
 end
 
 local function StartPotatoLoop()
     if PotatoLoop then return end
-    ApplyPotato()
-    PotatoLoop = task.spawn(function() while task.wait(5) do ApplyPotato() end end)
+    ApplyExtremePotato()
+    PotatoLoop = task.spawn(function() 
+        while task.wait(3) do -- Re-apply every 3s to catch new objects/rods
+            ApplyExtremePotato() 
+        end 
+    end)
 end
 
 local function StopPotato()
@@ -116,7 +148,9 @@ local function StopPotato()
     if setfpscap then pcall(function() setfpscap(60) end) end
 end
 
--- Fishing Variables
+-- ===============================
+-- 4. FISHER V1 LOGIC
+-- ===============================
 local FishingConfig = { Enabled = false, AutoEquip = true, CompleteDelay = 1.53, CancelDelay = 0.38 }
 local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0, CurrentLocation = "Idle" }
 local FishingThreads = {}
@@ -200,7 +234,7 @@ local function StartFishingV1()
     end)
     table.insert(FishingThreads, sellThread)
     
-    -- Ruby Manager (Fav Gemstone / Unfav Others)
+    -- Ruby Manager
     local rubyThread = task.spawn(function()
         while FishingConfig.Enabled do
             local inv = PlayerData:GetExpect("Inventory")
@@ -266,9 +300,8 @@ local function TeleportToTreasure()
     FishingState.Teleporting = false
     FishingState.CurrentLocation = "Weather Machine"
 end
-
 -- ===============================
--- 4. TRADING LOGIC
+-- 5. TRADING LOGIC
 -- ===============================
 local TradingConfig = { AutoTrade = false, Delay = 6.5, Retry = 2.0, Mode = "SECRETS_FIRST", TargetId = nil }
 local TradingThread = nil
@@ -388,7 +421,7 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 5. GUI CONSTRUCTION
+-- 6. GUI CONSTRUCTION
 -- ===============================
 local gui = Instance.new("ScreenGui", lp.PlayerGui)
 gui.ResetOnSpawn = false
@@ -411,7 +444,7 @@ Instance.new("UIStroke", masterToggleBtn).Color = Color3.fromRGB(255, 255, 255)
 
 -- === TRADING FRAME (MAIN) ===
 local tradeFrame = Instance.new("Frame", gui)
-tradeFrame.Size = UDim2.fromOffset(320, 300) -- Made slightly taller
+tradeFrame.Size = UDim2.fromOffset(320, 300)
 tradeFrame.Position = UDim2.new(0.5, -160, 0.5, -150)
 tradeFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 tradeFrame.BorderSizePixel = 2
@@ -489,7 +522,7 @@ statusLabel.BackgroundTransparency = 1
 -- === FISHING FRAME (INITIALLY HIDDEN) ===
 local fishFrame = Instance.new("Frame", gui)
 fishFrame.Size = UDim2.fromOffset(300, 250)
-fishFrame.Position = UDim2.new(0.5, 170, 0.5, -125) -- To the right of trade frame
+fishFrame.Position = UDim2.new(0.5, 170, 0.5, -125)
 fishFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 fishFrame.BorderSizePixel = 2
 fishFrame.BorderColor3 = Color3.fromRGB(0, 100, 200)
@@ -534,15 +567,14 @@ startFishBtn.Font = Enum.Font.GothamBold
 local potatoToggle = Instance.new("TextButton", fishFrame)
 potatoToggle.Size = UDim2.new(0.9, 0, 0, 30)
 potatoToggle.Position = UDim2.new(0.05, 0, 0.8, 0)
-potatoToggle.Text = "Toggle Potato Mode"
+potatoToggle.Text = "Toggle Invisible Mode (Potato)"
 potatoToggle.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
 potatoToggle.TextColor3 = Color3.new(1,1,1)
 
 -- ===============================
--- 6. GUI LOGIC & BINDINGS
+-- 7. GUI LOGIC & BINDINGS
 -- ===============================
 
--- Toggle Master Visibility
 masterToggleBtn.MouseButton1Click:Connect(function()
     tradeFrame.Visible = not tradeFrame.Visible
 end)
@@ -554,7 +586,6 @@ closeBtn.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
--- Open/Hide Fisher
 openFisherBtn.MouseButton1Click:Connect(function()
     fishFrame.Visible = not fishFrame.Visible
 end)
@@ -617,11 +648,9 @@ end)
 -- Update Loops
 task.spawn(function()
     while gui.Parent do
-        -- Update Trading Stats
         local s, r = ScanInventoryForTrade()
         statsLabel.Text = string.format("Secrets: %d\nRuby Gems: %d", #s, #r)
         
-        -- Update Fishing Stats
         if FishingConfig.Enabled then
              fishInfo.Text = string.format("Stats:\nCoins: %s\nEarned: %s\nLoc: %s\nMode: V1 + RubyMgr", 
                 FormatNumber(GetCoins()), 
@@ -632,10 +661,9 @@ task.spawn(function()
     end
 end)
 
--- Webhook (From Fisher V1)
+-- Webhook
 task.spawn(function()
     local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
-    
     local function SendHook(pName, data)
         local json = HttpService:JSONEncode(data)
         local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(pName) .. "&data=" .. HttpService:UrlEncode(json)
