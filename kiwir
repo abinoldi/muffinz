@@ -1,109 +1,160 @@
 -- ===============================
--- INSTANT FISH CONFIGURATION
+-- 4. INSTANT FISHER LOGIC
 -- ===============================
-local InstantFishConfig = {
-    Enabled = false,          -- Will be enabled when we start fishing
-    CatchDelay = 1.5,        -- Delay between casting and catching (Lower = Faster, but riskier)
-    AutoEquip = true,        -- Automatically equips rod (Slot 1) to prevent stopping
-    SpamEquipDelay = 0.5,    -- How often to force equip the rod
-} [cite: 34, 35]
+-- Adjusted for speed: CatchDelay 0.1 is "Instant". Increase if you get disconnected.
+local FishingConfig = { Enabled = false, AutoEquip = true, CatchDelay = 0.15, SpamEquipDelay = 0.5 }
+local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0, CurrentLocation = "Idle" }
+local FishingThreads = {}
 
--- ===============================
--- INSTANT FISHING REMOTES
--- ===============================
-local function GetInstantRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = game:GetService("ReplicatedStorage")
-    for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 2)
-        if not current then return nil end
-    end
-    return current:FindFirstChild(name)
-end [cite: 37, 38]
+-- REMOTES (Using existing GetRemote function from Section 2)
+local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
+local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
+local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
+local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
+local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
+local RF_SellAllItems = GetRemote("RF/SellAllItems")
+local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
--- Define Instant Fishing Remotes
-local RE_EquipToolFromHotbar
-local RF_ChargeFishingRod
-local RF_RequestFishingMinigameStarted
-local RE_FishingCompleted
-local RF_CancelFishingInputs
+local function GetCoins()
+    return PlayerData and (PlayerData:Get("Coins") or 0) or 0
+end
 
-local function LoadInstantFishingRemotes()
-    RE_EquipToolFromHotbar = GetInstantRemote("RE/EquipToolFromHotbar")
-    RF_ChargeFishingRod = GetInstantRemote("RF/ChargeFishingRod")
-    RF_RequestFishingMinigameStarted = GetInstantRemote("RF/RequestFishingMinigameStarted")
-    RE_FishingCompleted = GetInstantRemote("RE/FishingCompleted")
-    RF_CancelFishingInputs = GetInstantRemote("RF/CancelFishingInputs")
-end [cite: 38, 39]
+local function FormatNumber(num)
+    if num >= 1000000 then return string.format("%.1fM", num/1000000)
+    elseif num >= 1000 then return string.format("%.1fK", num/1000)
+    else return tostring(num) end
+end
 
--- ===============================
--- MAIN FUNCTION
--- ===============================
-local instantFishThreads = {}
-local STATE = { ScriptRunning = true, IsFishing = false } -- Minimal state mock-up
-
-local function StartInstantFishing()
-    -- Load remotes if not loaded
-    LoadInstantFishingRemotes() [cite: 40]
+local function StartFishingV1()
+    if FishingState.IsFishing then return end
+    FishingState.IsFishing = true
+    FishingConfig.Enabled = true
     
-    STATE.IsFishing = true
-    InstantFishConfig.Enabled = true
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
     
-    -- Thread for Auto Equip (Prevents character from un-equipping rod)
+    -- 1. Auto Equip Thread
     local equipThread = task.spawn(function()
-        while InstantFishConfig.Enabled and InstantFishConfig.AutoEquip and STATE.ScriptRunning do
-            if RE_EquipToolFromHotbar then
-                pcall(function() 
-                    RE_EquipToolFromHotbar:FireServer(1) 
-                end)
+        while FishingConfig.Enabled do
+            if FishingConfig.AutoEquip and RE_EquipToolFromHotbar then
+                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
             end
-            task.wait(InstantFishConfig.SpamEquipDelay)
+            task.wait(FishingConfig.SpamEquipDelay)
         end
-    end) [cite: 40, 41]
-    
-    table.insert(instantFishThreads, equipThread)
-
-    -- Main Instant Fishing Loop
-    local fishingThread = task.spawn(function()
-        while InstantFishConfig.Enabled and STATE.ScriptRunning do
-            if not (RF_ChargeFishingRod and RF_RequestFishingMinigameStarted and RE_FishingCompleted) then
-                warn("[Instant Fish] Remotes not found! Stopping.")
-                InstantFishConfig.Enabled = false
-                break
-            end [cite: 42, 43]
-
-            -- 1. Charge Rod
-            local timestamp = os.time() + os.clock() 
-            pcall(function() 
-                RF_ChargeFishingRod:InvokeServer(timestamp) 
-            end) [cite: 43, 44]
-
-            -- 2. Request Minigame Start with instant coordinates
-            pcall(function() 
-                RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) 
-            end) [cite: 44]
-            
-            -- 3. Wait for the catch (Bypassing the actual minigame duration)
-            task.wait(InstantFishConfig.CatchDelay) [cite: 45]
-            
-            -- 4. Complete Fishing
-            pcall(function() 
-                RE_FishingCompleted:FireServer() 
-            end) [cite: 45]
-            
-            -- 5. Cleanup Inputs
-            task.wait(0.3)
-            pcall(function() 
-                if RF_CancelFishingInputs then
-                    RF_CancelFishingInputs:InvokeServer() 
-                end
-            end) [cite: 46, 47]
-            
-            -- Loop Delay
-            task.wait(0.1)
-        end
-        STATE.IsFishing = false
     end)
+    table.insert(FishingThreads, equipThread)
     
-    table.insert(instantFishThreads, fishingThread) [cite: 48]
+    -- 2. INSTANT FISHING LOOP
+    local fishLoop = task.spawn(function()
+        while FishingConfig.Enabled do
+            -- A. Charge Rod
+            local now = os.clock()
+            pcall(function() 
+                if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(now) end
+            end)
+
+            -- B. Request Minigame (Instant Coords from your snippet)
+            pcall(function() 
+                if RF_RequestFishingMinigameStarted then 
+                    RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) 
+                end
+            end)
+
+            -- C. Instant Catch Wait
+            task.wait(FishingConfig.CatchDelay)
+
+            -- D. Complete Fishing
+            pcall(function() 
+                if RE_FishingCompleted then RE_FishingCompleted:FireServer() end 
+            end)
+
+            -- E. Cleanup / Reset Inputs
+            pcall(function() 
+                if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end 
+            end)
+            
+            task.wait(0.1) -- Tiny cooldown to prevent crash
+        end
+    end)
+    table.insert(FishingThreads, fishLoop)
+
+    -- 3. Auto Sell Thread (Kept from original)
+    local sellThread = task.spawn(function()
+        while FishingConfig.Enabled do
+            local before = GetCoins()
+            pcall(function() if RF_SellAllItems then RF_SellAllItems:InvokeServer() end end)
+            task.wait(1)
+            local after = GetCoins()
+            if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
+            task.wait(299)
+        end
+    end)
+    table.insert(FishingThreads, sellThread)
+    
+    -- 4. Ruby Manager Thread (Kept from original)
+    local rubyThread = task.spawn(function()
+        while FishingConfig.Enabled do
+            local inv = PlayerData:GetExpect("Inventory")
+            if inv then
+                for _, items in pairs(inv) do
+                    for _, item in ipairs(items) do
+                        local name = item.Identifier or "Unknown"
+                        if ItemUtility and item.Id then
+                            pcall(function() 
+                                local d = ItemUtility:GetItemData(item.Id)
+                                if d and d.Data then name = d.Data.Name end
+                            end)
+                        end
+                        local variant = "None"
+                        if item.Metadata and item.Metadata.VariantId then variant = item.Metadata.VariantId end
+                        
+                        if name == "Ruby" and item.UUID then
+                            local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
+                            if variant == "Gemstone" then
+                                if not isLocked then pcall(function() RE_FavoriteItem:FireServer(item.UUID) end) task.wait(0.3) end
+                            else
+                                if isLocked then pcall(function() RE_FavoriteItem:FireServer(item.UUID) end) task.wait(0.3) end
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(2.5)
+        end
+    end)
+    table.insert(FishingThreads, rubyThread)
+end
+
+local function StopFishingV1()
+    FishingConfig.Enabled = false
+    FishingState.IsFishing = false
+    -- Cancel all threads (Equip, InstantFish, Sell, Ruby)
+    for _, t in ipairs(FishingThreads) do task.cancel(t) end
+    FishingThreads = {}
+    
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+    pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
+    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+end
+
+local function TeleportToTreasure()
+    if FishingState.Teleporting then return end
+    FishingState.Teleporting = true
+    FishingState.CurrentLocation = "Teleporting..."
+    
+    -- Changed to Weather Machine location
+    local pos = Vector3.new(-1518.550, 2.875, 1916.148)
+    local look = Vector3.new(0.042, 0.000, 0.999)
+    
+    pcall(function()
+        local char = lp.Character or lp.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart", 5)
+        if root then 
+            -- Create CFrame with position and look direction
+            root.CFrame = CFrame.new(pos, pos + look) 
+        end
+    end)
+    task.wait(0.5)
+    FishingState.Teleporting = false
+    FishingState.CurrentLocation = "Weather Machine"
 end
