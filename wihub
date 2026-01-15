@@ -51,7 +51,7 @@ _G.FishItConfig = _G.FishItConfig or {
         },
         ["FARM_LOC_SECRET_SACRIFICE"] = "Ocean",
 
-        ["Minimum Rod"] = "Starter Rod",
+        ["Minimum Rod"] = "Ghostfinn Rod",
     },
     ["WebHook"] = {
         ["Link Webhook"] = "",
