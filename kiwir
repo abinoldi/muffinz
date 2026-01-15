@@ -1070,32 +1070,49 @@ tradeToggle.MouseButton1Click:Connect(function()
     end
 end)
 
--- Fishing Logic Update
 startFishBtn.MouseButton1Click:Connect(function()
     if FishingState.IsFishing then
-        StopInstantFishing()
+        StopInstantFishing()  -- Changed from StopFishingV1
         startFishBtn.Text = "START INSTANT FISHING"
         startFishBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
-        statusLabel.Text = "Status: Fishing Stopped"
+        statusLabel.Text = "Status: Stopped"
     else
         startFishBtn.Text = "STOP INSTANT FISHING"
         startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-        statusLabel.Text = "Status: Starting Instant Fishing..."
+        statusLabel.Text = "Status: Starting..."
         
-        -- Start potato mode first
-        StartPotatoLoop()
-        
-        -- Teleport after a short delay
-        task.wait(1)
-        TeleportToTreasure()
-        
-        -- Start fishing after teleport
-        task.wait(1)
-        StartInstantFishing()
-        
-        statusLabel.Text = "Status: Instant Fishing Active"
+        -- Start in sequence
+        task.spawn(function()
+            -- First, enable potato mode if needed
+            if not PotatoLoop then
+                StartPotatoLoop()
+                task.wait(1)
+            end
+            
+            -- Teleport to fishing spot
+            local teleportSuccess = TeleportToTreasure()
+            
+            if teleportSuccess then
+                task.wait(1)  -- Wait a second after teleport
+                
+                -- Start instant fishing
+                StartInstantFishing()
+                
+                -- Update UI
+                statusLabel.Text = "Status: Instant Fishing Active"
+                fishInfo.Text = string.format("Stats:\nCoins: %s\nEarned: %s\nLoc: %s\nMode: INSTANT", 
+                    FormatNumber(GetCoins()), 
+                    FormatNumber(FishingState.SessionEarnings),
+                    FishingState.CurrentLocation)
+            else
+                statusLabel.Text = "Status: Teleport Failed"
+                startFishBtn.Text = "START INSTANT FISHING"
+                startFishBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+            end
+        end)
     end
 end)
+
 
 potatoToggle.MouseButton1Click:Connect(function()
     if PotatoLoop then 
@@ -1184,37 +1201,34 @@ task.wait(3)
 
 -- Function to auto-start everything (optional, can be disabled)
 local function AutoStartEverything()
-    pcall(function()
-        -- Only start if GUI is still there
-        if gui.Parent then
-            print("[AutoStart] Starting Instant Fishing...")
-            
-            -- Enable Potato Mode
-            StartPotatoLoop()
-            
-            -- Update potato button
-            potatoToggle.Text = "Disable Invisible Mode"
-            potatoToggle.BackgroundColor3 = Color3.fromRGB(100, 150, 0)
-            
-            -- Teleport after delay
-            task.wait(2)
-            TeleportToTreasure()
-            
-            -- Start fishing after teleport
-            task.wait(1)
-            StartInstantFishing()
-            
-            -- Update fishing button
-            startFishBtn.Text = "STOP INSTANT FISHING"
-            startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-            
-            -- Update status and show fishing frame
-            statusLabel.Text = "Status: Auto-Started Instant Fishing"
-            fishFrame.Visible = true
-            
-            print("[AutoStart] Instant Fishing started successfully!")
-        end
-    end)
+    print("[AutoStart] Beginning auto-start sequence...")
+    
+    -- Enable Potato Mode
+    StartPotatoLoop()
+    task.wait(1)
+    
+    -- Teleport to treasure location
+    local teleported = TeleportToTreasure()
+    
+    if teleported then
+        task.wait(2)  -- Wait after teleport
+        
+        -- Start Instant Fishing
+        StartInstantFishing()
+        
+        -- Update fishing button state
+        startFishBtn.Text = "STOP INSTANT FISHING"
+        startFishBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+        
+        -- Update status and show fishing frame
+        statusLabel.Text = "Status: Auto-Started Instant Fishing"
+        fishFrame.Visible = true
+        
+        print("[AutoStart] Instant Fishing started successfully!")
+    else
+        print("[AutoStart] Failed to teleport. Check your character.")
+        statusLabel.Text = "Status: Teleport Failed"
+    end
 end
 
 -- Auto-start after delay (optional - comment out if you don't want auto-start)
