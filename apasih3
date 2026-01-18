@@ -305,21 +305,38 @@ local function StartFishingV1()
     end)
     table.insert(FishingThreads, sellThread)
     
-    -- Loop 4: Ruby Manager
-    local rubyThread = task.spawn(function()
+    -- Loop 4: Mutation Favorite Manager (UPDATED FOR LEVIATHAN'S RAGE)
+    local mutationThread = task.spawn(function()
         while FishingConfig.Enabled do
             local inv = PlayerData:GetExpect("Inventory")
             if inv then
                 for _, items in pairs(inv) do
                     for _, item in ipairs(items) do
-                        local name, _ = GetFishNameAndRarity(item)
-                        local variant = GetMutation(item)
-                        if name == "Ruby" and item.UUID then
+                        if item.UUID then
+                            local mutation = GetMutation(item)
                             local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
-                            if variant == "Gemstone" then
-                                if not isLocked then pcall(function() RE_FavoriteItem:FireServer(item.UUID) end) task.wait(0.3) end
-                            else
-                                if isLocked then pcall(function() RE_FavoriteItem:FireServer(item.UUID) end) task.wait(0.3) end
+                            
+                            -- Check for Leviathan's Rage mutation
+                            if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
+                                if not isLocked then
+                                    pcall(function() 
+                                        RE_FavoriteItem:FireServer(item.UUID) 
+                                        print("[Leviathan's Rage] Favorited item:", item.Identifier or "Unknown")
+                                    end)
+                                    task.wait(0.2)
+                                end
+                            -- Ruby Gemstone logic (kept for compatibility)
+                            elseif item.Identifier == "Ruby" and mutation == "Gemstone" then
+                                if not isLocked then 
+                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                    task.wait(0.2)
+                                end
+                            -- Unlock regular rubies (non-gemstone)
+                            elseif item.Identifier == "Ruby" and mutation ~= "Gemstone" then
+                                if isLocked then 
+                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                    task.wait(0.2)
+                                end
                             end
                         end
                     end
@@ -328,7 +345,7 @@ local function StartFishingV1()
             task.wait(2.5)
         end
     end)
-    table.insert(FishingThreads, rubyThread)
+    table.insert(FishingThreads, mutationThread)
 end
 
 local function StopFishingV1()
@@ -364,10 +381,11 @@ local TradingConfig = { AutoTrade = false, Delay = 6.5, Retry = 2.0, Mode = "SEC
 local TradingThread = nil
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 
+-- Updated to include Leviathan's Rage items
 local function ScanInventoryForTrade()
-    local secrets, rubies = {}, {}
+    local secrets, specialMutations = {}, {}
     local inv = PlayerData:GetExpect("Inventory")
-    if not inv then return secrets, rubies end
+    if not inv then return secrets, specialMutations end
     
     for _, items in pairs(inv) do
         for _, item in ipairs(items) do
@@ -378,12 +396,25 @@ local function ScanInventoryForTrade()
                 table.insert(secrets, {uuid = item.UUID, name = name})
             end
             
-            if name == "Ruby" and mutation == "Gemstone" then
-                table.insert(rubies, {uuid = item.UUID, name = name})
+            -- Include Leviathan's Rage items in special mutations
+            if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
+                table.insert(specialMutations, {
+                    uuid = item.UUID, 
+                    name = name, 
+                    mutation = mutation,
+                    isFavorite = (item.IsFavorite or item.Favorited or item.Locked)
+                })
+            elseif name == "Ruby" and mutation == "Gemstone" then
+                table.insert(specialMutations, {
+                    uuid = item.UUID, 
+                    name = name, 
+                    mutation = mutation,
+                    isFavorite = (item.IsFavorite or item.Favorited or item.Locked)
+                })
             end
         end
     end
-    return secrets, rubies
+    return secrets, specialMutations
 end
 
 local function IsItemStillInInventory(uuid)
@@ -404,9 +435,9 @@ local function RunAutoTrade()
     TradingThread = task.spawn(function()
         while TradingConfig.AutoTrade do
             local success, err = pcall(function()
-                local secrets, rubies = ScanInventoryForTrade()
+                local secrets, specialMutations = ScanInventoryForTrade()
                 
-                if #secrets == 0 and #rubies == 0 then
+                if #secrets == 0 and #specialMutations == 0 then
                     TradingConfig.AutoTrade = false
                     return
                 end
@@ -415,12 +446,20 @@ local function RunAutoTrade()
                 
                 if TradingConfig.Mode == "SECRETS_FIRST" then
                     if #secrets > 0 then tradeUUID = secrets[1].uuid; tradeName = secrets[1].name
-                    elseif #rubies > 0 then tradeUUID = rubies[1].uuid; tradeName = rubies[1].name end
+                    elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid; tradeName = specialMutations[1].name .. " (" .. specialMutations[1].mutation .. ")" end
                 elseif TradingConfig.Mode == "RUBY_GEMSTONE" then
-                    if #rubies > 0 then tradeUUID = rubies[1].uuid; tradeName = rubies[1].name end
+                    if #specialMutations > 0 then 
+                        for _, item in ipairs(specialMutations) do
+                            if item.name == "Ruby" and item.mutation == "Gemstone" then
+                                tradeUUID = item.uuid
+                                tradeName = item.name .. " (" .. item.mutation .. ")"
+                                break
+                            end
+                        end
+                    end
                 elseif TradingConfig.Mode == "ALL" then
                     if #secrets > 0 then tradeUUID = secrets[1].uuid; tradeName = secrets[1].name
-                    elseif #rubies > 0 then tradeUUID = rubies[1].uuid; tradeName = rubies[1].name end
+                    elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid; tradeName = specialMutations[1].name .. " (" .. specialMutations[1].mutation .. ")" end
                 end
                 
                 if not tradeUUID then task.wait(2); return end
@@ -538,7 +577,7 @@ Instance.new("UICorner", input).CornerRadius = UDim.new(0, 6)
 
 local invStats = Instance.new("TextLabel", container)
 invStats.Size = UDim2.new(1, 0, 0, 20)
-invStats.Text = "Inventory: 0 Secrets | 0 Gemstones"
+invStats.Text = "Inventory: 0 Secrets | 0 Special"
 invStats.TextColor3 = Color3.fromRGB(200, 200, 200)
 invStats.BackgroundTransparency = 1
 invStats.LayoutOrder = 3
@@ -682,8 +721,8 @@ end)
 -- Stats Updater Loop
 task.spawn(function()
     while gui.Parent do
-        local s, r = ScanInventoryForTrade()
-        invStats.Text = string.format("Inventory: %d Secrets | %d Gemstones", #s, #r)
+        local s, special = ScanInventoryForTrade()
+        invStats.Text = string.format("Inventory: %d Secrets | %d Special", #s, #special)
         
         -- Fishing Stats Update
         coinLabel.Text = "Coins: " .. FormatNumber(GetCoins())
@@ -716,10 +755,11 @@ task.spawn(function()
                 for _, item in ipairs(items) do
                     local n, r = GetFishNameAndRarity(item)
                     local mut = GetMutation(item)
-                    if r == "SECRET" or (n == "Ruby" and mut == "Gemstone") then
+                    
+                    -- Include Leviathan's Rage and other special mutations in webhook
+                    if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
                         local dName = n
-                        if mut == "Gemstone" then dName = "[Gemstone] " .. n 
-                        elseif mut ~= "None" then dName = "["..mut.."] "..n end
+                        if mut ~= "None" then dName = "["..mut.."] "..n end
                         summary[dName] = (summary[dName] or 0) + 1
                     end
                 end
