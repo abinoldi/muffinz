@@ -1,6 +1,6 @@
 _G.FishItConfig = _G.FishItConfig or {
     ["Fishing"] = {
-        ["Auto Perfect"] = false,
+        ["Auto Perfect"] = true,
         ["Random Result"] = false,
 
         ["Auto Favorite"] = true,
@@ -74,15 +74,15 @@ _G.FishItConfig = _G.FishItConfig or {
     },
     ["Totems"] = {
         ["Auto Use"] = true,
-        ["Minimum Rod"] = "Ghostfinn Rod",
+        ["Minimum Rod"] = "Element Rod",
         ["Buy List"] = {
-            ["Luck Totem"] = 5,
-            "Mutation Totem",
+            "Luck Totem",
+            ["Mutation Totem"] = 50,
             "Shiny Totem",
         },
     },
     ["Event"] = {
-        ["Start Farm"] = true,
+        ["Start Farm"] = false,
         ["Minimum Rod"] = "Ghostfinn Rod",
         ["Event List"] = {
             "Megalodon Hunt",
@@ -92,18 +92,11 @@ _G.FishItConfig = _G.FishItConfig or {
         },
     },
     ["Enchant"] = {
-        ["Auto Enchant"] = false,
+        ["Auto Enchant"] = true,
         ["Roll Enchant"] = false,
         ["Evolved Roll Enchant"] = true,
         ["Enchant List"] = {
-            "Reeler II",
-            "Reeler I",
             "SECRET Hunter",
-            "Shark Hunter",
-            "Mutation Hunter III",
-            "Leprechaun II",
-            "Mutation Hunter II",
-            "Prismatic I",
         },
         ["Second Enchant"] = false,
         ["Allowed Sacrifice"] = {
@@ -115,7 +108,7 @@ _G.FishItConfig = _G.FishItConfig or {
             "Prismatic I",
             "Mutation Hunter II",
         },
-        ["Minimum Rod"] = "Ghostfinn Rod",
+        ["Minimum Rod"] = "Element Rod",
     },
     ["Bait List"] = {
         ["Auto Buying"] = true,
@@ -140,7 +133,8 @@ _G.FishItConfig = _G.FishItConfig or {
             ["Fisherman Island"] = {"Starter Rod"},
             ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
             ["Tropical Grove"] = {"Astral Rod"},
-            ["Kohana"] = {"Element Rod", "Ghostfinn Rod", "Angler Rod", "Ares Rod"},
+            ["Kohana"] = {"Ghostfinn Rod", "Angler Rod", "Ares Rod"},
+            ["Ancient Ruin"] = {"Element Rod"},
         },
         ["Endgame"] = "",
     },
