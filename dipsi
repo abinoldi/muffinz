@@ -1,18 +1,16 @@
 -- ======================================================
--- ENOCHHUB | FISH IT PRO - AFK DASHBOARD (FINAL TIMER)
--- Features: Full Screen, Time Elapsed, Auto-Start, Safe Mode
+-- ENOCHHUB | FISH IT PRO - DASHBOARD (FIXED LAYER)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
 
 -- ===============================
--- 1. ANTI-AFK (WAJIB UNTUK AFK LAMA)
+-- 1. ANTI-AFK (WAJIB)
 -- ===============================
 local virtualUser = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
     virtualUser:CaptureController()
     virtualUser:ClickButton2(Vector2.new())
-    print("[Anti-AFK] Prevented kick")
 end)
 
 -- ===============================
@@ -29,16 +27,16 @@ local STATE = {
     HasDeepSeaQuest = false, CurrentQuestObj = 0, QuestProgress = "0/0",
     QuestTarget = "N/A", QuestLocation = "None",
     FishCount = 0, FishPerMinute = 0.0, 
-    StartTime = os.time(), -- Waktu Mulai Script
+    StartTime = os.time(),
     Status = "Starting...",
     Teleporting = false
 }
 
 -- ===============================
--- SAFE POTATO MODE (NO CRASH)
+-- SAFE POTATO MODE
 -- ===============================
 local function EnablePotatoMode()
-    -- Hook Visuals (VFX & Cutscenes)
+    -- Hook Visuals
     pcall(function()
         local VFX = require(ReplicatedStorage.Controllers.VFXController)
         if VFX then VFX.Handle=function() end; if VFX.PlayVFX then VFX.PlayVFX.Fire=function() end end end
@@ -48,7 +46,7 @@ local function EnablePotatoMode()
         if Cutscene then Cutscene.Play=function() end end
     end)
 
-    -- Apply Transparency Loop
+    -- Apply Transparency Loop (Safe)
     task.spawn(function()
         while task.wait(5) do
             pcall(function()
@@ -105,7 +103,6 @@ local function CalcStats()
     local mins = (os.time()-STATE.StartTime)/60
     STATE.FishPerMinute = mins>0 and STATE.FishCount/mins or 0
 end
--- Fungsi Format Waktu (00h 00m 00s)
 local function FormatTime(seconds)
     local h = math.floor(seconds / 3600)
     local m = math.floor((seconds % 3600) / 60)
@@ -127,7 +124,7 @@ local function UpdateGameState()
     local ownedRods = {}; for _,r in ipairs(inv["Fishing Rods"] or {}) do table.insert(ownedRods, tonumber(r.Id)) end
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     
-    -- Quest Logic (Auto Advance)
+    -- Quest Logic
     local quest = PlayerDataReplion:Get().Quests and PlayerDataReplion:Get().Quests.Mainline and PlayerDataReplion:Get().Quests.Mainline["Deep Sea Quest"]
     if quest then
         STATE.HasDeepSeaQuest = true
@@ -178,11 +175,10 @@ local clickThread = nil
 local function ClickLoop()
     while AutoActive and STATE.Status == "Reeling" do
         FishingController:RequestFishingMinigameClick()
-        task.wait(0.1) -- Safe Speed (Anti-Kick)
+        task.wait(0.1)
     end
 end
 
--- Hooks
 local oldStart = FishingController.FishingRodStarted
 FishingController.FishingRodStarted = function(self,...)
     oldStart(self,...)
@@ -199,7 +195,6 @@ FishingController.FishingStopped = function(self,...)
     if AutoActive then STATE.Status = "Casting" end
 end
 
--- Main Loop
 task.spawn(function()
     while task.wait(4) do
         if AutoActive then
@@ -223,12 +218,10 @@ task.spawn(function()
 
             -- Auto Teleport
             local target = "Esoteric Island"
-            if STATE.HasDeepSeaQuest then
-                target = STATE.QuestLocation 
-            end
+            if STATE.HasDeepSeaQuest then target = STATE.QuestLocation end
             if STATE.CurrentArea ~= target then Teleport(target) end
             
-            -- Auto Equip Rod
+            -- Auto Equip
             if STATE.HasAstralRod then
                  pcall(function()
                     local rods = PlayerDataReplion:GetExpect("Inventory")["Fishing Rods"]
@@ -239,7 +232,6 @@ task.spawn(function()
     end
 end)
 
--- Fish Listener
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(_,_,full)
         STATE.FishCount = STATE.FishCount + 1
@@ -250,22 +242,23 @@ if RE_ObtainedNewFishNotification then
 end
 
 -- ===============================
--- FULL SCREEN DASHBOARD GUI
+-- DASHBOARD GUI (LAYER FIX)
 -- ===============================
 local function CreateDashboard()
     if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
     
     local gui = Instance.new("ScreenGui", game.CoreGui)
     gui.Name = "EnochDashboard"
-    gui.IgnoreGuiInset = true -- Covers top bar
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling -- FIX: Ini penting agar Text muncul di atas Background
     
-    -- Full Screen Frame
+    -- Background Hitam (ZIndex 1)
     local main = Instance.new("Frame", gui)
     main.Size = UDim2.fromScale(1, 1)
-    main.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Full Black
-    main.ZIndex = 100 -- Topmost
+    main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    main.ZIndex = 1 
     
-    -- Center Layout
+    -- Layout
     local layout = Instance.new("UIListLayout", main)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -277,25 +270,24 @@ local function CreateDashboard()
         l.Size = UDim2.new(1, 0, 0, size+10)
         l.BackgroundTransparency = 1
         l.Font = bold and Enum.Font.GothamBlack or Enum.Font.Gotham
+        l.ZIndex = 2 -- FIX: ZIndex lebih tinggi dari background
         return l
     end
     
     -- Elements
     Text("ENOCHHUB | AFK DASHBOARD", 20, Color3.fromRGB(80, 80, 80), true)
     
-    local L_Coins = Text("$0", 50, Color3.fromRGB(255, 215, 0), true) -- Gold
+    local L_Coins = Text("$0", 50, Color3.fromRGB(255, 215, 0), true)
     local L_Stats = Text("0 | 0.0 F/M", 35, Color3.fromRGB(255, 255, 255), true)
+    local L_Time  = Text("Loading Timer...", 30, Color3.fromRGB(180, 180, 180), true)
     
-    -- TIME ELAPSED (ADDED HERE)
-    local L_Time = Text("00h 00m 00s", 30, Color3.fromRGB(180, 180, 180), true)
+    local div = Instance.new("Frame", main); div.Size=UDim2.new(0.5,0,0,2); div.BackgroundColor3=Color3.fromRGB(50,50,50); div.BorderSizePixel=0; div.ZIndex=2
     
-    local div = Instance.new("Frame", main); div.Size=UDim2.new(0.5,0,0,2); div.BackgroundColor3=Color3.fromRGB(50,50,50); div.BorderSizePixel=0
+    local L_QuestLoc = Text("Checking Quest...", 25, Color3.fromRGB(100, 200, 255), true)
+    local L_QuestProg = Text("...", 20, Color3.fromRGB(150, 255, 150), false)
+    local L_Status = Text("Starting...", 18, Color3.fromRGB(255, 100, 100), true)
     
-    local L_QuestLoc = Text("Checking...", 25, Color3.fromRGB(100, 200, 255), true)
-    local L_QuestProg = Text("0/0", 20, Color3.fromRGB(150, 255, 150), false)
-    local L_Status = Text("Initializing...", 18, Color3.fromRGB(255, 100, 100), true)
-    
-    -- Hide/Minimize Button (Bottom Right)
+    -- Minimize Button (ZIndex 10)
     local hideBtn = Instance.new("TextButton", gui)
     hideBtn.Size = UDim2.fromOffset(120, 40)
     hideBtn.Position = UDim2.new(1, -140, 1, -60)
@@ -303,6 +295,7 @@ local function CreateDashboard()
     hideBtn.Text = "MINIMIZE UI"
     hideBtn.TextColor3 = Color3.new(1,1,1)
     hideBtn.Font = Enum.Font.GothamBold
+    hideBtn.ZIndex = 10
     Instance.new("UICorner", hideBtn).CornerRadius = UDim.new(0, 8)
     
     local minimized = false
@@ -323,10 +316,7 @@ local function CreateDashboard()
             L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
             CalcStats()
             L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
-            
-            -- UPDATE TIME ELAPSED
             L_Time.Text = FormatTime(os.time() - STATE.StartTime)
-            
             L_QuestLoc.Text = "QUEST: " .. STATE.QuestTarget
             L_QuestProg.Text = STATE.QuestProgress .. " - " .. STATE.QuestLocation
             L_Status.Text = "STATUS: " .. STATE.Status
@@ -336,11 +326,10 @@ local function CreateDashboard()
 end
 
 -- ===============================
--- START
+-- EXECUTE
 -- ===============================
 task.spawn(EnablePotatoMode)
 task.spawn(CreateDashboard)
-
 task.wait(2)
-RF_UpdateAutoFishingState:InvokeServer(true) -- Force Start
-print("🚀 EnochHub Auto-Farm Started (AFK Dashboard Mode)")
+RF_UpdateAutoFishingState:InvokeServer(true)
+print("🚀 EnochHub AFK Dashboard Started!")
