@@ -1045,7 +1045,7 @@ local function CreateGUI()
     end)
 
     -- --- 3. TOMBOL HIDE/SHOW (FOOTER) ---
-    -- Ini tombol "W - v1.1.3" yang berfungsi menyembunyikan konten
+    -- Ini tombol "Enoch Hub" yang berfungsi menyembunyikan konten
     local hideBtn = Instance.new("TextButton")
     hideBtn.Name = "HideButton"
     hideBtn.Size = UDim2.new(0.6, 0, 0, 30)
