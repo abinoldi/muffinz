@@ -1,5 +1,5 @@
 -- ======================================================
--- ENOCHHUB | FISH IT PRO - FINAL FIX (AUTO BUY ORIGINAL LOGIC)
+-- ENOCHHUB | FISH IT PRO - FINAL FIX (ORIGINAL GEAR LOGIC)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -22,7 +22,7 @@ local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 
 local STATE = {
-    HasAstralRod = false, CurrentRodUUID = "", CurrentBait = "...",
+    HasAstralRod = false, CurrentRod = "Checking...", CurrentBait = "...",
     CurrentArea = "Loading...", NextBaitPrice = "N/A", TotalCoins = 0,
     HasDeepSeaQuest = false, CurrentQuestObj = 0, QuestProgress = "0/0",
     QuestTarget = "N/A", QuestLocation = "None",
@@ -30,7 +30,8 @@ local STATE = {
     StartTime = os.time(),
     Status = "Starting...",
     Teleporting = false,
-    TotalPurchases = 0
+    TotalPurchases = 0,
+    LastEquipCheck = 0
 }
 
 -- ===============================
@@ -61,7 +62,7 @@ local function EnablePotatoMode()
 end
 
 -- ===============================
--- LOGIC & REMOTES
+-- REMOTES & MODULES
 -- ===============================
 local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
 local function GetRemote(path, name)
@@ -76,7 +77,7 @@ local RE_EquipToolFromHotbar = GetRemote(RPath, "RE/EquipToolFromHotbar")
 local RF_UpdateAutoFishingState = GetRemote(RPath, "RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote(RPath, "RF/SellAllItems")
 local RF_PurchaseBait = GetRemote(RPath, "RF/PurchaseBait")
-local RF_PurchaseFishingRod = GetRemote(RPath, "RF/PurchaseFishingRod") -- REMOT PENTING UNTUK BELI ROD
+local RF_PurchaseFishingRod = GetRemote(RPath, "RF/PurchaseFishingRod")
 local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 
 local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
@@ -84,7 +85,9 @@ local FishingController = require(ReplicatedStorage.Controllers.FishingControlle
 local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
--- DATABASE ITEM
+-- ===============================
+-- GAME DATA (DATABASE)
+-- ===============================
 local FishingAreas = {
     ["Enchant Room"]={Pos=Vector3.new(3255,-1301,1371),Look=Vector3.new(0,0,-1)},
     ["Treasure Room"]={Pos=Vector3.new(-3598,-281,-1645),Look=Vector3.new(-0.06,0,-1)},
@@ -93,21 +96,25 @@ local FishingAreas = {
     ["Esoteric Island"]={Pos=Vector3.new(2164,3,1242),Look=Vector3.new(0,0,-1)}
 }
 local DeepSeaQuestTargets = {[1]=300, [2]=3, [3]=1, [4]=1000000}
-local ShopBaits = {{ID=3,Price=3000},{ID=17,Price=83500},{ID=6,Price=290000},{ID=8,Price=630000},{ID=15,Price=1148484},{ID=16,Price=3700000},{ID=20,Price=4000000}}
 
--- LIST ROD DARI MURAH KE MAHAL (PENTING UNTUK URUTAN BELI)
+-- URUTAN BELI ROD (Original Script Data)
 local ShopRods = {
-    {Name="Luck Rod",ID=79,Price=325}, 
-    {Name="Carbon Rod",ID=76,Price=750}, 
-    {Name="Grass Rod",ID=85,Price=1500}, 
-    {Name="Demascus Rod",ID=77,Price=3000},
-    {Name="Ice Rod",ID=78,Price=5000}, 
-    {Name="Lucky Rod",ID=4,Price=15000}, 
-    {Name="Midnight Rod",ID=80,Price=50000}, 
-    {Name="Astral Rod",ID=5,Price=1000000},
+    {Name="Luck Rod",     ID=79, Price=325}, 
+    {Name="Carbon Rod",   ID=76, Price=750}, 
+    {Name="Grass Rod",    ID=85, Price=1500}, 
+    {Name="Demascus Rod", ID=77, Price=3000},
+    {Name="Ice Rod",      ID=78, Price=5000}, 
+    {Name="Lucky Rod",    ID=4,  Price=15000}, 
+    {Name="Midnight Rod", ID=80, Price=50000}, 
+    {Name="Astral Rod",   ID=5,  Price=1000000},
 }
 
--- Helpers
+local ShopBaits = {
+    {ID=3,Price=3000}, {ID=17,Price=83500}, {ID=6,Price=290000}, 
+    {ID=8,Price=630000}, {ID=15,Price=1148484}, {ID=16,Price=3700000}, {ID=20,Price=4000000}
+}
+
+-- HELPERS
 local function FormatNumber(n)
     if n>=1e6 then return string.format("%.2fM",n/1e6) elseif n>=1e3 then return string.format("%.1fK",n/1e3) else return tostring(n) end
 end
@@ -128,7 +135,7 @@ local function GetOwnedRods(inv)
 end
 
 -- ===============================
--- MAIN LOGIC
+-- CORE LOGIC (UPDATE & TELEPORT)
 -- ===============================
 local function UpdateGameState()
     if not PlayerDataReplion then return end
@@ -179,80 +186,69 @@ local function Teleport(area)
 end
 
 -- ===============================
--- PURCHASING LOGIC (FROM ORIGINAL SCRIPT)
+-- GEAR LOGIC (AUTO BUY + AUTO EQUIP)
 -- ===============================
-
--- Mencari rod terjangkau selanjutnya
-local function GetNextAffordableRod()
-    local coins = STATE.TotalCoins
-    local r = PlayerDataReplion
-    if not r then return false, nil end
-    
-    local inv = r:GetExpect("Inventory")
-    local ownedRods = GetOwnedRods(inv)
-    
-    -- Jika sudah punya Astral, stop beli rod
-    if table.find(ownedRods, 5) then 
-        STATE.HasAstralRod = true
-        return false, nil
-    end
-    
-    -- Cari rod yang belum punya & bisa dibeli
-    for _, rod in ipairs(ShopRods) do
-        if not table.find(ownedRods, rod.ID) and coins >= rod.Price then
-            return true, rod
-        end
-    end
-    return false, nil
-end
-
--- Eksekusi Beli Rod
-local function PurchaseRod(rod)
-    local success = pcall(function()
-        return RF_PurchaseFishingRod:InvokeServer(rod.ID)
-    end)
-    if success then
-        STATE.TotalPurchases = STATE.TotalPurchases + 1
-        if rod.ID == 5 then STATE.HasAstralRod = true end
-        return true
-    end
-    return false
-end
-
--- ===============================
--- EQUIP LOGIC (GABUNGAN AUTO BUY)
--- ===============================
-local function EquipBestGear()
+local function CheckAndBuyGear()
     if not PlayerDataReplion then return end
     local inv = PlayerDataReplion:GetExpect("Inventory")
+    local ownedRods = GetOwnedRods(inv)
     
-    -- [AUTO BUY ROD LOGIC] - Diambil dari Original Script
+    -- 1. AUTO BUY ROD (Urut dari murah ke mahal)
     if not STATE.HasAstralRod then
-        local canBuy, nextRod = GetNextAffordableRod()
-        if canBuy then
-            local purchased = PurchaseRod(nextRod)
-            if purchased then
-                task.wait(1) -- Tunggu server update inventory
-                inv = PlayerDataReplion:GetExpect("Inventory") -- Refresh Inventory
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) then
+                if STATE.TotalCoins >= rod.Price then
+                    local success = RF_PurchaseFishingRod:InvokeServer(rod.ID)
+                    if success then
+                        STATE.TotalPurchases = STATE.TotalPurchases + 1
+                        task.wait(0.5) -- Jeda biar server proses
+                    end
+                end
+                break -- Fokus beli satu persatu urut
             end
         end
     end
     
-    -- [EQUIP BEST ROD LOGIC]
+    -- 2. AUTO BUY BAIT (Hanya kalau sudah punya Astral Rod)
+    if STATE.HasAstralRod then
+        local ownedBaits = {}; for _,b in pairs(inv.Baits or {}) do table.insert(ownedBaits, b.ItemId or b.Id) end
+        for _,b in ipairs(ShopBaits) do
+            if not table.find(ownedBaits, b.ID) then
+                STATE.NextBaitPrice = FormatNumber(b.Price)
+                if STATE.TotalCoins >= b.Price then 
+                    RF_PurchaseBait:InvokeServer(b.ID) 
+                end
+                break
+            else
+                STATE.NextBaitPrice = "MAX"
+            end
+        end
+    end
+end
+
+local function EquipBestGear()
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    
+    -- Cari Rod Terbaik yang dimiliki
     local bestRod, bestPrice = nil, -1
     for _, r in pairs(inv["Fishing Rods"] or {}) do
         for _, s in ipairs(ShopRods) do
             if tonumber(r.Id) == s.ID and s.Price > bestPrice then
                 bestRod = r
                 bestPrice = s.Price
+                STATE.CurrentRod = s.Name
             end
         end
     end
     
-    if bestRod and STATE.CurrentRodUUID ~= bestRod.UUID then
+    -- FORCE EQUIP (Mengikuti Logika Script Asli)
+    if bestRod then
+        -- Selalu kirim sinyal equip agar game sadar kita pakai rod ini
         RE_EquipItem:FireServer(bestRod.UUID, "Fishing Rods")
-        RE_EquipToolFromHotbar:FireServer(1) 
-        STATE.CurrentRodUUID = bestRod.UUID
+        task.wait(0.2)
+        -- Penting: Sinyal pakai tool dari hotbar slot 1
+        RE_EquipToolFromHotbar:FireServer(1)
     end
 end
 
@@ -286,29 +282,15 @@ FishingController.FishingStopped = function(self,...)
 end
 
 task.spawn(function()
-    while task.wait(4) do
+    while task.wait(5) do -- Loop utama setiap 5 detik
         if AutoActive then
             pcall(function() RF_SellAllItems:InvokeServer() end)
+            
             UpdateGameState()
+            CheckAndBuyGear() -- Cek Beli
+            EquipBestGear()   -- Cek Pakai
             
-            -- PANGGIL FUNGSI EQUIP (YANG DIDALAMNYA ADA AUTO BUY)
-            EquipBestGear() 
-            
-            -- Auto Buy Bait (Hanya jika punya Astral Rod)
-            if STATE.HasAstralRod then
-                local inv = PlayerDataReplion:GetExpect("Inventory")
-                local ownedBaits = {}; for _,b in pairs(inv.Baits or {}) do table.insert(ownedBaits, b.ItemId or b.Id) end
-                for _,b in ipairs(ShopBaits) do
-                    if not table.find(ownedBaits, b.ID) then
-                        STATE.NextBaitPrice = FormatNumber(b.Price)
-                        if STATE.TotalCoins >= b.Price then RF_PurchaseBait:InvokeServer(b.ID) end
-                        break
-                    else
-                        STATE.NextBaitPrice = "MAX"
-                    end
-                end
-            end
-
+            -- Teleport Logic
             local target = "Esoteric Island"
             if STATE.HasDeepSeaQuest then target = STATE.QuestLocation end
             if STATE.CurrentArea ~= target then Teleport(target) end
