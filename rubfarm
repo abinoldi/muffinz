@@ -1,1 +1,166 @@
 
+-- ==========================================================
+--  FISH IT ULTIMATE | WEBHOOK MONITOR ONLY (BACKGROUND)
+-- ==========================================================
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- 1. SETUP REMOTE & MODULES
+-- ==========================================
+local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+
+local function GetRemote(remotePath, name, timeout)
+    local currentInstance = ReplicatedStorage
+    for _, childName in ipairs(remotePath) do
+        currentInstance = currentInstance:WaitForChild(childName, timeout or 0.5)
+        if not currentInstance then return nil end
+    end
+    return currentInstance:FindFirstChild(name)
+end
+
+-- Remote Notification (for Console Logs)
+local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification", 10)
+
+-- Load Modules (Required to read inventory data)
+local ItemUtility, TierUtility, Replion
+local ModulesLoaded = false
+
+pcall(function()
+    ItemUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemUtility", 5))
+    TierUtility = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("TierUtility", 5))
+    Replion = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Replion")).Client
+    ModulesLoaded = true
+end)
+
+if not ModulesLoaded then
+    warn("[Webhook Monitor] Failed to load game modules. Data may be inaccurate.")
+end
+
+-- ==========================================
+-- 2. HELPER FUNCTIONS
+-- ==========================================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+
+    -- Try to resolve Item Data
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+            end
+        end)
+    end
+
+    -- Refine Name and Rarity
+    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        local tier
+        pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
+        if tier and tier.Name then rarity = tier.Name end 
+    end
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+    if item.Metadata.Shiny == true then return "Shiny" end
+    return "None"
+end
+
+-- ==========================================
+-- 3. CONSOLE LOGGER (VERIFICATION)
+-- ==========================================
+-- Prints to console (F9) so you know it's detecting fish
+if RE_ObtainedNewFishNotification then
+    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(itemId, metadata, fullData)
+        local dummyItem = { Id = itemId, Identifier = fullData and fullData.Identifier, Metadata = metadata }
+        local name, rarity = GetFishNameAndRarity(dummyItem)
+        local mutation = GetMutation(dummyItem)
+        
+        local displayStr = name
+        if mutation ~= "None" then displayStr = "[" .. mutation .. "] " .. name end
+        
+        -- Print to console
+        print("[Monitor] Caught: " .. displayStr .. " (" .. rarity .. ")")
+    end)
+end
+
+-- ==========================================================
+-- 4. WEBHOOK SENDER LOOP
+-- ==========================================================
+task.spawn(function()
+    -- Configuration from source
+    local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+    local LOOP_DELAY = 15 
+
+    local function sendToWebhook(playerName, summary)
+        local json = HttpService:JSONEncode(summary)
+        local encoded = HttpService:UrlEncode(json)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(playerName) .. "&data=" .. encoded
+        
+        -- Send Request
+        pcall(function() game:HttpGet(url) end)
+    end
+
+    if Replion then
+        -- Wait for initial data load
+        local dataReplica = Replion:WaitReplion("Data")
+        
+        while true do
+            local success, inventory = pcall(function() return dataReplica:GetExpect("Inventory") end)
+            
+            if success and inventory then
+                local summary = {}
+                
+                -- Scan Inventory
+                for _, items in pairs(inventory) do
+                    for _, item in ipairs(items) do
+                        local name, rarity = GetFishNameAndRarity(item)
+                        local mutation = GetMutation(item)
+
+                        -- Filter: Only count Secrets and Ruby Gemstones
+                        local isSecret = (rarity == "SECRET")
+                        local isGemstoneRuby = (name == "Ruby" and mutation == "Gemstone")
+
+                        if isSecret or isGemstoneRuby then
+                            local displayName = name
+                            if isGemstoneRuby then 
+                                displayName = "[Gemstone] Ruby"
+                            elseif mutation ~= "None" then 
+                                displayName = "[" .. mutation .. "] " .. name 
+                            end
+                            
+                            summary[displayName] = (summary[displayName] or 0) + 1
+                        end
+                    end
+                end
+                
+                -- Send data
+                sendToWebhook(LocalPlayer.Name, summary)
+            end
+            
+            task.wait(LOOP_DELAY)
+        end
+    end
+end)
+
+-- Notification that script is running
+StarterGui:SetCore("SendNotification", {
+    Title = "Webhook Monitor";
+    Text = "Active. Tracking Secrets & Rubies in background.";
+    Duration = 5;
+})
