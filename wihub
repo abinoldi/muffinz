@@ -8,7 +8,7 @@ _G.FishItConfig = _G.FishItConfig or {
         ["Fish Name"] = {
             "Sacred Guardian Squid",
             {Name = "Ruby", Variant = "Gemstone"},
-{Variant = "Leviathan's Rage"},
+{Variant = "Leviathan Rage"},
         },
         ["Auto Accept Trade"] = true,
 
@@ -150,7 +150,7 @@ _G.FishItConfig = _G.FishItConfig or {
     ["Disable3DRender"] = true,
     ["AutoRemovePlayer"] = true,
 
-    ["AutoReconnect"] = false,
+    ["AutoReconnect"] = true,
     ["HideGUI"] = false,
     ["EXIT_MAP_IF_DISCONNECT"] = false,
 }
