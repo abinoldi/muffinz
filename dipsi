@@ -239,63 +239,73 @@ local function UpdateDeepSeaQuestStatus()
     end
     
     STATE.HasDeepSeaQuest = true
-    local serverObj = quest.CurrentObj or 1
     
-    -- Cek progress saat ini dari data game
+    -- 1. Ambil data mentah dari server
+    local serverCurrentObj = quest.CurrentObj or 1
     local objectives = quest.Objectives or {}
-    local currentProgress = 0
-    local currentTarget = 1
-    local isComplete = false
     
+    -- 2. Ambil progress SEMUA objektif dulu (Restore Logic Original)
+    -- Kita simpan progress masing-masing ID ke dalam tabel biar gampang dicek
+    local progressMap = {}
     for _, obj in pairs(objectives) do
-        if obj.Id == serverObj then
-            currentProgress = obj.Progress or 0
-            currentTarget = DeepSeaQuestTargets[obj.Id] or 1
-            isComplete = currentProgress >= currentTarget
-            break
-        end
+        progressMap[obj.Id] = obj.Progress or 0
     end
     
-    -- LOGIKA PERBAIKAN: AUTO ADVANCE
-    -- Jika Quest 1 (300 Ikan) sudah penuh, paksa script pindah ke Quest 2
-    if isComplete then
-        STATE.CurrentQuestObj = serverObj + 1
-        -- Reset visual progress sementara agar tidak bingung (misal 0/3)
-        currentProgress = 0 
-        if DeepSeaQuestTargets[STATE.CurrentQuestObj] then
-             currentTarget = DeepSeaQuestTargets[STATE.CurrentQuestObj]
-        end
-    else
-        STATE.CurrentQuestObj = serverObj
+    -- 3. Cek manual apakah target sudah terpenuhi (Tanpa menunggu server ganti quest)
+    -- Target: 1=300 Fish, 2=3 Mythic, 3=1 Secret, 4=1M Coins
+    local obj1Done = (progressMap[1] or 0) >= (DeepSeaQuestTargets[1] or 300)
+    local obj2Done = (progressMap[2] or 0) >= (DeepSeaQuestTargets[2] or 3)
+    local obj3Done = (progressMap[3] or 0) >= (DeepSeaQuestTargets[3] or 1)
+    
+    -- 4. LOGIKA AUTO-ADVANCE (Ini yang hilang sebelumnya!)
+    -- Kita tentukan 'actualObj' sendiri berdasarkan progress kita
+    local actualObj = serverCurrentObj
+    
+    if actualObj == 1 and obj1Done then
+        actualObj = 2 -- Paksa pindah ke Quest 2
+    elseif actualObj == 2 and obj2Done then
+        actualObj = 3 -- Paksa pindah ke Quest 3
+    elseif actualObj == 3 and obj3Done then
+        actualObj = 4 -- Paksa pindah ke Quest 4
     end
-
-    -- Hitung Persentase
-    local percent = math.clamp((currentProgress / currentTarget) * 100, 0, 100)
-
-    -- Tentukan Lokasi & Target Berdasarkan Objektif yang SUDAH DI-FIX
-    if STATE.CurrentQuestObj == 1 then 
+    
+    STATE.CurrentQuestObj = actualObj
+    STATE.QuestStatus = "Active"
+    
+    -- 5. Set Tampilan & Lokasi berdasarkan 'actualObj' yang sudah dikoreksi
+    local currentProg = progressMap[actualObj] or 0
+    local currentTarg = DeepSeaQuestTargets[actualObj] or 1
+    local percent = math.clamp((currentProg / currentTarg) * 100, 0, 100)
+    
+    if actualObj == 1 then 
         STATE.QuestTarget = "300 Epic/Rare"
         STATE.QuestLocation = "Treasure Room"
-        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProgress, currentTarget, percent)
+        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProg, currentTarg, percent)
         
-    elseif STATE.CurrentQuestObj == 2 then 
+    elseif actualObj == 2 then 
+        -- Karena sudah dipaksa jadi 2, dia akan membaca blok ini dan set lokasi ke Sisyphus
         STATE.QuestTarget = "3 Mythic Fish"
-        STATE.QuestLocation = "Sisyphus Statue" -- FIX: Sekarang akan ke sini
-        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProgress, currentTarget, percent)
+        STATE.QuestLocation = "Sisyphus Statue" 
+        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProg, currentTarg, percent)
         
-    elseif STATE.CurrentQuestObj == 3 then 
+    elseif actualObj == 3 then 
         STATE.QuestTarget = "1 Secret Fish"
         STATE.QuestLocation = "Sisyphus Statue"
-        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProgress, currentTarget, percent)
+        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProg, currentTarg, percent)
         
-    elseif STATE.CurrentQuestObj == 4 then 
+    elseif actualObj == 4 then 
         STATE.QuestTarget = "1M Coins"
-        STATE.QuestLocation = "Sacred Temple" -- Lokasi terbaik farming coin
-        STATE.QuestProgress = string.format("%s/%s (%.0f%%)", FormatNumber(currentProgress), FormatNumber(currentTarget), percent)
+        -- Logic Astral Rod untuk Quest 4
+        if STATE.HasAstralRod then
+            STATE.QuestLocation = "Sacred Temple"
+        else
+            STATE.QuestLocation = "Esoteric Island"
+        end
+        STATE.QuestProgress = string.format("%s/%s (%.0f%%)", FormatNumber(currentProg), FormatNumber(currentTarg), percent)
         
     else 
         STATE.QuestTarget = "Quest Done"
-        STATE.QuestLocation = "Esoteric Island"
+        STATE.QuestLocation = "Esoteric Island" -- Lokasi bebas setelah quest selesai
         STATE.QuestProgress = "COMPLETED"
     end
 end
