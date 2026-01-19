@@ -92,7 +92,7 @@ _G.FishItConfig = _G.FishItConfig or {
         },
     },
     ["Enchant"] = {
-        ["Auto Enchant"] = true,
+        ["Auto Enchant"] = false,
         ["Roll Enchant"] = false,
         ["Evolved Roll Enchant"] = true,
         ["Enchant List"] = {
@@ -134,7 +134,7 @@ _G.FishItConfig = _G.FishItConfig or {
             ["Kohana Volcano"] = {"Grass Rod", "Midnight Rod"},
             ["Tropical Grove"] = {"Astral Rod"},
             ["Kohana"] = {"Ghostfinn Rod", "Angler Rod", "Ares Rod"},
-            ["Ancient Ruin"] = {"Element Rod"},
+            ["Treasure Room"] = {"Element Rod"},
         },
         ["Endgame"] = "",
     },
