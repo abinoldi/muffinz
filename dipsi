@@ -1,5 +1,5 @@
 -- ======================================================
--- ENOCHHUB | FISH IT PRO - FULL DASHBOARD + TOGGLE
+-- ENOCHHUB | FISH IT PRO - RESPONSIVE DASHBOARD
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -230,7 +230,7 @@ if RE_ObtainedNewFishNotification then
 end
 
 -- ===============================
--- GUI: DASHBOARD + FLOATING BUTTON
+-- GUI: FLEXIBLE / RESPONSIVE
 -- ===============================
 local function CreateDashboard()
     if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
@@ -240,76 +240,77 @@ local function CreateDashboard()
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    -- 1. FLOATING TOGGLE BUTTON (Selalu ada di bawah layar)
-    -- Ini tombol "W - v1.1.3" yang kamu minta
+    -- 1. FLOATING TOGGLE BUTTON (Tetap di bawah)
     local toggleBtn = Instance.new("TextButton", gui)
-    toggleBtn.Name = "ToggleButton"
-    toggleBtn.Size = UDim2.fromOffset(180, 40)
-    toggleBtn.Position = UDim2.new(0.5, 0, 1, -60) -- Posisi di Tengah Bawah
-    toggleBtn.AnchorPoint = Vector2.new(0.5, 0)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242) -- Biru Blurple
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0) -- Lebar 30%, Tinggi 8% dari layar (Fleksibel)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0) -- Posisi bawah
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
     toggleBtn.Text = "W - v1.1.3"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextSize = 14
-    toggleBtn.ZIndex = 100 -- Paling Atas (Selalu terlihat)
-    toggleBtn.AutoButtonColor = true
-    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0) -- Kapsul
+    toggleBtn.TextScaled = true -- Font menyesuaikan tombol
+    toggleBtn.ZIndex = 100
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    Instance.new("UITextSizeConstraint", toggleBtn).MaxTextSize = 24 -- Batasi agar tidak terlalu besar di layar raksasa
     
     -- 2. DASHBOARD FRAME (Full Screen Black)
     local dashboard = Instance.new("Frame", gui)
-    dashboard.Name = "BlackScreen"
-    dashboard.Size = UDim2.fromScale(1, 1) -- Menutupi Seluruh Layar
-    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Hitam Pekat
-    dashboard.ZIndex = 50 -- Di bawah tombol toggle
-    dashboard.Visible = true -- Default Nyala
+    dashboard.Size = UDim2.fromScale(1, 1)
+    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dashboard.ZIndex = 50
+    dashboard.Visible = true
     
-    -- Layout Dashboard
     local layout = Instance.new("UIListLayout", dashboard)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    layout.Padding = UDim.new(0, 15)
+    layout.Padding = UDim.new(0.02, 0) -- Jarak antar elemen 2% dari tinggi layar
     
-    local function Text(txt, size, col, bold)
+    -- Fungsi Helper Responsive Text
+    -- 'heightScale' adalah berapa persen tinggi layar yang diambil text ini (0.1 = 10%)
+    local function Text(txt, heightScale, col, bold)
         local l = Instance.new("TextLabel", dashboard)
-        l.Text = txt; l.TextSize = size; l.TextColor3 = col
-        l.Size = UDim2.new(1, 0, 0, size+10)
+        l.Text = txt
+        l.TextColor3 = col
+        l.Size = UDim2.new(0.9, 0, heightScale, 0) -- Lebar 90%, Tinggi Fleksibel
         l.BackgroundTransparency = 1
         l.Font = bold and Enum.Font.GothamBlack or Enum.Font.Gotham
+        l.TextScaled = true -- KUNCI FLEKSIBILITAS
         l.ZIndex = 51
+        
+        -- Constraint agar tidak pecah di layar ultra-wide atau terlalu kecil
+        local const = Instance.new("UITextSizeConstraint", l)
+        const.MaxTextSize = 100 -- Maksimal font size
+        const.MinTextSize = 12  -- Minimal font size
+        
         return l
     end
     
-    -- Isi Dashboard
-    Text("ENOCHHUB | AFK MONITOR", 24, Color3.fromRGB(80, 80, 80), true)
+    -- Isi Dashboard (Menggunakan Tinggi Persentase)
+    Text("ENOCHHUB | AFK MONITOR", 0.05, Color3.fromRGB(80, 80, 80), true)
     
-    local L_Coins = Text("$0", 60, Color3.fromRGB(255, 215, 0), true)
-    local L_Stats = Text("0 | 0.0 F/M", 40, Color3.fromRGB(255, 255, 255), true)
-    local L_Time  = Text("00h 00m 00s", 35, Color3.fromRGB(180, 180, 180), true)
+    local L_Coins = Text("$0", 0.15, Color3.fromRGB(255, 215, 0), true)       -- 15% Tinggi Layar
+    local L_Stats = Text("0 | 0.0 F/M", 0.10, Color3.fromRGB(255, 255, 255), true) -- 10% Tinggi Layar
+    local L_Time  = Text("00h 00m 00s", 0.08, Color3.fromRGB(180, 180, 180), true) -- 8% Tinggi Layar
     
-    local div = Instance.new("Frame", dashboard); div.Size=UDim2.new(0.6,0,0,2); div.BackgroundColor3=Color3.fromRGB(50,50,50); div.BorderSizePixel=0; div.ZIndex=51
+    local div = Instance.new("Frame", dashboard); div.Size=UDim2.new(0.6,0,0.005,0); div.BackgroundColor3=Color3.fromRGB(50,50,50); div.BorderSizePixel=0; div.ZIndex=51
     
-    local L_QuestLoc = Text("Checking...", 25, Color3.fromRGB(100, 200, 255), true)
-    local L_QuestProg = Text("...", 20, Color3.fromRGB(150, 255, 150), false)
-    local L_Status = Text("Starting...", 18, Color3.fromRGB(255, 100, 100), true)
+    local L_QuestLoc = Text("Checking...", 0.05, Color3.fromRGB(100, 200, 255), true)
+    local L_QuestProg = Text("...", 0.04, Color3.fromRGB(150, 255, 150), false)
+    local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100), true)
     
-    -- LOGIKA TOGGLE
+    -- Toggle Logic
     local isOpen = true
     toggleBtn.MouseButton1Click:Connect(function()
         isOpen = not isOpen
-        dashboard.Visible = isOpen -- Menyembunyikan/Menampilkan Layar Hitam
-        
-        if isOpen then
-            toggleBtn.Text = "W - v1.1.3" -- Saat layar hitam aktif
-        else
-            toggleBtn.Text = "SHOW DASHBOARD" -- Saat melihat game
-        end
+        dashboard.Visible = isOpen
+        toggleBtn.Text = isOpen and "W - v1.1.3" or "OPEN MONITOR"
     end)
     
-    -- Update Data Loop
+    -- Update Loop
     task.spawn(function()
         while task.wait(0.5) do
-            if dashboard.Visible then -- Hanya update teks jika terlihat (Hemat Resource)
+            if dashboard.Visible then
                 L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
                 CalcStats()
                 L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
@@ -330,4 +331,4 @@ task.spawn(EnablePotatoMode)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub AFK Dashboard Started!")
+print("🚀 EnochHub Responsive Dashboard Started!")
