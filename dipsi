@@ -1,11 +1,11 @@
 -- ======================================================
--- ENOCHHUB | FISH IT PRO - DASHBOARD (FIXED LAYER)
+-- ENOCHHUB | FISH IT PRO - FULL DASHBOARD + TOGGLE
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
 
 -- ===============================
--- 1. ANTI-AFK (WAJIB)
+-- 1. ANTI-AFK
 -- ===============================
 local virtualUser = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
@@ -36,7 +36,6 @@ local STATE = {
 -- SAFE POTATO MODE
 -- ===============================
 local function EnablePotatoMode()
-    -- Hook Visuals
     pcall(function()
         local VFX = require(ReplicatedStorage.Controllers.VFXController)
         if VFX then VFX.Handle=function() end; if VFX.PlayVFX then VFX.PlayVFX.Fire=function() end end end
@@ -46,7 +45,6 @@ local function EnablePotatoMode()
         if Cutscene then Cutscene.Play=function() end end
     end)
 
-    -- Apply Transparency Loop (Safe)
     task.spawn(function()
         while task.wait(5) do
             pcall(function()
@@ -104,9 +102,7 @@ local function CalcStats()
     STATE.FishPerMinute = mins>0 and STATE.FishCount/mins or 0
 end
 local function FormatTime(seconds)
-    local h = math.floor(seconds / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    local s = seconds % 60
+    local h = math.floor(seconds / 3600); local m = math.floor((seconds % 3600) / 60); local s = seconds % 60
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
@@ -115,16 +111,12 @@ end
 -- ===============================
 local function UpdateGameState()
     if not PlayerDataReplion then return end
-    
-    -- Coins
     STATE.TotalCoins = PlayerDataReplion:Get("Coins") or 0
     
-    -- Rod & Bait
     local inv = PlayerDataReplion:GetExpect("Inventory")
     local ownedRods = {}; for _,r in ipairs(inv["Fishing Rods"] or {}) do table.insert(ownedRods, tonumber(r.Id)) end
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     
-    -- Quest Logic
     local quest = PlayerDataReplion:Get().Quests and PlayerDataReplion:Get().Quests.Mainline and PlayerDataReplion:Get().Quests.Mainline["Deep Sea Quest"]
     if quest then
         STATE.HasDeepSeaQuest = true
@@ -132,7 +124,6 @@ local function UpdateGameState()
         local progMap = {}
         for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
         
-        -- Logic Auto Advance
         local actObj = sObj
         if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
         if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
@@ -201,7 +192,6 @@ task.spawn(function()
             pcall(function() RF_SellAllItems:InvokeServer() end)
             UpdateGameState()
             
-            -- Auto Buy Bait
             if STATE.HasAstralRod then
                 local inv = PlayerDataReplion:GetExpect("Inventory")
                 local ownedBaits = {}; for _,b in pairs(inv.Baits or {}) do table.insert(ownedBaits, b.ItemId or b.Id) end
@@ -216,12 +206,10 @@ task.spawn(function()
                 end
             end
 
-            -- Auto Teleport
             local target = "Esoteric Island"
             if STATE.HasDeepSeaQuest then target = STATE.QuestLocation end
             if STATE.CurrentArea ~= target then Teleport(target) end
             
-            -- Auto Equip
             if STATE.HasAstralRod then
                  pcall(function()
                     local rods = PlayerDataReplion:GetExpect("Inventory")["Fishing Rods"]
@@ -242,7 +230,7 @@ if RE_ObtainedNewFishNotification then
 end
 
 -- ===============================
--- DASHBOARD GUI (LAYER FIX)
+-- GUI: DASHBOARD + FLOATING BUTTON
 -- ===============================
 local function CreateDashboard()
     if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
@@ -250,77 +238,87 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui)
     gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling -- FIX: Ini penting agar Text muncul di atas Background
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    -- Background Hitam (ZIndex 1)
-    local main = Instance.new("Frame", gui)
-    main.Size = UDim2.fromScale(1, 1)
-    main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    main.ZIndex = 1 
+    -- 1. FLOATING TOGGLE BUTTON (Selalu ada di bawah layar)
+    -- Ini tombol "W - v1.1.3" yang kamu minta
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Name = "ToggleButton"
+    toggleBtn.Size = UDim2.fromOffset(180, 40)
+    toggleBtn.Position = UDim2.new(0.5, 0, 1, -60) -- Posisi di Tengah Bawah
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 0)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242) -- Biru Blurple
+    toggleBtn.Text = "W - v1.1.3"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 14
+    toggleBtn.ZIndex = 100 -- Paling Atas (Selalu terlihat)
+    toggleBtn.AutoButtonColor = true
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0) -- Kapsul
     
-    -- Layout
-    local layout = Instance.new("UIListLayout", main)
+    -- 2. DASHBOARD FRAME (Full Screen Black)
+    local dashboard = Instance.new("Frame", gui)
+    dashboard.Name = "BlackScreen"
+    dashboard.Size = UDim2.fromScale(1, 1) -- Menutupi Seluruh Layar
+    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Hitam Pekat
+    dashboard.ZIndex = 50 -- Di bawah tombol toggle
+    dashboard.Visible = true -- Default Nyala
+    
+    -- Layout Dashboard
+    local layout = Instance.new("UIListLayout", dashboard)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
     layout.Padding = UDim.new(0, 15)
     
     local function Text(txt, size, col, bold)
-        local l = Instance.new("TextLabel", main)
+        local l = Instance.new("TextLabel", dashboard)
         l.Text = txt; l.TextSize = size; l.TextColor3 = col
         l.Size = UDim2.new(1, 0, 0, size+10)
         l.BackgroundTransparency = 1
         l.Font = bold and Enum.Font.GothamBlack or Enum.Font.Gotham
-        l.ZIndex = 2 -- FIX: ZIndex lebih tinggi dari background
+        l.ZIndex = 51
         return l
     end
     
-    -- Elements
-    Text("ENOCHHUB | AFK DASHBOARD", 20, Color3.fromRGB(80, 80, 80), true)
+    -- Isi Dashboard
+    Text("ENOCHHUB | AFK MONITOR", 24, Color3.fromRGB(80, 80, 80), true)
     
-    local L_Coins = Text("$0", 50, Color3.fromRGB(255, 215, 0), true)
-    local L_Stats = Text("0 | 0.0 F/M", 35, Color3.fromRGB(255, 255, 255), true)
-    local L_Time  = Text("Loading Timer...", 30, Color3.fromRGB(180, 180, 180), true)
+    local L_Coins = Text("$0", 60, Color3.fromRGB(255, 215, 0), true)
+    local L_Stats = Text("0 | 0.0 F/M", 40, Color3.fromRGB(255, 255, 255), true)
+    local L_Time  = Text("00h 00m 00s", 35, Color3.fromRGB(180, 180, 180), true)
     
-    local div = Instance.new("Frame", main); div.Size=UDim2.new(0.5,0,0,2); div.BackgroundColor3=Color3.fromRGB(50,50,50); div.BorderSizePixel=0; div.ZIndex=2
+    local div = Instance.new("Frame", dashboard); div.Size=UDim2.new(0.6,0,0,2); div.BackgroundColor3=Color3.fromRGB(50,50,50); div.BorderSizePixel=0; div.ZIndex=51
     
-    local L_QuestLoc = Text("Checking Quest...", 25, Color3.fromRGB(100, 200, 255), true)
+    local L_QuestLoc = Text("Checking...", 25, Color3.fromRGB(100, 200, 255), true)
     local L_QuestProg = Text("...", 20, Color3.fromRGB(150, 255, 150), false)
     local L_Status = Text("Starting...", 18, Color3.fromRGB(255, 100, 100), true)
     
-    -- Minimize Button (ZIndex 10)
-    local hideBtn = Instance.new("TextButton", gui)
-    hideBtn.Size = UDim2.fromOffset(120, 40)
-    hideBtn.Position = UDim2.new(1, -140, 1, -60)
-    hideBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    hideBtn.Text = "MINIMIZE UI"
-    hideBtn.TextColor3 = Color3.new(1,1,1)
-    hideBtn.Font = Enum.Font.GothamBold
-    hideBtn.ZIndex = 10
-    Instance.new("UICorner", hideBtn).CornerRadius = UDim.new(0, 8)
-    
-    local minimized = false
-    hideBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        if minimized then
-            main:TweenPosition(UDim2.new(0, 0, 1, 0), "Out", "Quad", 0.5, true)
-            hideBtn.Text = "SHOW UI"
+    -- LOGIKA TOGGLE
+    local isOpen = true
+    toggleBtn.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        dashboard.Visible = isOpen -- Menyembunyikan/Menampilkan Layar Hitam
+        
+        if isOpen then
+            toggleBtn.Text = "W - v1.1.3" -- Saat layar hitam aktif
         else
-            main:TweenPosition(UDim2.new(0, 0, 0, 0), "Out", "Back", 0.5, true)
-            hideBtn.Text = "MINIMIZE UI"
+            toggleBtn.Text = "SHOW DASHBOARD" -- Saat melihat game
         end
     end)
     
-    -- Update Loop
+    -- Update Data Loop
     task.spawn(function()
         while task.wait(0.5) do
-            L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
-            CalcStats()
-            L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
-            L_Time.Text = FormatTime(os.time() - STATE.StartTime)
-            L_QuestLoc.Text = "QUEST: " .. STATE.QuestTarget
-            L_QuestProg.Text = STATE.QuestProgress .. " - " .. STATE.QuestLocation
-            L_Status.Text = "STATUS: " .. STATE.Status
-            L_Status.TextColor3 = (STATE.Status=="Reeling") and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
+            if dashboard.Visible then -- Hanya update teks jika terlihat (Hemat Resource)
+                L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
+                CalcStats()
+                L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
+                L_Time.Text = FormatTime(os.time() - STATE.StartTime)
+                L_QuestLoc.Text = "QUEST: " .. STATE.QuestTarget
+                L_QuestProg.Text = STATE.QuestProgress .. " - " .. STATE.QuestLocation
+                L_Status.Text = "STATUS: " .. STATE.Status
+                L_Status.TextColor3 = (STATE.Status=="Reeling") and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
+            end
         end
     end)
 end
