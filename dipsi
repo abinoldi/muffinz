@@ -1355,6 +1355,31 @@ local function Initialize()
     print("🪱 Auto-Bait: Continuous upgrades during quest")
     print("📍 Auto-Teleport: Quest-based location switching")
     print("📌 Total fishing areas:", #FishingAreas)
+
+    -- ===============================
+    -- AUTO START LOGIC
+    -- ===============================
+    task.spawn(function()
+        task.wait(5) -- Delay sebentar untuk memastikan Game & GUI sudah loading sempurna
+        
+        if not AutoFish.Active then
+            print("[AUTO START] 🚀 Mengaktifkan Auto Fish secara otomatis...")
+            
+            -- 1. Aktifkan logika Auto Fish
+            ToggleAutoFish(true)
+            
+            -- 2. Update visual tombol agar berubah jadi 'STOP' (merah)
+            if GUI.ToggleButton then
+                GUI.ToggleButton.Text = "⏸️ STOP AUTO FISH"
+                
+                -- Efek transisi warna tombol
+                local TweenService = game:GetService("TweenService")
+                TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {
+                    BackgroundColor3 = Color3.fromRGB(180, 40, 60)
+                }):Play()
+            end
+        end
+    end)
 end
 
 -- Start initialization
