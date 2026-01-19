@@ -239,32 +239,65 @@ local function UpdateDeepSeaQuestStatus()
     end
     
     STATE.HasDeepSeaQuest = true
-    STATE.CurrentQuestObj = quest.CurrentObj or 0
-    STATE.QuestStatus = "Active"
+    local serverObj = quest.CurrentObj or 1
     
-    -- Progress Logic
+    -- Cek progress saat ini dari data game
     local objectives = quest.Objectives or {}
+    local currentProgress = 0
+    local currentTarget = 1
+    local isComplete = false
+    
     for _, obj in pairs(objectives) do
-        if obj.Id == STATE.CurrentQuestObj then
-            local target = DeepSeaQuestTargets[obj.Id] or 1
-            local progress = obj.Progress or 0
-            local percent = math.clamp((progress / target) * 100, 0, 100)
-            
-            if obj.Id == 4 then
-                STATE.QuestProgress = string.format("%s/%s (%.0f%%)", FormatNumber(progress), FormatNumber(target), percent)
-            else
-                STATE.QuestProgress = string.format("%d/%d (%.0f%%)", progress, target, percent)
-            end
+        if obj.Id == serverObj then
+            currentProgress = obj.Progress or 0
+            currentTarget = DeepSeaQuestTargets[obj.Id] or 1
+            isComplete = currentProgress >= currentTarget
             break
         end
     end
     
-    -- Set Target Text
-    if STATE.CurrentQuestObj == 1 then STATE.QuestTarget = "300 Epic/Rare"; STATE.QuestLocation = "Treasure Room"
-    elseif STATE.CurrentQuestObj == 2 then STATE.QuestTarget = "3 Mythic Fish"; STATE.QuestLocation = "Sisyphus Statue"
-    elseif STATE.CurrentQuestObj == 3 then STATE.QuestTarget = "1 Secret Fish"; STATE.QuestLocation = "Sisyphus Statue"
-    elseif STATE.CurrentQuestObj == 4 then STATE.QuestTarget = "1M Coins"; STATE.QuestLocation = "Anywhere"
-    else STATE.QuestTarget = "Done"; STATE.QuestLocation = "None" end
+    -- LOGIKA PERBAIKAN: AUTO ADVANCE
+    -- Jika Quest 1 (300 Ikan) sudah penuh, paksa script pindah ke Quest 2
+    if isComplete then
+        STATE.CurrentQuestObj = serverObj + 1
+        -- Reset visual progress sementara agar tidak bingung (misal 0/3)
+        currentProgress = 0 
+        if DeepSeaQuestTargets[STATE.CurrentQuestObj] then
+             currentTarget = DeepSeaQuestTargets[STATE.CurrentQuestObj]
+        end
+    else
+        STATE.CurrentQuestObj = serverObj
+    end
+
+    -- Hitung Persentase
+    local percent = math.clamp((currentProgress / currentTarget) * 100, 0, 100)
+
+    -- Tentukan Lokasi & Target Berdasarkan Objektif yang SUDAH DI-FIX
+    if STATE.CurrentQuestObj == 1 then 
+        STATE.QuestTarget = "300 Epic/Rare"
+        STATE.QuestLocation = "Treasure Room"
+        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProgress, currentTarget, percent)
+        
+    elseif STATE.CurrentQuestObj == 2 then 
+        STATE.QuestTarget = "3 Mythic Fish"
+        STATE.QuestLocation = "Sisyphus Statue" -- FIX: Sekarang akan ke sini
+        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProgress, currentTarget, percent)
+        
+    elseif STATE.CurrentQuestObj == 3 then 
+        STATE.QuestTarget = "1 Secret Fish"
+        STATE.QuestLocation = "Sisyphus Statue"
+        STATE.QuestProgress = string.format("%d/%d (%.0f%%)", currentProgress, currentTarget, percent)
+        
+    elseif STATE.CurrentQuestObj == 4 then 
+        STATE.QuestTarget = "1M Coins"
+        STATE.QuestLocation = "Sacred Temple" -- Lokasi terbaik farming coin
+        STATE.QuestProgress = string.format("%s/%s (%.0f%%)", FormatNumber(currentProgress), FormatNumber(currentTarget), percent)
+        
+    else 
+        STATE.QuestTarget = "Quest Done"
+        STATE.QuestLocation = "Esoteric Island"
+        STATE.QuestProgress = "COMPLETED"
+    end
 end
 
 local function TeleportToArea(name)
