@@ -899,362 +899,205 @@ local function ToggleAutoFish(state)
 end
 
 -- ===============================
--- CREATE GUI (CLEANER VERSION)
+-- CREATE GUI (MINIMALIST + HIDE BUTTON)
 -- ===============================
 local function CreateGUI()
-    print("[GUI] Creating EnochHUB Fish It Pro GUI...")
+    print("[GUI] Creating Minimalist GUI with Hide Function...")
     
-    -- Create ScreenGui
     local gui = Instance.new("ScreenGui")
-    gui.Name = "EnochHUB_FishIt_Pro"
+    gui.Name = "EnochHUB_Minimal_v2"
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     gui.ResetOnSpawn = false
     gui.Parent = game.CoreGui
 
-    -- Main frame (smaller and cleaner)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.fromOffset(420, 520)
-    frame.Position = UDim2.fromScale(0.5, 0.5)
-    frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    frame.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
-    frame.Active = true
-    frame.Draggable = true
-    frame.ZIndex = 10
-    frame.Parent = gui
-    
-    GUI.Frame = frame
+    -- --- 1. MAIN FRAME (Wadah Utama) ---
+    -- Ukuran penuh saat terbuka: 350x380
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.fromOffset(350, 380) 
+    mainFrame.Position = UDim2.fromScale(0.5, 0.5)
+    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 5) -- Hitam pekat
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Draggable = true -- Bisa digeser
+    mainFrame.Parent = gui
 
-    -- Gradient effect
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 25, 45)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 15, 30))
-    }
-    gradient.Rotation = 45
-    gradient.Parent = frame
+    -- Border Tipis
+    local mainStroke = Instance.new("UIStroke")
+    mainStroke.Color = Color3.fromRGB(40, 40, 40)
+    mainStroke.Thickness = 1
+    mainStroke.Parent = mainFrame
 
-    -- Corner radius
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = frame
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 10)
+    mainCorner.Parent = mainFrame
 
-    -- Top bar with EnochHUB branding
-    local topBar = Instance.new("Frame")
-    topBar.Size = UDim2.new(1, 0, 0, 60)
-    topBar.Position = UDim2.new(0, 0, 0, 0)
-    topBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    topBar.BackgroundTransparency = 0.7
-    topBar.ZIndex = 11
-    topBar.Parent = frame
+    -- --- 2. CONTENT FRAME (Wadah Statistik & Tombol Start) ---
+    -- Ini yang akan di-hide/show
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "Content"
+    contentFrame.Size = UDim2.new(1, 0, 1, -50) -- Sisakan ruang bawah untuk tombol Hide
+    contentFrame.Position = UDim2.new(0, 0, 0, 0)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
 
-    -- EnochHUB Title
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -120, 0, 30)
-    title.Position = UDim2.new(0, 15, 0, 5)
-    title.BackgroundTransparency = 1
-    title.Text = "✨ ENOCHHUB | FISH IT PRO"
-    title.Font = Enum.Font.GothamBlack
-    title.TextSize = 20
-    title.TextColor3 = Color3.fromRGB(255, 215, 0)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 12
-    title.Parent = topBar
+    -- Layout untuk menyusun konten ke bawah
+    local layout = Instance.new("UIListLayout")
+    layout.Parent = contentFrame
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Padding = UDim.new(0, 6)
 
-    local subtitle = Instance.new("TextLabel")
-    subtitle.Size = UDim2.new(1, -120, 0, 20)
-    subtitle.Position = UDim2.new(0, 15, 0, 30)
-    subtitle.BackgroundTransparency = 1
-    subtitle.Text = "Auto Quest + Auto Gear"
-    subtitle.Font = Enum.Font.GothamBold
-    subtitle.TextSize = 12
-    subtitle.TextColor3 = Color3.fromRGB(180, 220, 255)
-    subtitle.TextXAlignment = Enum.TextXAlignment.Left
-    subtitle.ZIndex = 12
-    subtitle.Parent = topBar
+    -- Padding agar tidak mepet atas
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 15)
+    padding.Parent = contentFrame
 
-    -- Top buttons
-    local function CreateTopButton(txt, x, color)
-        local b = Instance.new("TextButton")
-        b.Size = UDim2.fromOffset(32, 32)
-        b.Position = UDim2.fromOffset(x, 14)
-        b.Text = txt
-        b.Font = Enum.Font.GothamBold
-        b.TextSize = 16
-        b.BackgroundColor3 = color
-        b.TextColor3 = Color3.new(1, 1, 1)
-        b.ZIndex = 12
-        b.AutoButtonColor = false
-        b.Parent = topBar
+    -- --- HELPER FUNCTIONS ---
+    local orderCount = 0
+    local function AddDivider()
+        orderCount = orderCount + 1
+        local divContainer = Instance.new("Frame")
+        divContainer.Size = UDim2.new(0.8, 0, 0, 1)
+        divContainer.BackgroundTransparency = 1
+        divContainer.LayoutOrder = orderCount
+        divContainer.Parent = contentFrame
         
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 8)
-        btnCorner.Parent = b
-        
-        return b
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, 0, 0, 1)
+        line.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        line.BorderSizePixel = 0
+        line.Parent = divContainer
     end
 
-    local hideBtn = CreateTopButton("–", 350, Color3.fromRGB(40, 120, 180))
-    local closeBtn = CreateTopButton("X", 390, Color3.fromRGB(180, 40, 60))
-
-    -- Status Panel
-    local statusPanel = Instance.new("Frame")
-    statusPanel.Size = UDim2.new(0.9, 0, 0, 300)
-    statusPanel.Position = UDim2.fromScale(0.05, 0.12)
-    statusPanel.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
-    statusPanel.BackgroundTransparency = 0.5
-    statusPanel.ZIndex = 11
-    statusPanel.Parent = frame
-
-    local statusCorner = Instance.new("UICorner")
-    statusCorner.CornerRadius = UDim.new(0, 10)
-    statusCorner.Parent = statusPanel
-
-    -- Status labels with icons
-    local function CreateStatusRow(y, icon, label, value, isHighlight)
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(0.9, 0, 0, 28)
-        row.Position = UDim2.fromScale(0.05, y)
-        row.BackgroundTransparency = 1
-        row.ZIndex = 12
-        row.Parent = statusPanel
-        
-        local iconLabel = Instance.new("TextLabel")
-        iconLabel.Size = UDim2.fromOffset(28, 28)
-        iconLabel.Position = UDim2.fromOffset(0, 0)
-        iconLabel.BackgroundTransparency = 1
-        iconLabel.Text = icon
-        iconLabel.Font = Enum.Font.GothamBold
-        iconLabel.TextSize = 16
-        iconLabel.TextColor3 = isHighlight and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(100, 200, 255)
-        iconLabel.TextXAlignment = Enum.TextXAlignment.Left
-        iconLabel.ZIndex = 13
-        iconLabel.Parent = row
-        
-        local labelText = Instance.new("TextLabel")
-        labelText.Size = UDim2.fromOffset(150, 28)
-        labelText.Position = UDim2.fromOffset(35, 0)
-        labelText.BackgroundTransparency = 1
-        labelText.Text = label
-        labelText.Font = Enum.Font.Gotham
-        labelText.TextSize = 13
-        labelText.TextColor3 = Color3.fromRGB(200, 200, 220)
-        labelText.TextXAlignment = Enum.TextXAlignment.Left
-        labelText.ZIndex = 13
-        labelText.Parent = row
-        
-        local valueText = Instance.new("TextLabel")
-        valueText.Size = UDim2.fromOffset(180, 28)
-        valueText.Position = UDim2.fromOffset(185, 0)
-        valueText.BackgroundTransparency = 1
-        valueText.Text = value
-        valueText.Font = Enum.Font.GothamBold
-        valueText.TextSize = 13
-        valueText.TextColor3 = isHighlight and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(220, 240, 255)
-        valueText.TextXAlignment = Enum.TextXAlignment.Right
-        valueText.ZIndex = 13
-        valueText.Parent = row
-        
-        return valueText
+    local function AddText(name, size, color, isBold)
+        orderCount = orderCount + 1
+        local label = Instance.new("TextLabel")
+        label.Name = name
+        label.Size = UDim2.new(1, 0, 0, size + 4)
+        label.BackgroundTransparency = 1
+        label.Text = "..."
+        label.TextColor3 = color
+        label.TextSize = size
+        label.Font = isBold and Enum.Font.GothamBold or Enum.Font.Gotham
+        label.LayoutOrder = orderCount
+        label.Parent = contentFrame
+        return label
     end
 
-    -- Create status rows (clean and organized)
-    GUI.CoinValue = CreateStatusRow(0.02, "💰", "Coins:", "0", true)
-    GUI.RodValue = CreateStatusRow(0.10, "🎣", "Current Rod:", "None", false)
-    GUI.BaitValue = CreateStatusRow(0.18, "🪱", "Current Bait:", "None", false)
-    GUI.NextBaitValue = CreateStatusRow(0.26, "⬆️", "Next Bait Cost:", "N/A", false)
-    GUI.AreaValue = CreateStatusRow(0.34, "📍", "Area:", "Current Location", false)
+    -- --- ISI KONTEN (STATS) ---
+    local title = AddText("Title", 12, Color3.fromRGB(150, 150, 150), true)
+    title.Text = "ENOCHHUB | FISH IT"
     
-    -- Quest Info
-    GUI.QuestStatusValue = CreateStatusRow(0.42, "🌊", "Deep Sea Quest:", "Not Found", true)
-    GUI.QuestLocationValue = CreateStatusRow(0.50, "📍", "Quest Location:", "None", false)
-    GUI.QuestTargetValue = CreateStatusRow(0.58, "🎯", "Current Target:", "N/A", false)
-    GUI.QuestProgressValue = CreateStatusRow(0.66, "📈", "Quest Progress:", "0%", true)
+    AddDivider()
+
+    GUI.CoinValue = AddText("Coins", 24, Color3.fromRGB(255, 255, 255), true)
     
-    -- Quest Breakdown
-    GUI.QuestProgress1Value = CreateStatusRow(0.74, "①", "Obj 1 (300 Fish):", "0/300 (0%)", false)
-    GUI.QuestProgress2Value = CreateStatusRow(0.82, "②", "Obj 2 (3 Mythic):", "0/3 (0%)", false)
-    GUI.QuestProgress3Value = CreateStatusRow(0.90, "③", "Obj 3 (1 Secret):", "0/1 (0%)", false)
-    GUI.QuestProgress4Value = CreateStatusRow(0.98, "④", "Obj 4 (1M Coins):", "0/1M (0%)", false)
+    AddDivider()
 
-    GUI.PurchasesValue = CreateStatusRow(1.06, "🛒", "Total Purchases:", "0", false)
-    GUI.EarningsValue = CreateStatusRow(1.14, "💸", "Session Earnings:", "0", true)
+    GUI.AreaValue = AddText("Area", 16, Color3.fromRGB(200, 200, 200), true)
+    GUI.QuestLocationValue = AddText("QuestLoc", 12, Color3.fromRGB(100, 200, 255), false)
 
-    -- Strategy Indicator
-    local strategyBox = Instance.new("Frame")
-    strategyBox.Size = UDim2.new(0.9, 0, 0, 40)
-    strategyBox.Position = UDim2.fromScale(0.05, 0.72)
-    strategyBox.BackgroundColor3 = Color3.fromRGB(30, 40, 70)
-    strategyBox.ZIndex = 11
-    strategyBox.Parent = frame
+    AddDivider()
 
-    local strategyCorner = Instance.new("UICorner")
-    strategyCorner.CornerRadius = UDim.new(0, 8)
-    strategyCorner.Parent = strategyBox
+    GUI.RodBaitCombined = AddText("RodBait", 14, Color3.fromRGB(255, 255, 255), true)
+    GUI.NextBaitValue = AddText("NextBait", 12, Color3.fromRGB(150, 150, 150), false)
 
-    GUI.StrategyText = Instance.new("TextLabel")
-    GUI.StrategyText.Size = UDim2.new(1, 0, 1, 0)
-    GUI.StrategyText.Position = UDim2.fromScale(0, 0)
-    GUI.StrategyText.BackgroundTransparency = 1
-    GUI.StrategyText.Text = "STRATEGY: Acquiring Astral Rod First"
-    GUI.StrategyText.Font = Enum.Font.GothamBold
-    GUI.StrategyText.TextSize = 14
-    GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
-    GUI.StrategyText.ZIndex = 12
-    GUI.StrategyText.Parent = strategyBox
+    AddDivider()
 
-    -- Main toggle button
+    GUI.CurrentTargetValue = AddText("Target", 14, Color3.fromRGB(255, 255, 255), true)
+    GUI.QuestProgressValue = AddText("Progress", 12, Color3.fromRGB(100, 255, 100), true)
+
+    -- Spacer sebelum tombol start
+    local spacer = Instance.new("Frame")
+    spacer.Size = UDim2.new(1,0,0,5)
+    spacer.BackgroundTransparency = 1
+    spacer.LayoutOrder = 98
+    spacer.Parent = contentFrame
+
+    -- --- TOMBOL START (Di dalam Content) ---
     GUI.ToggleButton = Instance.new("TextButton")
-    GUI.ToggleButton.Size = UDim2.fromOffset(360, 50)
-    GUI.ToggleButton.Position = UDim2.fromOffset(30, 450)
-    GUI.ToggleButton.Text = "🚀 START AUTO FISH"
+    GUI.ToggleButton.Name = "StartButton"
+    GUI.ToggleButton.Size = UDim2.new(0.7, 0, 0, 30)
+    GUI.ToggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80) -- Hijau
+    GUI.ToggleButton.Text = "START AUTO FISH"
+    GUI.ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     GUI.ToggleButton.Font = Enum.Font.GothamBlack
-    GUI.ToggleButton.TextSize = 18
-    GUI.ToggleButton.BackgroundColor3 = Color3.fromRGB(40, 120, 180)
-    GUI.ToggleButton.TextColor3 = Color3.new(1, 1, 1)
-    GUI.ToggleButton.ZIndex = 12
-    GUI.ToggleButton.AutoButtonColor = false
-    GUI.ToggleButton.Parent = frame
-
-    local toggleCorner = Instance.new("UICorner")
-    toggleCorner.CornerRadius = UDim.new(0, 12)
-    toggleCorner.Parent = GUI.ToggleButton
-
-    local toggleStroke = Instance.new("UIStroke")
-    toggleStroke.Color = Color3.fromRGB(80, 160, 220)
-    toggleStroke.Thickness = 3
-    toggleStroke.Transparency = 0.3
-    toggleStroke.Parent = GUI.ToggleButton
-
-    -- Show/hide button
-    local showBtn = Instance.new("TextButton")
-    showBtn.Size = UDim2.fromOffset(180, 50)
-    showBtn.Position = UDim2.fromScale(0.02, 0.5)
-    showBtn.AnchorPoint = Vector2.new(0, 0.5)
-    showBtn.Text = "✨ ENOCHHUB"
-    showBtn.Font = Enum.Font.GothamBlack
-    showBtn.TextSize = 16
-    showBtn.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
-    showBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
-    showBtn.Visible = false
-    showBtn.ZIndex = 1000
-    showBtn.AutoButtonColor = false
-    showBtn.Parent = gui
-
-    local showCorner = Instance.new("UICorner")
-    showCorner.CornerRadius = UDim.new(0, 18)
-    showCorner.Parent = showBtn
-
-    local showStroke = Instance.new("UIStroke")
-    showStroke.Color = Color3.fromRGB(255, 215, 0)
-    showStroke.Thickness = 3
-    showStroke.Transparency = 0.3
-    showStroke.Parent = showBtn
-
-    -- Button animations
-    local function AnimateButton(button)
-        TweenService:Create(button, TweenInfo.new(0.1), {Size = UDim2.fromOffset(button.Size.X.Offset - 6, button.Size.Y.Offset - 6)}):Play()
-        task.wait(0.1)
-        TweenService:Create(button, TweenInfo.new(0.1), {Size = UDim2.fromOffset(button.Size.X.Offset + 6, button.Size.Y.Offset + 6)}):Play()
-    end
-
-    -- Update strategy display function
-    local function UpdateStrategyDisplay()
-        if not STATE.HasAstralRod then
-            GUI.StrategyText.Text = "STRATEGY: Priority → Astral Rod (1M Coins)"
-            GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 215, 0)
-            strategyBox.BackgroundColor3 = Color3.fromRGB(70, 40, 30)
-        elseif STATE.HasDeepSeaQuest then
-            if STATE.CurrentQuestObj == 1 then
-                GUI.StrategyText.Text = "QUEST: 300 Epic/Rare Fish + Bait Upgrades"
-                GUI.StrategyText.TextColor3 = Color3.fromRGB(100, 200, 255)
-                strategyBox.BackgroundColor3 = Color3.fromRGB(30, 50, 70)
-            elseif STATE.CurrentQuestObj == 2 then
-                GUI.StrategyText.Text = "QUEST: 3 Mythic Fish + Bait Upgrades"
-                GUI.StrategyText.TextColor3 = Color3.fromRGB(200, 100, 255)
-                strategyBox.BackgroundColor3 = Color3.fromRGB(50, 30, 70)
-            elseif STATE.CurrentQuestObj == 3 then
-                GUI.StrategyText.Text = "QUEST: 1 Secret Fish + Bait Upgrades"
-                GUI.StrategyText.TextColor3 = Color3.fromRGB(255, 100, 100)
-                strategyBox.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
-            elseif STATE.CurrentQuestObj == 4 then
-                GUI.StrategyText.Text = "QUEST: 1M Coins + Bait Upgrades"
-                GUI.StrategyText.TextColor3 = Color3.fromRGB(100, 255, 100)
-                strategyBox.BackgroundColor3 = Color3.fromRGB(30, 70, 40)
-            else
-                GUI.StrategyText.Text = "STRATEGY: Quest Complete! Bait Upgrades"
-                GUI.StrategyText.TextColor3 = Color3.fromRGB(100, 255, 100)
-                strategyBox.BackgroundColor3 = Color3.fromRGB(30, 70, 40)
-            end
-        else
-            GUI.StrategyText.Text = "STRATEGY: Astral Rod Acquired! Bait Upgrades"
-            GUI.StrategyText.TextColor3 = Color3.fromRGB(100, 255, 100)
-            strategyBox.BackgroundColor3 = Color3.fromRGB(30, 70, 40)
-        end
-    end
-
-    -- Toggle auto fish
-    GUI.ToggleButton.MouseButton1Click:Connect(function()
-        AnimateButton(GUI.ToggleButton)
-        ToggleAutoFish(not AutoFish.Active)
-        
-        if AutoFish.Active then
-            GUI.ToggleButton.Text = "⏸️ STOP AUTO FISH"
-            TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(180, 40, 60)}):Play()
-            TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(220, 80, 100)}):Play()
-        else
-            GUI.ToggleButton.Text = "🚀 START AUTO FISH"
-            TweenService:Create(GUI.ToggleButton, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(40, 120, 180)}):Play()
-            TweenService:Create(toggleStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(80, 160, 220)}):Play()
-        end
-    end)
-
-    -- Hide/show GUI
-    hideBtn.MouseButton1Click:Connect(function()
-        AnimateButton(hideBtn)
-        TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(1.5, 0.5)}):Play()
-        task.wait(0.3)
-        frame.Visible = false
-        showBtn.Visible = true
-    end)
-
-    showBtn.MouseButton1Click:Connect(function()
-        AnimateButton(showBtn)
-        frame.Visible = true
-        showBtn.Visible = false
-        TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(0.5, 0.5)}):Play()
-    end)
-
-    closeBtn.MouseButton1Click:Connect(function()
-        AnimateButton(closeBtn)
-        ToggleAutoFish(false)
-        TweenService:Create(gui, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(frame, TweenInfo.new(0.3), {Position = UDim2.fromScale(0.5, 1.5)}):Play()
-        task.wait(0.3)
-        gui:Destroy()
-    end)
-
-    -- Add watermark
-    local watermark = Instance.new("TextLabel")
-    watermark.Size = UDim2.new(1, 0, 0, 20)
-    watermark.Position = UDim2.new(0, 0, 1, -20)
-    watermark.BackgroundTransparency = 1
-    watermark.Text = "✨ EnochHUB Fish It Pro | Auto-Quest + Auto-Gear"
-    watermark.Font = Enum.Font.Gotham
-    watermark.TextSize = 11
-    watermark.TextColor3 = Color3.fromRGB(255, 215, 0)
-    watermark.TextTransparency = 0.7
-    watermark.ZIndex = 1000
-    watermark.Parent = gui
-
-    -- Initial animation
-    frame.Position = UDim2.fromScale(0.5, -0.5)
-    TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.fromScale(0.5, 0.5)
-    }):Play()
-
-    print("[GUI] EnochHUB GUI created successfully")
+    GUI.ToggleButton.TextSize = 13
+    GUI.ToggleButton.LayoutOrder = 99
+    GUI.ToggleButton.Parent = contentFrame
     
-    return gui, UpdateStrategyDisplay
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = GUI.ToggleButton
+
+    -- Logic Start/Stop
+    GUI.ToggleButton.MouseButton1Click:Connect(function()
+        ToggleAutoFish(not AutoFish.Active)
+        if AutoFish.Active then
+            GUI.ToggleButton.Text = "STOP AUTO FISH"
+            GUI.ToggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 60)
+        else
+            GUI.ToggleButton.Text = "START AUTO FISH"
+            GUI.ToggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+        end
+    end)
+
+    -- --- 3. TOMBOL HIDE/SHOW (FOOTER) ---
+    -- Ini tombol "W - v1.1.3" yang berfungsi menyembunyikan konten
+    local hideBtn = Instance.new("TextButton")
+    hideBtn.Name = "HideButton"
+    hideBtn.Size = UDim2.new(0.6, 0, 0, 30)
+    hideBtn.Position = UDim2.new(0.2, 0, 1, -40) -- Posisi di bawah
+    hideBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242) -- Blurple (Warna seperti gambar)
+    hideBtn.Text = "W - v1.1.3"
+    hideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    hideBtn.Font = Enum.Font.GothamBold
+    hideBtn.TextSize = 14
+    hideBtn.Parent = mainFrame
+    
+    local hideCorner = Instance.new("UICorner")
+    hideCorner.CornerRadius = UDim.new(1, 0) -- Kapsul penuh
+    hideCorner.Parent = hideBtn
+
+    -- Logic Hide/Show
+    local isExpanded = true
+    local expandedSize = UDim2.fromOffset(350, 380) -- Ukuran penuh
+    local collapsedSize = UDim2.fromOffset(200, 50) -- Ukuran kecil (cuma tombol)
+
+    hideBtn.MouseButton1Click:Connect(function()
+        isExpanded = not isExpanded
+        
+        if isExpanded then
+            -- BUKA
+            mainFrame:TweenSize(expandedSize, "Out", "Back", 0.3, true)
+            contentFrame.Visible = true
+            hideBtn.Text = "W - v1.1.3"
+            -- Kembalikan posisi tombol ke bawah frame besar
+            hideBtn:TweenPosition(UDim2.new(0.2, 0, 1, -40), "Out", "Quad", 0.3, true)
+        else
+            -- TUTUP
+            contentFrame.Visible = false
+            mainFrame:TweenSize(collapsedSize, "Out", "Quad", 0.3, true)
+            hideBtn.Text = "SHOW GUI"
+            -- Sesuaikan posisi tombol agar pas di frame kecil
+            hideBtn:TweenPosition(UDim2.new(0.2, 0, 0.5, -15), "Out", "Quad", 0.3, true)
+        end
+    end)
+    
+    -- Tombol Close X (Hapus GUI)
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.fromOffset(20, 20)
+    closeBtn.Position = UDim2.new(1, -25, 0, 5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "x"
+    closeBtn.TextColor3 = Color3.fromRGB(80, 80, 80)
+    closeBtn.Parent = mainFrame
+    closeBtn.MouseButton1Click:Connect(function() ToggleAutoFish(false) gui:Destroy() end)
+
+    GUI.Frame = mainFrame -- Update referensi frame utama
+    return gui, nil
 end
 
 -- ===============================
@@ -1302,48 +1145,37 @@ local function Initialize()
         EnsureAtOptimalLocation()
     end)
     
-    -- Start update loop
+    -- Start update loop (MINIMALIST DATA FILLER)
     task.spawn(function()
         while task.wait(0.5) do
-            if GUI.CoinValue then
-                -- Update all GUI values
-                GUI.CoinValue.Text = FormatNumber(STATE.TotalCoins)
-                GUI.RodValue.Text = STATE.CurrentRod
-                GUI.BaitValue.Text = STATE.CurrentBait
-                GUI.NextBaitValue.Text = STATE.NextBaitPrice
+            if GUI.CoinValue and GUI.Frame and GUI.Frame.Parent then
+                
+                -- Update Data
+                GUI.CoinValue.Text = "$" .. FormatNumber(STATE.TotalCoins)
                 GUI.AreaValue.Text = STATE.CurrentArea
-                GUI.PurchasesValue.Text = tostring(STATE.TotalPurchases)
-                GUI.EarningsValue.Text = FormatNumber(STATE.SessionEarnings)
+                GUI.QuestLocationValue.Text = "Quest Area: " .. STATE.QuestLocation
                 
-                -- Update quest values
-                GUI.QuestStatusValue.Text = STATE.QuestStatus
-                GUI.QuestLocationValue.Text = STATE.QuestLocation
-                GUI.QuestTargetValue.Text = STATE.QuestTarget
-                GUI.QuestProgressValue.Text = STATE.QuestProgress
-                GUI.QuestProgress1Value.Text = STATE.QuestProgress1
-                GUI.QuestProgress2Value.Text = STATE.QuestProgress2
-                GUI.QuestProgress3Value.Text = STATE.QuestProgress3
-                GUI.QuestProgress4Value.Text = STATE.QuestProgress4
+                -- Gabung Nama Rod & Bait
+                local rodName = string.gsub(STATE.CurrentRod, " Rod", "")
+                local baitName = string.gsub(STATE.CurrentBait, " Bait", "")
+                GUI.RodBaitCombined.Text = string.format("%s Rod | %s Bait", rodName, baitName)
                 
-                -- Update strategy display
-                if updateStrategyFunc then
-                    updateStrategyFunc()
-                end
-                
-                -- Highlight bait upgrade availability
-                if STATE.HasAstralRod and STATE.NextBaitPrice ~= "MAX ✓" and STATE.NextBaitPrice ~= "N/A" then
-                    GUI.NextBaitValue.TextColor3 = Color3.fromRGB(255, 200, 100)
+                -- Next Cost
+                if STATE.NextBaitPrice == "MAX ✓" or STATE.NextBaitPrice == "N/A" or STATE.NextBaitPrice == "LOCKED 🔒" then
+                     GUI.NextBaitValue.Text = STATE.NextBaitPrice
                 else
-                    GUI.NextBaitValue.TextColor3 = Color3.fromRGB(220, 240, 255)
+                     GUI.NextBaitValue.Text = "Next Bait: $" .. STATE.NextBaitPrice
                 end
+
+                -- Quest Progress
+                GUI.CurrentTargetValue.Text = STATE.QuestTarget
+                GUI.QuestProgressValue.Text = STATE.QuestProgress
                 
-                -- Highlight quest status
-                if STATE.HasDeepSeaQuest then
-                    if STATE.QuestStatus == "Active" then
-                        GUI.QuestStatusValue.TextColor3 = Color3.fromRGB(100, 200, 255)
-                    else
-                        GUI.QuestStatusValue.TextColor3 = Color3.fromRGB(100, 255, 100)
-                    end
+                -- Warna Progress
+                if STATE.HasDeepSeaQuest and STATE.QuestStatus == "Active" then
+                    GUI.QuestProgressValue.TextColor3 = Color3.fromRGB(100, 255, 100)
+                else
+                    GUI.QuestProgressValue.TextColor3 = Color3.fromRGB(150, 150, 150)
                 end
             end
         end
