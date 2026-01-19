@@ -396,9 +396,19 @@ local function EquipBestGear()
 end
 
 -- ===============================
--- MAIN LOOPS
+-- MAIN LOOPS (FIXED REELING SPEED)
 -- ===============================
-local AutoFish = {Active=false}
+local AutoFish = {Active=false, Minigame=false} -- Kembalikan flag Minigame
+local clickThread = nil
+
+-- Fungsi Click Loop Terpisah (Seperti Original)
+local function ClickLoop()
+    while AutoFish.Active and AutoFish.Minigame do
+        FishingController:RequestFishingMinigameClick()
+        task.wait(0.01) -- Dipercepat sedikit dari 0.05 ke 0.01 untuk respon lebih kilat
+    end
+end
+
 local function ToggleAutoFish(bool)
     AutoFish.Active = bool
     
@@ -425,8 +435,37 @@ local function ToggleAutoFish(bool)
             end
         end)
     else
+        -- Matikan semua saat stop
+        AutoFish.Minigame = false
+        if clickThread then task.cancel(clickThread) end
         RF_UpdateAutoFishingState:InvokeServer(false)
         STATE.Status = "Idle"
+    end
+end
+
+-- HOOK 1: Saat Minigame Mulai (Reeling)
+local oldStart = FishingController.FishingRodStarted
+FishingController.FishingRodStarted = function(self, ...)
+    oldStart(self, ...)
+    if AutoFish.Active then
+        STATE.Status = "Reeling"
+        AutoFish.Minigame = true -- Set flag aktif
+        
+        -- Jalankan Clicker
+        if clickThread then task.cancel(clickThread) end
+        clickThread = task.spawn(ClickLoop)
+    end
+end
+
+-- HOOK 2: Saat Minigame Selesai (Stop Reeling) - INI YANG KEMARIN HILANG
+local oldStop = FishingController.FishingStopped
+FishingController.FishingStopped = function(self, ...)
+    oldStop(self, ...)
+    AutoFish.Minigame = false -- Matikan flag segera
+    if clickThread then task.cancel(clickThread) end
+    
+    if AutoFish.Active then
+        STATE.Status = "Casting" -- Kembalikan status visual ke Casting
     end
 end
 
