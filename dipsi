@@ -1099,7 +1099,120 @@ local function CreateGUI()
     GUI.Frame = mainFrame -- Update referensi frame utama
     return gui, nil
 end
+-- ===============================
+-- AUTO-RUN: EXTREME INVISIBLE POTATO MODE
+-- ===============================
+local function EnablePotatoMode()
+    print("🥔 Potato Mode: ACTIVATED (Invisible + Low CPU)")
 
+    -- Global State untuk Potato
+    local PotatoLoop = nil
+    
+    -- 1. MODULE HOOKS & BACKUPS (Mencegah VFX dan Cutscene berat)
+    local VFXControllerModule
+    pcall(function()
+        VFXControllerModule = require(ReplicatedStorage:WaitForChild("Controllers").VFXController)
+        -- Matikan fungsi handle dan PlayVFX
+        if VFXControllerModule then
+            VFXControllerModule.Handle = function(...) return nil end
+            if VFXControllerModule.PlayVFX then 
+                VFXControllerModule.PlayVFX.Fire = function(...) return nil end 
+            end
+        end
+    end)
+
+    pcall(function()
+        local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+        if CutsceneController and CutsceneController.Play then
+            CutsceneController.Play = function() return end
+        end
+    end)
+
+    -- 2. FUNGSI LOGIKA POTATO
+    local function DisableAnimations()
+        local character = lp.Character
+        if not character then return end
+        
+        -- Matikan Script Animate
+        local animateScript = character:FindFirstChild("Animate")
+        if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then
+            animateScript.Enabled = false
+        end
+        
+        -- Hancurkan Animator
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            if animator then animator:Destroy() end
+        end
+    end
+
+    local function ApplyExtremePotato()
+        -- Bersihkan folder kosmetik
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
+
+        -- Matikan Animasi
+        DisableAnimations()
+
+        -- Optimasi Lighting & Terrain
+        pcall(function()
+            local Lighting = game:GetService("Lighting")
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            Lighting.Brightness = 0
+            if workspace.Terrain then
+                workspace.Terrain.WaterWaveSize = 0
+                workspace.Terrain.WaterTransparency = 1 
+                workspace.Terrain.WaterReflectance = 0
+            end
+        end)
+
+        -- Buat Semua Part Transparan (Invisible)
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.Transparency = 1
+                v.Reflectance = 0
+                v.CastShadow = false
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+                v:Destroy()
+            end
+        end
+
+        -- Karakter LocalPlayer Invisible
+        if lp.Character then
+            for _, v in ipairs(lp.Character:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.Transparency = 1
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") then 
+                    v:Destroy() 
+                end
+                if v:IsA("MeshPart") then v.Transparency = 1 end
+            end
+        end
+
+        -- Cap FPS ke 30 (Hemat CPU)
+        if setfpscap then pcall(function() setfpscap(30) end) end
+    end
+
+    -- 3. JALANKAN LOOP
+    task.spawn(function()
+        -- Jalankan sekali di awal
+        ApplyExtremePotato()
+        
+        -- Loop setiap 3 detik untuk membersihkan part baru
+        while task.wait(3) do 
+            ApplyExtremePotato() 
+        end 
+    end)
+    
+    -- Hook saat respawn agar animasi tetap mati
+    lp.CharacterAdded:Connect(function(newCharacter)
+        task.wait(0.2)
+        DisableAnimations()
+    end)
+end
 -- ===============================
 -- INITIALIZE
 -- ===============================
@@ -1128,7 +1241,13 @@ local function Initialize()
     -- Initial status updates
     UpdateAstralStatus()
     UpdateDeepSeaQuestStatus()
-    
+
+    -- ==========================================
+    -- TAMBAHKAN PEMANGGIL POTATO MODE DI SINI
+    -- ==========================================
+    task.spawn(EnablePotatoMode) -- <--- INI YANG DITAMBAHKAN
+    -- ==========================================
+
     if updateStrategyFunc then
         updateStrategyFunc()
     end
