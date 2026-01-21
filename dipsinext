@@ -164,20 +164,35 @@ end
 local function EquipBestBait()
     if not PlayerDataReplion then return end
     local inv = PlayerDataReplion:GetExpect("Inventory")
-    local best, bestPrice = nil, -1
-
-    for _, b in pairs(inv["Baits"] or {}) do
-        for _, s in ipairs(ShopBaits) do
-            if tonumber(b.Id) == s.ID and s.Price > bestPrice then
-                best = b
-                bestPrice = s.Price
-                STATE.CurrentBait = s.Name
+    
+    -- Find the best bait (highest price)
+    local bestBaitId, bestBaitPrice = nil, -1
+    local baitList = inv["Baits"] or inv["Bait"] or {}
+    
+    for _, b in pairs(baitList) do
+        local baitId = tonumber(b.Id)
+        -- Find the price in ShopBaits
+        for _, shopBait in ipairs(ShopBaits) do
+            if shopBait.ID == baitId and shopBait.Price > bestBaitPrice then
+                bestBaitId = baitId
+                bestBaitPrice = shopBait.Price
+                -- Update bait name in STATE
+                for _, sb in ipairs(ShopBaits) do
+                    if sb.ID == baitId then
+                        STATE.CurrentBait = sb.Name or "Bait ID: " .. baitId
+                        break
+                    end
+                end
             end
         end
     end
-
-    if best then
-        RE_EquipItem:FireServer(best.UUID, "Baits")
+    
+    -- Equip the best bait if found
+    if bestBaitId then
+        pcall(function()
+            -- Try different equip methods
+            RE_EquipItem:FireServer(bestBaitId, "Baits")
+        end)
     end
 end
 
