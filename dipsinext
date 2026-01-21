@@ -317,7 +317,51 @@ local function AutoBuy()
         end
     end
 end
+-- Sort baits by price once at start (Cheapest -> Expensive)
+table.sort(ShopBaits, function(a, b) return a.Price < b.Price end)
 
+local function EquipBestBait()
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local baits = inv["Baits"] or {}
+    local bestBait = nil
+    local maxID = -1
+
+    -- Find the highest ID bait in inventory (Best Bait)
+    for _, b in pairs(baits) do
+        local id = tonumber(b.Id)
+        if id > maxID then
+            maxID = id
+            bestBait = b
+        end
+    end
+
+    if bestBait then
+        pcall(function()
+            -- Fires the equip remote for the best bait found
+            RE_EquipItem:FireServer(bestBait.UUID, "Baits")
+        end)
+    end
+end
+
+local function AutoBuyBait()
+    if not PlayerDataReplion then return end
+    local data = PlayerDataReplion:Get()
+    local inv = data.Inventory or {}
+    local currentBaits = inv["Baits"] or {}
+    
+    -- Only buy if we are low or out of bait
+    if #currentBaits == 0 then
+        for _, bait in ipairs(ShopBaits) do
+            if STATE.TotalCoins >= bait.Price then
+                -- Buy the first (cheapest) affordable bait
+                RF_PurchaseBait:InvokeServer(bait.ID)
+                task.wait(0.5)
+                break
+            end
+        end
+    end
+end
 -- ===============================
 -- MAIN LOOP
 -- ===============================
@@ -339,6 +383,9 @@ task.spawn(function()
         if AutoActive then
             pcall(function() RF_SellAllItems:InvokeServer() end)
             UpdateGameMode()
+
+            AutoBuyBait() 
+            EquipBestBait()
             
             if STATE.Mode == "DeepSea" then
                 AutoBuy()
