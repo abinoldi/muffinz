@@ -141,41 +141,40 @@ end
 -- CORE LOGIC (DECISION MAKER)
 -- ===============================
 local function CheckDeepSeaQuest(data)
-    -- NEW: Check if we already have the endgame rods. 
-    -- If we have Ghostfin (169) or Astral (5), we definitely finished or skipped this.
-    local owned = GetOwnedRods(data.Inventory or {})
-    if table.find(owned, 169) or table.find(owned, 5) then
+    local inv = data.Inventory or {}
+    local owned = GetOwnedRods(inv)
+    
+    -- ONLY return "Done" if you actually have the Ghostfin Rod reward
+    if table.find(owned, 169) then
         return "Done"
     end
 
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
     
-    -- If quest is missing and we DON'T have the rods, go trigger it.
+    -- If quest is not found and no Ghostfin, go to Sisyphus to trigger it
     if not quest then 
         return "DeepSea", "Sisyphus Statue", "Triggering Quest..." 
     end
     
     local sObj = quest.CurrentObj or 1
     local progMap = {}
-    for _, o in pairs(quest.Objectives or {}) do 
-        progMap[o.Id] = o.Progress or 0 
-    end
+    for _, o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
 
-    -- Objective Logic
     local actObj = sObj
     if actObj == 1 and (progMap[1] or 0) >= 300 then actObj = 2 end
     if actObj == 2 and (progMap[2] or 0) >= 3 then actObj = 3 end
     if actObj == 3 and (progMap[3] or 0) >= 1 then actObj = 4 end
     
-    if actObj == 1 then 
-        return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
-    elseif actObj == 2 then 
-        return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
-    elseif actObj == 3 then 
-        return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
-    elseif actObj == 4 then 
-        if (progMap[4] or 0) >= 1000000 then return "Done" end
-        return "DeepSea", (table.find(owned, 5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins"
+    -- Final Stage: Farming 1M coins to get the Ghostfin reward
+    if actObj == 4 then 
+        local hasAstral = table.find(owned, 5) ~= nil
+        return "DeepSea", (hasAstral and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins (Final)"
+    end
+    
+    -- Map for earlier stages
+    if actObj == 1 then return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
+    elseif actObj == 2 then return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
+    elseif actObj == 3 then return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
     end
     
     return "Done"
@@ -202,10 +201,9 @@ local function UpdateGameMode()
     STATE.TotalCoins = data.Coins or 0
     local inv = data.Inventory or {}
     local ownedRods = GetOwnedRods(inv)
-    STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     local hasGhostfin = table.find(ownedRods, 169) ~= nil
 
-    -- 1. DEEP SEA QUEST
+    -- 1. DEEP SEA QUEST (Must have Ghostfin to pass this)
     local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
     if dsMode == "DeepSea" then
         STATE.Mode = "DeepSea"
@@ -214,7 +212,7 @@ local function UpdateGameMode()
         return
     end
 
-    -- 2. AUTO LEVER (Requires Ghostfin)
+    -- 2. AUTO LEVER (Only starts after Deep Sea is Done)
     if hasGhostfin then
         local allLeversDone = true
         for _, art in ipairs(ArtifactOrder) do
@@ -226,24 +224,17 @@ local function UpdateGameMode()
             STATE.NextLocation = "Auto"
             return
         end
-    else
-        if dsMode == "Done" then
-            STATE.Mode = "Waiting"
-            STATE.TargetInfo = "Need Ghostfin Rod!"
-            STATE.NextLocation = "Esoteric Island"
+        
+        -- 3. ELEMENT QUEST
+        local elMode, elLoc, elProg = CheckElementQuest(data)
+        if elMode == "Element" then
+            STATE.Mode = "Element"
+            STATE.TargetInfo = elProg
+            STATE.NextLocation = elLoc
             return
         end
     end
 
-    -- 3. ELEMENT QUEST
-    local elMode, elLoc, elProg = CheckElementQuest(data)
-    if elMode == "Element" then
-        STATE.Mode = "Element"
-        STATE.TargetInfo = elProg
-        STATE.NextLocation = elLoc
-        return
-    end
-    
     -- 4. ALL DONE
     STATE.Mode = "Finished"
     STATE.TargetInfo = "All Quests Done"
