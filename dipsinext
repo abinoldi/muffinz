@@ -1,3 +1,5 @@
+[file name]: dipsinext.txt
+[file content begin]
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
 -- VERSION: v1.3.1 (Fix Stats Display)
@@ -28,7 +30,8 @@ local STATE = {
     -- STATUS
     FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
     Status = "Starting...", Teleporting = false,
-    CurrentArea = "None", TargetInfo = "None"
+    CurrentArea = "None", TargetInfo = "None",
+    CurrentBait = "None" -- Added for bait tracking
 }
 
 -- ===============================
@@ -135,6 +138,49 @@ local function Teleport(area)
         STATE.CurrentArea = area
     end)
     STATE.Teleporting = false
+end
+
+-- ===============================
+-- BAIT FUNCTIONS (ADDED)
+-- ===============================
+local function AutoBuyBestBait()
+    if not PlayerDataReplion then return end
+    local data = PlayerDataReplion:Get()
+    local inv = data.Inventory or {}
+    local owned = {}
+
+    for _, b in pairs(inv["Baits"] or {}) do
+        owned[tonumber(b.Id)] = true
+    end
+
+    for i = #ShopBaits, 1, -1 do
+        local bait = ShopBaits[i]
+        if data.Coins >= bait.Price and not owned[bait.ID] then
+            RF_PurchaseBait:InvokeServer(bait.ID)
+            task.wait(0.3)
+            break
+        end
+    end
+end
+
+local function EquipBestBait()
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local best, bestPrice = nil, -1
+
+    for _, b in pairs(inv["Baits"] or {}) do
+        for _, s in ipairs(ShopBaits) do
+            if tonumber(b.Id) == s.ID and s.Price > bestPrice then
+                best = b
+                bestPrice = s.Price
+                STATE.CurrentBait = s.Name
+            end
+        end
+    end
+
+    if best then
+        RE_EquipItem:FireServer(best.UUID, "Baits")
+    end
 end
 
 -- ===============================
@@ -263,45 +309,6 @@ local function EquipRod(nameID)
         end)
     end
 end
-local function AutoBuyBestBait()
-    if not PlayerDataReplion then return end
-    local data = PlayerDataReplion:Get()
-    local inv = data.Inventory or {}
-    local owned = {}
-
-    for _, b in pairs(inv["Baits"] or {}) do
-        owned[tonumber(b.Id)] = true
-    end
-
-    for i = #ShopBaits, 1, -1 do
-        local bait = ShopBaits[i]
-        if data.Coins >= bait.Price and not owned[bait.ID] then
-            RF_PurchaseBait:InvokeServer(bait.ID)
-            task.wait(0.3)
-            break
-        end
-    end
-end
-
-local function EquipBestBait()
-    if not PlayerDataReplion then return end
-    local inv = PlayerDataReplion:GetExpect("Inventory")
-    local best, bestPrice = nil, -1
-
-    for _, b in pairs(inv["Baits"] or {}) do
-        for _, s in ipairs(ShopBaits) do
-            if tonumber(b.Id) == s.ID and s.Price > bestPrice then
-                best = b
-                bestPrice = s.Price
-                STATE.CurrentBait = s.Name
-            end
-        end
-    end
-
-    if best then
-        RE_EquipItem:FireServer(best.UUID, "Baits")
-    end
-end
 
 local function ExecuteLeverLogic()
     local inv = PlayerDataReplion:GetExpect("Inventory")
@@ -376,23 +383,35 @@ FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoA
 task.spawn(function()
     while task.wait(3) do
         if AutoActive then
-            pcall(function() RF_SellAllItems:InvokeServer() end)
-            UpdateGameMode
-            AutoBuyBestBait()   -- ✅ added
-            EquipBestBait()     -- ✅ added
-            
-            if STATE.Mode == "DeepSea" then
-                AutoBuy()
-                EquipRod("Best")
-                if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
-            elseif STATE.Mode == "Lever" then
-                ExecuteLeverLogic()
-            elseif STATE.Mode == "Element" then
-                EquipRod(169)
-                if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
-            elseif STATE.Mode == "Finished" then
-                 if STATE.CurrentArea ~= "Esoteric Island" then Teleport("Esoteric Island") end
-            end
+            pcall(function()
+                RF_SellAllItems:InvokeServer()
+
+                UpdateGameMode()      -- 🧠 QUEST BRAIN (DO NOT TOUCH)
+                AutoBuyBestBait()     -- ✅ GLOBAL
+                EquipBestBait()       -- ✅ GLOBAL
+
+                if STATE.Mode == "DeepSea" then
+                    AutoBuy()
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    end
+
+                elseif STATE.Mode == "Lever" then
+                    ExecuteLeverLogic()
+
+                elseif STATE.Mode == "Element" then
+                    EquipRod(169)
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    end
+
+                elseif STATE.Mode == "Finished" then
+                    if STATE.CurrentArea ~= "Esoteric Island" then
+                        Teleport("Esoteric Island")
+                    end
+                end
+            end)
         end
     end
 end)
@@ -464,3 +483,4 @@ task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
 print("🚀 EnochHub Full Auto (v1.3.1) Started!")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
+[file content end]
