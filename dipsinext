@@ -342,13 +342,13 @@ local function AutoBuy()
         end
     end
 
-    -- 2. NEW: Auto Buy Best Bait
-    -- Iterates through your ShopBaits table [cite: 6]
-    for i = #ShopBaits, 1, -1 do 
-        local b = ShopBaits[i]
-        if STATE.TotalCoins >= b.Price then
-            -- Uses the bait purchase remote defined in your script [cite: 5]
-            RF_PurchaseBait:InvokeServer(b.ID) 
+    -- 2. Auto Buy Baits (Cheapest to Expensive) 
+    -- We loop from 1 to the end of the table [cite: 6]
+    for i = 1, #ShopBaits do 
+        local b = ShopBaits[i] [cite: 6]
+        if STATE.TotalCoins >= b.Price then [cite: 6]
+            -- Purchase the cheapest affordable bait and stop [cite: 5]
+            RF_PurchaseBait:InvokeServer(b.ID) [cite: 5]
             break 
         end
     end
