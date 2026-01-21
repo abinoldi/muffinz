@@ -141,9 +141,16 @@ end
 -- CORE LOGIC (DECISION MAKER)
 -- ===============================
 local function CheckDeepSeaQuest(data)
+    -- NEW: Check if we already have the endgame rods. 
+    -- If we have Ghostfin (169) or Astral (5), we definitely finished or skipped this.
+    local owned = GetOwnedRods(data.Inventory or {})
+    if table.find(owned, 169) or table.find(owned, 5) then
+        return "Done"
+    end
+
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
     
-    -- FIX: If quest is not found, teleport to Sisyphus Statue to "unlock/detect" it
+    -- If quest is missing and we DON'T have the rods, go trigger it.
     if not quest then 
         return "DeepSea", "Sisyphus Statue", "Triggering Quest..." 
     end
@@ -154,13 +161,12 @@ local function CheckDeepSeaQuest(data)
         progMap[o.Id] = o.Progress or 0 
     end
 
-    -- Determine Real Objective
+    -- Objective Logic
     local actObj = sObj
     if actObj == 1 and (progMap[1] or 0) >= 300 then actObj = 2 end
     if actObj == 2 and (progMap[2] or 0) >= 3 then actObj = 3 end
     if actObj == 3 and (progMap[3] or 0) >= 1 then actObj = 4 end
     
-    -- Return Active Step Info
     if actObj == 1 then 
         return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
     elseif actObj == 2 then 
@@ -169,7 +175,7 @@ local function CheckDeepSeaQuest(data)
         return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
     elseif actObj == 4 then 
         if (progMap[4] or 0) >= 1000000 then return "Done" end
-        return "DeepSea", (table.find(GetOwnedRods(data.Inventory), 5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins"
+        return "DeepSea", (table.find(owned, 5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins"
     end
     
     return "Done"
