@@ -1,6 +1,6 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.2 (Auto Bait + GUI Rod|Bait)
+-- VERSION: v1.3.1 (Fix Stats Display)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -22,19 +22,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
 local STATE = {
-    HasAstralRod = false,
-    CurrentRod = "Checking...",
-    CurrentBait = "None",
-    TotalCoins = 0,
-
-    Mode = "Starting...",
-    FishCount = 0,
-    FishPerMinute = 0.0,
-    StartTime = os.time(),
-    Status = "Starting...",
-    Teleporting = false,
-    CurrentArea = "None",
-    TargetInfo = "None"
+    HasAstralRod = false, CurrentRod = "Checking...", TotalCoins = 0,
+    -- QUEST MODES
+    Mode = "Starting...", -- "DeepSea", "Lever", "Element", "Finished"
+    -- STATUS
+    FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
+    Status = "Starting...", Teleporting = false,
+    CurrentArea = "None", TargetInfo = "None"
 }
 
 -- ===============================
@@ -47,12 +41,8 @@ local function EnablePotatoMode()
                 game.Lighting.GlobalShadows = false
                 game.Lighting.Brightness = 0
                 for _, v in ipairs(workspace:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.Transparency = 1
-                        v.CastShadow = false
-                    elseif v:IsA("Decal") or v:IsA("Texture") then
-                        v.Transparency = 1
-                    end
+                    if v:IsA("BasePart") then v.Transparency=1; v.CastShadow=false
+                    elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency=1 end
                 end
             end)
         end
@@ -84,65 +74,198 @@ local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
--- CONFIG DATA
+-- CONFIGURATION DATA 
 -- ===============================
+local FishingAreas = {
+    ["Enchant Room"]={Pos=Vector3.new(3255,-1301,1371),Look=Vector3.new(0,0,-1)},
+    ["Treasure Room"]={Pos=Vector3.new(-3598,-281,-1645),Look=Vector3.new(-0.06,0,-1)},
+    ["Sisyphus Statue"]={Pos=Vector3.new(-3743,-135,-1007),Look=Vector3.new(0.3,0,0.95)},
+    ["Sacred Temple"]={Pos=Vector3.new(1461,-22,-670),Look=Vector3.new(-0.99,0,0.14)},
+    ["Esoteric Island"]={Pos=Vector3.new(2164,3,1242),Look=Vector3.new(0,0,-1)},
+    ["Ancient Jungle"]={Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)}
+}
+
 local ShopRods = {
-    {Name="Luck Rod", ID=79, Price=325},
-    {Name="Carbon Rod", ID=76, Price=750},
-    {Name="Grass Rod", ID=85, Price=1500},
-    {Name="Demascus Rod", ID=77, Price=3000},
-    {Name="Ice Rod", ID=78, Price=5000},
-    {Name="Lucky Rod", ID=4, Price=15000},
-    {Name="Midnight Rod", ID=80, Price=50000},
-    {Name="Astral Rod", ID=5, Price=1000000},
+    {Name="Luck Rod", ID=79, Price=325}, {Name="Carbon Rod", ID=76, Price=750}, 
+    {Name="Grass Rod", ID=85, Price=1500}, {Name="Demascus Rod", ID=77, Price=3000},
+    {Name="Ice Rod", ID=78, Price=5000}, {Name="Lucky Rod", ID=4, Price=15000}, 
+    {Name="Midnight Rod", ID=80, Price=50000}, {Name="Astral Rod", ID=5, Price=1000000},
+}
+local ShopBaits = {{ID=3,Price=3000}, {ID=17,Price=83500}, {ID=6,Price=290000}, {ID=8,Price=630000}, {ID=15,Price=1148484}, {ID=16,Price=3700000}, {ID=20,Price=4000000}}
+
+-- ARTIFACT & LEVER DATA
+local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
+local ARTIFACT_IDS = {["Arrow Artifact"]=265, ["Crescent Artifact"]=266, ["Diamond Artifact"]=267, ["Hourglass Diamond Artifact"]=271}
+local ArtifactData = {
+    ["Hourglass Diamond Artifact"] = {LeverName="Hourglass Diamond Lever", ChildRef=6, Suffix="Crystal", UnlockColor=Color3.fromRGB(255, 248, 49), Pos=Vector3.new(1490, 3.3, -843), Look=Vector3.new(0.1, 0, 0.9), LeverPos=Vector3.new(1484.6, 8.4, -861.0)},
+    ["Diamond Artifact"] = {LeverName="Diamond Lever", ChildRef="TempleLever", Suffix="Crystal", UnlockColor=Color3.fromRGB(219, 38, 255), Pos=Vector3.new(1844, 2.5, -288), Look=Vector3.new(0.9, 0, -0.1), LeverPos=Vector3.new(1818.9, 8.4, -284.1)},
+    ["Arrow Artifact"] = {LeverName="Arrow Lever", ChildRef=5, Suffix="Crystal", UnlockColor=Color3.fromRGB(255, 47, 47), Pos=Vector3.new(874, 2.5, -358), Look=Vector3.new(-0.9, 0, 0.1), LeverPos=Vector3.new(898.2, 8.4, -361.8)},
+    ["Crescent Artifact"] = {LeverName="Crescent Lever", ChildRef=4, Suffix="Crystal", UnlockColor=Color3.fromRGB(112, 255, 69), Pos=Vector3.new(1401, 6.4, 116), Look=Vector3.new(-0.5, 0, 0.8), LeverPos=Vector3.new(1419.7, 31.1, 78.5)},
 }
 
--- ✅ UPDATED BAITS (cheap → expensive)
-local ShopBaits = {
-    {Name="Topwater Bait", ID=10, Price=100},
-    {Name="Luck Bait", ID=2, Price=1000},
-    {Name="Midnight Bait", ID=3, Price=3000},
-    {Name="Nature Bait", ID=17, Price=83500},
-    {Name="Chroma Bait", ID=6, Price=290000},
-    {Name="Dark Matter Bait", ID=8, Price=630000},
-    {Name="Corrupt Bait", ID=15, Price=1148484},
-    {Name="Aether Bait", ID=16, Price=3700000},
-    {Name="Floral Bait", ID=20, Price=4000000},
-}
-
--- ===============================
 -- HELPERS
+local function FormatNumber(n) if n>=1e6 then return string.format("%.2fM",n/1e6) elseif n>=1e3 then return string.format("%.1fK",n/1e3) else return tostring(n) end end
+local function CalcStats() local mins = (os.time()-STATE.StartTime)/60; STATE.FishPerMinute = mins>0 and STATE.FishCount/mins or 0 end
+local function FormatTime(s) return string.format("%02dh %02dm %02ds", math.floor(s/3600), math.floor((s%3600)/60), s%60) end
+
+local function GetOwnedRods(inv)
+    local owned = {}
+    for _, r in ipairs(inv["Fishing Rods"] or {}) do table.insert(owned, tonumber(r.Id)) end
+    return owned
+end
+
+local function IsLeverUnlocked(name)
+    local jungle = workspace:FindFirstChild("JUNGLE INTERACTIONS")
+    if not jungle then return false end
+    local d = ArtifactData[name]
+    local folder = (type(d.ChildRef)=="string" and jungle:FindFirstChild(d.ChildRef)) or jungle:GetChildren()[d.ChildRef]
+    local crystal = folder and folder:FindFirstChild(d.Suffix)
+    if not crystal then return false end
+    local c1, c2 = crystal.Color, d.UnlockColor
+    return math.abs(c1.R-c2.R)<0.05 and math.abs(c1.G-c2.G)<0.05 and math.abs(c1.B-c2.B)<0.05
+end
+
+local function Teleport(area)
+    if STATE.Teleporting or not FishingAreas[area] then return end
+    STATE.Teleporting = true
+    STATE.CurrentArea = "TP -> " .. area
+    pcall(function()
+        lp.Character.HumanoidRootPart.CFrame = CFrame.new(FishingAreas[area].Pos, FishingAreas[area].Pos+FishingAreas[area].Look)
+        task.wait(1.5)
+        STATE.CurrentArea = area
+    end)
+    STATE.Teleporting = false
+end
+
 -- ===============================
-local function FormatNumber(n)
-    if n >= 1e6 then
-        return string.format("%.2fM", n / 1e6)
-    elseif n >= 1e3 then
-        return string.format("%.1fK", n / 1e3)
+-- CORE LOGIC (DECISION MAKER)
+-- ===============================
+local function CheckDeepSeaQuest(data)
+    local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
+    if not quest then return "Done" end
+    
+    local sObj = quest.CurrentObj or 1
+    local progMap = {}
+    for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
+
+    -- Determine Real Objective
+    local actObj = sObj
+    if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
+    if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
+    if actObj==3 and (progMap[3] or 0)>=1 then actObj=4 end
+    if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end -- Quest Finished
+    
+    -- Return Active Step Info
+    if actObj==1 then return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
+    elseif actObj==2 then return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
+    elseif actObj==3 then return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
+    elseif actObj==4 then return "DeepSea", (table.find(GetOwnedRods(data.Inventory),5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins"
+    end
+    return "Done"
+end
+
+local function CheckElementQuest(data)
+    local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Element Quest"]
+    if not quest then return "Check" end 
+    
+    local progMap = {}
+    for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
+    
+    if (progMap[2] or 0) < 1 then return "Element", "Ancient Jungle", "Catch Secret (Jungle)" end
+    if (progMap[3] or 0) < 1 then return "Element", "Sacred Temple", "Catch Secret (Temple)" end
+    
+    return "Finished"
+end
+
+local function UpdateGameMode()
+    if not PlayerDataReplion then return end
+    local data = PlayerDataReplion:Get()
+    if not data then return end
+    
+    STATE.TotalCoins = data.Coins or 0
+    local inv = data.Inventory or {}
+    local ownedRods = GetOwnedRods(inv)
+    STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
+    local hasGhostfin = table.find(ownedRods, 169) ~= nil
+
+    -- 1. DEEP SEA QUEST
+    local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
+    if dsMode == "DeepSea" then
+        STATE.Mode = "DeepSea"
+        STATE.TargetInfo = dsProg
+        STATE.NextLocation = dsLoc
+        return
+    end
+
+    -- 2. AUTO LEVER (Requires Ghostfin)
+    if hasGhostfin then
+        local allLeversDone = true
+        for _, art in ipairs(ArtifactOrder) do
+            if not IsLeverUnlocked(art) then allLeversDone = false; break end
+        end
+        if not allLeversDone then
+            STATE.Mode = "Lever"
+            STATE.TargetInfo = "Unlocking Levers..."
+            STATE.NextLocation = "Auto"
+            return
+        end
     else
-        return tostring(n)
+        if dsMode == "Done" then
+            STATE.Mode = "Waiting"
+            STATE.TargetInfo = "Need Ghostfin Rod!"
+            STATE.NextLocation = "Esoteric Island"
+            return
+        end
+    end
+
+    -- 3. ELEMENT QUEST
+    local elMode, elLoc, elProg = CheckElementQuest(data)
+    if elMode == "Element" then
+        STATE.Mode = "Element"
+        STATE.TargetInfo = elProg
+        STATE.NextLocation = elLoc
+        return
+    end
+    
+    -- 4. ALL DONE
+    STATE.Mode = "Finished"
+    STATE.TargetInfo = "All Quests Done"
+    STATE.NextLocation = "Esoteric Island"
+end
+
+-- ===============================
+-- ACTION FUNCTIONS
+-- ===============================
+local function EquipRod(nameID)
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local rods = inv["Fishing Rods"] or {}
+    local targetRod = nil
+    
+    for _, r in pairs(rods) do
+        if nameID == "Best" then
+            local bestPrice = -1
+            for _, s in ipairs(ShopRods) do
+                if tonumber(r.Id) == s.ID and s.Price > bestPrice then
+                    targetRod = r; bestPrice = s.Price; STATE.CurrentRod = s.Name
+                end
+            end
+        else
+            if tonumber(r.Id) == nameID then targetRod = r; break end
+        end
+    end
+    
+    if targetRod then
+        pcall(function()
+            RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods")
+            task.wait(0.2)
+            RE_EquipToolFromHotbar:FireServer(1)
+        end)
     end
 end
-
-local function CalcStats()
-    local mins = (os.time() - STATE.StartTime) / 60
-    STATE.FishPerMinute = mins > 0 and STATE.FishCount / mins or 0
-end
-
-local function FormatTime(s)
-    return string.format("%02dh %02dm %02ds",
-        math.floor(s / 3600),
-        math.floor((s % 3600) / 60),
-        s % 60
-    )
-end
-
--- ===============================
--- AUTO BUY + EQUIP BAIT (GLOBAL)
--- ===============================
 local function AutoBuyBestBait()
     if not PlayerDataReplion then return end
     local data = PlayerDataReplion:Get()
-    local coins = data.Coins or 0
     local inv = data.Inventory or {}
     local owned = {}
 
@@ -152,7 +275,7 @@ local function AutoBuyBestBait()
 
     for i = #ShopBaits, 1, -1 do
         local bait = ShopBaits[i]
-        if coins >= bait.Price and not owned[bait.ID] then
+        if data.Coins >= bait.Price and not owned[bait.ID] then
             RF_PurchaseBait:InvokeServer(bait.ID)
             task.wait(0.3)
             break
@@ -163,10 +286,9 @@ end
 local function EquipBestBait()
     if not PlayerDataReplion then return end
     local inv = PlayerDataReplion:GetExpect("Inventory")
-    local baits = inv["Baits"] or {}
-
     local best, bestPrice = nil, -1
-    for _, b in pairs(baits) do
+
+    for _, b in pairs(inv["Baits"] or {}) do
         for _, s in ipairs(ShopBaits) do
             if tonumber(b.Id) == s.ID and s.Price > bestPrice then
                 best = b
@@ -181,138 +303,153 @@ local function EquipBestBait()
     end
 end
 
--- ===============================
--- ROD EQUIP
--- ===============================
-local function EquipRod(nameID)
-    if not PlayerDataReplion then return end
+local function ExecuteLeverLogic()
     local inv = PlayerDataReplion:GetExpect("Inventory")
-    local rods = inv["Fishing Rods"] or {}
-
-    local targetRod, bestPrice = nil, -1
-    for _, r in pairs(rods) do
-        for _, s in ipairs(ShopRods) do
-            if tonumber(r.Id) == s.ID and s.Price > bestPrice then
-                targetRod = r
-                bestPrice = s.Price
-                STATE.CurrentRod = s.Name
+    EquipRod(169) -- Equip Ghostfin
+    
+    for _, artName in ipairs(ArtifactOrder) do
+        if not IsLeverUnlocked(artName) then
+            local d = ArtifactData[artName]
+            local hasArt = false
+            local id = ARTIFACT_IDS[artName]
+            local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
+            if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
+            
+            if hasArt then
+                STATE.TargetInfo = "Placing: "..artName
+                if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
+                    task.wait(0.5)
+                    lp.Character.HumanoidRootPart.Anchored = true
+                    RE_UnequipItem:FireServer("all")
+                    task.wait(0.5)
+                    RF_PlaceLeverItem:FireServer(artName)
+                    task.wait(2.0)
+                    lp.Character.HumanoidRootPart.Anchored = false
+                end
+            else
+                STATE.TargetInfo = "Farming: "..artName
+                Teleport(artName) -- Teleport to fishing spot
+                if lp.Character then
+                    local dist = (lp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
+                    if dist > 5 then
+                        lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look)
+                    end
+                end
             end
+            break 
         end
     end
+end
 
-    if targetRod then
-        RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods")
-        task.wait(0.2)
-        RE_EquipToolFromHotbar:FireServer(1)
+local function AutoBuy()
+    if STATE.Mode == "DeepSea" then
+        local inv = PlayerDataReplion:GetExpect("Inventory")
+        local owned = GetOwnedRods(inv)
+        if not STATE.HasAstralRod then
+            for _, r in ipairs(ShopRods) do
+                if not table.find(owned, r.ID) and STATE.TotalCoins >= r.Price then
+                    RF_PurchaseFishingRod:InvokeServer(r.ID); task.wait(0.5)
+                end
+                break
+            end
+        end
     end
 end
 
 -- ===============================
 -- MAIN LOOP
 -- ===============================
+local AutoActive = true
+local clickThread = nil
+local function ClickLoop()
+    while AutoActive and STATE.Status == "Reeling" do
+        FishingController:RequestFishingMinigameClick()
+        task.wait(0.1)
+    end
+end
+local oldStart = FishingController.FishingRodStarted
+FishingController.FishingRodStarted = function(self,...) oldStart(self,...) if AutoActive then STATE.Status="Reeling"; if clickThread then task.cancel(clickThread) end clickThread=task.spawn(ClickLoop) end end
+local oldStop = FishingController.FishingStopped
+FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
+
 task.spawn(function()
     while task.wait(3) do
-        pcall(function()
-            RF_SellAllItems:InvokeServer()
-            AutoBuyBestBait()
-            EquipBestBait()
-            EquipRod("Best")
-        end)
+        if AutoActive then
+            pcall(function() RF_SellAllItems:InvokeServer() end)
+            UpdateGameMode
+            AutoBuyBestBait()   -- ✅ added
+            EquipBestBait()     -- ✅ added
+            
+            if STATE.Mode == "DeepSea" then
+                AutoBuy()
+                EquipRod("Best")
+                if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
+            elseif STATE.Mode == "Lever" then
+                ExecuteLeverLogic()
+            elseif STATE.Mode == "Element" then
+                EquipRod(169)
+                if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
+            elseif STATE.Mode == "Finished" then
+                 if STATE.CurrentArea ~= "Esoteric Island" then Teleport("Esoteric Island") end
+            end
+        end
     end
 end)
 
--- ===============================
--- FISH TRACKING
--- ===============================
 if RE_ObtainedNewFishNotification then
-    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function()
-        STATE.FishCount += 1
-        CalcStats()
-        STATE.Status = "Caught!"
-        task.delay(1, function()
-            STATE.Status = "Casting"
-        end)
-    end)
+    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() STATE.FishCount=STATE.FishCount+1; CalcStats(); STATE.Status="Caught!"; task.delay(1,function() STATE.Status="Casting" end) end)
 end
 
 -- ===============================
--- GUI (ORIGINAL STYLE + ROD|BAIT)
+-- GUI (FIXED STATS)
 -- ===============================
 local function CreateDashboard()
-    if game.CoreGui:FindFirstChild("EnochDashboard") then
-        game.CoreGui.EnochDashboard:Destroy()
-    end
-
-    local gui = Instance.new("ScreenGui", game.CoreGui)
-    gui.Name = "EnochDashboard"
-    gui.IgnoreGuiInset = true
-
+    if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
+    local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
+    
     local toggleBtn = Instance.new("TextButton", gui)
-    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
-    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
-    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v1.3.2 (Auto Bait)"
-    toggleBtn.TextColor3 = Color3.new(1,1,1)
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextScaled = true
-    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
-
-    local dashboard = Instance.new("Frame", gui)
-    dashboard.Size = UDim2.fromScale(1, 1)
-    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    dashboard.Visible = true
-
-    local layout = Instance.new("UIListLayout", dashboard)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    layout.Padding = UDim.new(0.02, 0)
-
-    local function Text(txt, h, col)
-        local l = Instance.new("TextLabel", dashboard)
-        l.Text = txt
-        l.TextColor3 = col
-        l.Size = UDim2.new(1,0,h,0)
-        l.BackgroundTransparency = 1
-        l.Font = Enum.Font.GothamBold
-        l.TextScaled = true
-        return l
-    end
-
-    local L_Coins  = Text("$0", 0.12, Color3.fromRGB(255, 215, 0))
-    local L_Mode   = Text("MODE: CHECKING", 0.08, Color3.fromRGB(0, 255, 255))
-    local L_Stats  = Text("0 Fish | 0.0 F/M", 0.06, Color3.fromRGB(255,255,255))
-    local L_Time   = Text("00h 00m 00s", 0.05, Color3.fromRGB(180,180,180))
-    -- ✅ ONLY MODIFIED LINE
-    local L_Info   = Text("Rod: None | Bait: None", 0.05, Color3.fromRGB(200,200,200))
-    local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255,100,100))
-
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "W - v1.3.1 (Fixed Stats)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    
+    local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
+    local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
+    
+    local function Text(txt, h, col) local l = Instance.new("TextLabel", dashboard); l.Text=txt; l.TextColor3=col; l.Size=UDim2.new(1,0,h,0); l.BackgroundTransparency=1; l.Font=Enum.Font.GothamBold; l.TextScaled=true; return l end
+    
+    local L_Coins = Text("$0", 0.12, Color3.fromRGB(255, 215, 0))
+    local L_Mode = Text("MODE: CHECKING", 0.08, Color3.fromRGB(0, 255, 255))
+    -- [[ FIXED: ADDED STATS & TIME BACK ]] --
+    local L_Stats = Text("0 | 0.0 F/M", 0.06, Color3.fromRGB(255, 255, 255))
+    local L_Time  = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180))
+    -- [[ END FIX ]] --
+    local L_Info = Text("...", 0.05, Color3.fromRGB(200, 200, 200))
+    local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100))
+    
     local isOpen = true
-    toggleBtn.MouseButton1Click:Connect(function()
-        isOpen = not isOpen
-        dashboard.Visible = isOpen
-        toggleBtn.Text = isOpen and "W - v1.3.2 (Auto Bait)" or "OPEN"
-    end)
-
+    toggleBtn.MouseButton1Click:Connect(function() isOpen=not isOpen; dashboard.Visible=isOpen; toggleBtn.Text=isOpen and "W - v1.3.1 (Fixed Stats)" or "OPEN" end)
+    
     task.spawn(function()
         while task.wait(0.5) do
             if dashboard.Visible then
                 L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
                 L_Mode.Text = "MODE: " .. STATE.Mode
-
+                
+                -- [[ FIXED LOGIC ]] --
                 CalcStats()
                 L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
                 L_Time.Text = FormatTime(os.time() - STATE.StartTime)
-
-                -- ✅ ROD | BAIT DISPLAY
-                L_Info.Text = "Rod: " .. (STATE.CurrentRod or "None") ..
-                              " | Bait: " .. (STATE.CurrentBait or "None")
-
+                -- [[ END FIX ]] --
+                
+                if STATE.Mode == "DeepSea" then L_Mode.TextColor3 = Color3.fromRGB(100, 200, 255)
+                elseif STATE.Mode == "Lever" then L_Mode.TextColor3 = Color3.fromRGB(255, 170, 0)
+                elseif STATE.Mode == "Element" then L_Mode.TextColor3 = Color3.fromRGB(170, 0, 255)
+                else L_Mode.TextColor3 = Color3.fromRGB(0, 255, 0) end
+                
+                L_Info.Text = STATE.TargetInfo
                 L_Status.Text = STATE.Status
-                L_Status.TextColor3 =
-                    (STATE.Status == "Reeling")
-                    and Color3.fromRGB(100,255,100)
-                    or Color3.fromRGB(255,100,100)
+                L_Status.TextColor3 = (STATE.Status=="Reeling") and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
             end
         end
     end)
@@ -325,5 +462,5 @@ task.spawn(EnablePotatoMode)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-
-print("🚀 EnochHub v1.3.2 started!")
+print("🚀 EnochHub Full Auto (v1.3.1) Started!")
+loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
