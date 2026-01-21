@@ -306,6 +306,7 @@ local function StartFishingV1()
     table.insert(FishingThreads, sellThread)
     
     -- Loop 4: Mutation Favorite Manager (UPDATED FOR LEVIATHAN'S RAGE)
+    -- Loop 4: Mutation Favorite Manager (UPDATED FOR ALL RUBIES + LEVIATHAN'S RAGE)
     local mutationThread = task.spawn(function()
         while FishingConfig.Enabled do
             local inv = PlayerData:GetExpect("Inventory")
@@ -316,7 +317,7 @@ local function StartFishingV1()
                             local mutation = GetMutation(item)
                             local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
                             
-                            -- Check for Leviathan's Rage mutation
+                            -- Check for Leviathan's Rage mutation (priority)
                             if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
                                 if not isLocked then
                                     pcall(function() 
@@ -325,16 +326,13 @@ local function StartFishingV1()
                                     end)
                                     task.wait(0.2)
                                 end
-                            -- Ruby Gemstone logic (kept for compatibility)
-                            elseif item.Identifier == "Ruby" and mutation == "Gemstone" then
+                            -- FAVORITE ALL RUBIES (both Gemstone AND regular)
+                            elseif item.Identifier == "Ruby" then
                                 if not isLocked then 
-                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
-                                    task.wait(0.2)
-                                end
-                            -- Unlock regular rubies (non-gemstone)
-                            elseif item.Identifier == "Ruby" and mutation ~= "Gemstone" then
-                                if isLocked then 
-                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                    pcall(function() 
+                                        RE_FavoriteItem:FireServer(item.UUID) 
+                                        print("[Ruby] Favorited Ruby (mutation: " .. mutation .. ")")
+                                    end)
                                     task.wait(0.2)
                                 end
                             end
