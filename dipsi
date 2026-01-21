@@ -264,11 +264,16 @@ local function EquipRod(nameID)
             local bestPrice = -1
             for _, s in ipairs(ShopRods) do
                 if tonumber(r.Id) == s.ID and s.Price > bestPrice then
-                    targetRod = r; bestPrice = s.Price; STATE.CurrentRod = s.Name
+                    targetRod = r
+                    bestPrice = s.Price
+                    STATE.CurrentRod = s.Name
                 end
             end
-        else
-            if tonumber(r.Id) == nameID then targetRod = r; break end
+        elseif tonumber(r.Id) == nameID then 
+            -- Directly find the rod by ID (e.g., 169)
+            targetRod = r
+            STATE.CurrentRod = "Ghostfin Rod" -- Or a dynamic name lookup
+            break 
         end
     end
     
@@ -368,8 +373,14 @@ task.spawn(function()
             elseif STATE.Mode == "Lever" then
                 ExecuteLeverLogic()
             elseif STATE.Mode == "Element" then
-                EquipRod(169)
-                if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
+                -- Check current rod ID before equipping to prevent spamming remotes
+                if STATE.CurrentRod ~= "Ghostfin Rod" then
+                    EquipRod(169)
+                end
+                
+                if STATE.CurrentArea ~= STATE.NextLocation then 
+                    Teleport(STATE.NextLocation) 
+                end
             elseif STATE.Mode == "Finished" then
                  if STATE.CurrentArea ~= "Esoteric Island" then Teleport("Esoteric Island") end
             end
