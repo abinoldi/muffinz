@@ -327,30 +327,50 @@ local function ExecuteLeverLogic()
 end
 
 local function AutoBuy()
-    -- Removed the DeepSea restriction so it works in all modes
+    -- Removed 'if STATE.Mode == "DeepSea"' so it runs in all modes
+    if not PlayerDataReplion then return end
     local inv = PlayerDataReplion:GetExpect("Inventory")
     local data = PlayerDataReplion:Get()
     local ownedRods = GetOwnedRods(inv)
-    
-    -- 1. Auto Buy Rods (Existing logic)
+    local boughtSomething = false
+
+    -- 1. AUTO BUY RODS (Existing logic)
     if not STATE.HasAstralRod then
         for _, r in ipairs(ShopRods) do
             if not table.find(ownedRods, r.ID) and STATE.TotalCoins >= r.Price then
-                RF_PurchaseFishingRod:InvokeServer(r.ID)
-                task.wait(0.5)
+                pcall(function()
+                    RF_PurchaseFishingRod:InvokeServer(r.ID)
+                    task.wait(0.5)
+                    boughtSomething = true
+                end)
+                if boughtSomething then break end
             end
         end
     end
 
-    -- 2. Auto Buy Baits (Cheapest to Expensive) 
-    -- We loop from 1 to the end of the table [cite: 6]
+    -- 2. AUTO BUY BAITS (Cheapest to Expensive)
+    -- This uses the RF_PurchaseBait remote you already have 
     for i = 1, #ShopBaits do 
         local b = ShopBaits[i]
         if STATE.TotalCoins >= b.Price then
-            -- Purchase the cheapest affordable bait and stop [cite: 5]
-            RF_PurchaseBait:InvokeServer(b.ID)
-            break 
+            pcall(function()
+                -- Briefly stop fishing to "unlock" the shop
+                RF_UpdateAutoFishingState:InvokeServer(false)
+                task.wait(0.2)
+                
+                -- Buy the bait using the remote from your script
+                RF_PurchaseBait:InvokeServer(b.ID)
+                
+                boughtSomething = true
+                task.wait(0.2)
+            end)
+            if boughtSomething then break end 
         end
+    end
+
+    -- Resume fishing if we briefly paused for a purchase
+    if boughtSomething then
+        RF_UpdateAutoFishingState:InvokeServer(true)
     end
 end
 
