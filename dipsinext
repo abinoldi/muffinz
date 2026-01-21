@@ -163,6 +163,7 @@ end
 
 local function EquipBestBait()
     if not PlayerDataReplion then return end
+    
     local inv = PlayerDataReplion:GetExpect("Inventory")
     
     -- Find the best bait in inventory
@@ -174,17 +175,16 @@ local function EquipBestBait()
         -- Find price in ShopBaits list
         for _, shopBait in ipairs(ShopBaits) do
             if shopBait.ID == baitId and shopBait.Price > bestBaitPrice then
-                bestBaitUUID = baitData.UUID -- Use UUID instead of ID
+                bestBaitUUID = baitData.UUID
                 bestBaitPrice = shopBait.Price
                 STATE.CurrentBait = "Bait ID: " .. baitId
             end
         end
     end
     
-    -- Equip the best bait
+    -- SPAM EQUIP (just fire and forget)
     if bestBaitUUID then
         pcall(function()
-            -- Try the equip item remote (baits use UUID like rods)
             RE_EquipItem:FireServer(bestBaitUUID, "Baits")
         end)
     else
