@@ -1,0 +1,59 @@
+local RepStorage = game:GetService("ReplicatedStorage")
+local PromptController = nil
+local Promise = nil
+
+-- Toggle Variable
+_G.SynceHub_AutoAcceptTradeEnabled = true 
+
+pcall(function()
+    PromptController = require(RepStorage:WaitForChild("Controllers").PromptController)
+    Promise = require(RepStorage:WaitForChild("Packages").Promise)
+end)
+
+if PromptController and PromptController.FirePrompt and Promise then
+    local oldFirePrompt = PromptController.FirePrompt
+    
+    PromptController.FirePrompt = function(self, promptText, ...)
+        
+        -- Check if it is a Trade Request
+        if _G.SynceHub_AutoAcceptTradeEnabled and type(promptText) == "string" and promptText:find("Accept") and promptText:find("from:") then
+            
+            -- Extract player name from the prompt text
+            local initiatorName = string.match(promptText, "from: ([^\n]+)") or "Someone"
+            
+            -- 1. Notification: Incoming Trade
+            if WindUI then
+                WindUI:Notify({
+                    Title = "Incoming Trade!",
+                    Content = "From: " .. initiatorName .. "\nAuto accepting in 3.5s...",
+                    Duration = 3,
+                    Icon = "arrow-right-left"
+                })
+            end
+            
+            return Promise.new(function(resolve)
+                -- 2. Wait 3.5 Seconds
+                task.wait(3.5)
+                
+                -- 3. Accept Logic
+                resolve(true)
+
+                -- 4. Notification: Trade Accepted
+                if WindUI then
+                    WindUI:Notify({
+                        Title = "Trade Accepted ✅",
+                        Content = "Successfully accepted trade with " .. initiatorName,
+                        Duration = 3,
+                        Icon = "check"
+                    })
+                end
+            end)
+        end
+        
+        return oldFirePrompt(self, promptText, ...)
+    end
+    
+    print("Auto Accept Trade (With Notifications) Hooked!")
+else
+    warn("Failed to load PromptController. Auto Accept will not work.")
+end
