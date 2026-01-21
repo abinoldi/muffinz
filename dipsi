@@ -318,12 +318,16 @@ local function AutoBuy()
     if STATE.Mode == "DeepSea" then
         local inv = PlayerDataReplion:GetExpect("Inventory")
         local owned = GetOwnedRods(inv)
+        
         if not STATE.HasAstralRod then
+            -- Iterate through all shop rods to find what we can afford
             for _, r in ipairs(ShopRods) do
                 if not table.find(owned, r.ID) and STATE.TotalCoins >= r.Price then
-                    RF_PurchaseFishingRod:InvokeServer(r.ID); task.wait(0.5)
+                    STATE.TargetInfo = "Buying: " .. r.Name
+                    RF_PurchaseFishingRod:InvokeServer(r.ID)
+                    task.wait(0.5)
+                    break -- SUCCESS: Now it only breaks after buying a rod
                 end
-                break
             end
         end
     end
