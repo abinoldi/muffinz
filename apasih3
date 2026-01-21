@@ -305,8 +305,7 @@ local function StartFishingV1()
     end)
     table.insert(FishingThreads, sellThread)
     
-    -- Loop 4: Mutation Favorite Manager (UPDATED FOR LEVIATHAN'S RAGE)
-    -- Loop 4: Mutation Favorite Manager (UPDATED FOR ALL RUBIES + LEVIATHAN'S RAGE)
+    -- Loop 4: Aggressive Favorite Manager (PROTECTS ALL RUBIES INSTANTLY)
     local mutationThread = task.spawn(function()
         while FishingConfig.Enabled do
             local inv = PlayerData:GetExpect("Inventory")
@@ -317,30 +316,24 @@ local function StartFishingV1()
                             local mutation = GetMutation(item)
                             local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
                             
-                            -- Check for Leviathan's Rage mutation (priority)
+                            -- 1. Protect Leviathan's Rage Items
                             if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
                                 if not isLocked then
-                                    pcall(function() 
-                                        RE_FavoriteItem:FireServer(item.UUID) 
-                                        print("[Leviathan's Rage] Favorited item:", item.Identifier or "Unknown")
-                                    end)
-                                    task.wait(0.2)
+                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
                                 end
-                            -- FAVORITE ALL RUBIES (both Gemstone AND regular)
+                            
+                            -- 2. Protect ALL Rubies immediately 
                             elseif item.Identifier == "Ruby" then
                                 if not isLocked then 
-                                    pcall(function() 
-                                        RE_FavoriteItem:FireServer(item.UUID) 
-                                        print("[Ruby] Favorited Ruby (mutation: " .. mutation .. ")")
-                                    end)
-                                    task.wait(0.2)
+                                    pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
                                 end
                             end
                         end
                     end
                 end
             end
-            task.wait(2.5)
+            -- Faster scan rate to beat the Auto-Sell timer
+            task.wait(0.5) 
         end
     end)
     table.insert(FishingThreads, mutationThread)
