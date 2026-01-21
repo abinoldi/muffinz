@@ -1,5 +1,3 @@
-[file name]: dipsinext.txt
-[file content begin]
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
 -- VERSION: v1.3.1 (Fix Stats Display)
@@ -483,4 +481,3 @@ task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
 print("🚀 EnochHub Full Auto (v1.3.1) Started!")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
-[file content end]
