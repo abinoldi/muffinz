@@ -1,0 +1,75 @@
+-- [[ CONFIGURATION & DEPENDENCIES ]] --
+local RepStorage = game:GetService("ReplicatedStorage")
+local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"} -- Jalur remote standar
+
+-- Helper untuk mendapatkan Remote
+local function GetRemote(remotePath, name, timeout)
+    local currentInstance = RepStorage
+    for _, childName in ipairs(remotePath) do
+        currentInstance = currentInstance:WaitForChild(childName, timeout or 0.5)
+        if not currentInstance then return nil end
+    end
+    return currentInstance:FindFirstChild(name)
+end
+
+-- Helper untuk mendapatkan Data Pemain
+local function GetPlayerDataReplion()
+    local ReplionModule = RepStorage:WaitForChild("Packages"):WaitForChild("Replion", 10)
+    if not ReplionModule then return nil end
+    return require(ReplionModule).Client:WaitReplion("Data", 5) -- Mengambil data inventory
+end
+
+-- Daftar Prioritas Bait (Berdasarkan harga/kekuatan di dalam game)
+local BAIT_PRIORITY = {
+    [1]  = 0,       -- Starter Bait
+    [10] = 100,     -- Topwater Bait
+    [2]  = 1000,    -- Luck Bait
+    [3]  = 3000,    -- Midnight Bait
+    [17] = 83500,   -- Nature Bait
+    [6]  = 290000,  -- Chroma Bait
+    [4]  = 425000,  -- Royal Bait
+    [8]  = 630000,  -- Dark Matter Bait
+    [15] = 1148484, -- Corrupt Bait
+    [16] = 3700000, -- Aether Bait
+    [20] = 4000000, -- Floral Bait
+    [18] = 8200000  -- Singularity Bait
+}
+
+-- [[ MAIN LOOP - RUNS IMMEDIATELY ]] --
+task.spawn(function()
+    local RE_EquipBait = GetRemote(RPath, "RE/EquipBait") -- Remote untuk memakai bait
+    
+    while true do
+        local replion = GetPlayerDataReplion()
+        if replion then
+            local success, inventoryData = pcall(function() return replion:GetExpect("Inventory") end)
+            
+            if success and inventoryData then
+                local bestBaitId = nil
+                local highestValue = -1
+                
+                -- Mencari bait dengan prioritas tertinggi di inventory
+                local baits = inventoryData["Bait"] or inventoryData["Baits"] or {}
+                for _, bait in ipairs(baits) do
+                    local id = tonumber(bait.Id)
+                    local value = BAIT_PRIORITY[id] or 0
+                    
+                    if value > highestValue then
+                        highestValue = value
+                        bestBaitId = id
+                    end
+                end
+                
+                -- Eksekusi pemakaian bait jika ditemukan
+                if bestBaitId and RE_EquipBait then
+                    pcall(function() 
+                        RE_EquipBait:FireServer(bestBaitId) 
+                    end)
+                end
+            end
+        end
+        
+        -- Cek setiap 5 detik agar tidak membebani server
+        task.wait(0.5)
+    end
+end)
