@@ -390,7 +390,7 @@ local oldStop = FishingController.FishingStopped
 FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
 task.spawn(function()
-    while task.wait(3) do
+    while task.wait(0.5) do
         if AutoActive then
             pcall(function()
                 RF_SellAllItems:InvokeServer()
