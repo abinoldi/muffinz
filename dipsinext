@@ -265,23 +265,12 @@ local function UpdateGameMode()
             return
         end
     else
-        else
         if dsMode == "Done" then
-            -- TAMBAHAN: Cek jika belum punya Astral Rod, paksa mode DeepSea agar AutoBuy jalan
-            if not STATE.HasAstralRod then
-                STATE.Mode = "DeepSea"
-                STATE.TargetInfo = "Farming for Astral Rod..."
-                STATE.NextLocation = "Esoteric Island" -- Lokasi farming
-                return
-            end
-
-            -- Jika sudah punya Astral Rod tapi belum punya Ghostfin, baru Waiting
             STATE.Mode = "Waiting"
             STATE.TargetInfo = "Need Ghostfin Rod!"
             STATE.NextLocation = "Esoteric Island"
             return
         end
-    end
     end
 
     -- 3. ELEMENT QUEST
