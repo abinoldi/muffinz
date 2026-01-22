@@ -24,12 +24,13 @@ local lp = Players.LocalPlayer
 local STATE = {
     HasAstralRod = false, CurrentRod = "Checking...", TotalCoins = 0,
     -- QUEST MODES
-    Mode = "Starting...", -- "DeepSea", "Lever", "Element", "Finished"
+    Mode = "Starting...", -- "FarmNextRod", "DeepSea", "Lever", "Element", "Finished"
     -- STATUS
     FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
     Status = "Starting...", Teleporting = false,
     CurrentArea = "None", TargetInfo = "None",
-    CurrentBait = "None" -- Added for bait tracking
+    CurrentBait = "None", -- Added for bait tracking
+    NextRodInfo = nil -- Info rod berikutnya yang akan dibeli
 }
 
 -- ===============================
@@ -243,7 +244,62 @@ local function UpdateGameMode()
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     local hasGhostfin = table.find(ownedRods, 169) ~= nil
 
-    -- 1. DEEP SEA QUEST
+    -- ========== PRIORITAS 1: FARM UNTUK ROD BERIKUTNYA ==========
+    if not STATE.HasAstralRod then
+        -- Cari rod termahal yang bisa dibeli
+        local nextRodToBuy = nil
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) then
+                nextRodToBuy = rod
+                break  -- Ambil yang termurah yang belum dimiliki
+            end
+        end
+        
+        if nextRodToBuy then
+            STATE.Mode = "FarmNextRod"
+            
+            -- Hitung progres menuju rod berikutnya
+            local progressText
+            if STATE.TotalCoins >= nextRodToBuy.Price then
+                progressText = string.format("READY to buy %s", nextRodToBuy.Name)
+            else
+                local percent = math.floor((STATE.TotalCoins / nextRodToBuy.Price) * 100)
+                progressText = string.format("%s: $%s/$%s (%d%%)", 
+                    nextRodToBuy.Name, 
+                    FormatNumber(STATE.TotalCoins), 
+                    FormatNumber(nextRodToBuy.Price), 
+                    math.min(percent, 100))
+            end
+            
+            -- Tentukan area farm berdasarkan rod yang sedang digunakan
+            local bestArea = "Treasure Room"
+            local currentBestRodValue = 0
+            
+            -- Cari rod terbaik yang sudah dimiliki
+            for _, ownedId in ipairs(ownedRods) do
+                for _, shopRod in ipairs(ShopRods) do
+                    if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
+                        currentBestRodValue = shopRod.Price
+                        -- Update area berdasarkan rod
+                        if shopRod.Price >= 50000 then  -- Midnight Rod ke atas
+                            bestArea = "Sisyphus Statue"
+                        elseif shopRod.Price >= 15000 then  -- Lucky Rod ke atas
+                            bestArea = "Treasure Room"
+                        else
+                            bestArea = "Enchant Room"
+                        end
+                    end
+                end
+            end
+            
+            STATE.TargetInfo = progressText
+            STATE.NextLocation = bestArea
+            STATE.NextRodInfo = nextRodToBuy  -- Simpan info rod berikutnya
+            return
+        end
+    end
+
+    -- ========== PRIORITAS 2: DEEP SEA QUEST (SETELAH PUNYA ASTRAL ROD) ==========
     local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
     if dsMode == "DeepSea" then
         STATE.Mode = "DeepSea"
@@ -252,7 +308,7 @@ local function UpdateGameMode()
         return
     end
 
-    -- 2. AUTO LEVER (Requires Ghostfin)
+    -- ========== PRIORITAS 3: LEVER LOGIC ==========
     if hasGhostfin then
         local allLeversDone = true
         for _, art in ipairs(ArtifactOrder) do
@@ -273,7 +329,7 @@ local function UpdateGameMode()
         end
     end
 
-    -- 3. ELEMENT QUEST
+    -- ========== PRIORITAS 4: ELEMENT QUEST ==========
     local elMode, elLoc, elProg = CheckElementQuest(data)
     if elMode == "Element" then
         STATE.Mode = "Element"
@@ -282,7 +338,7 @@ local function UpdateGameMode()
         return
     end
     
-    -- 4. ALL DONE
+    -- ========== PRIORITAS 5: SELESAI ==========
     STATE.Mode = "Finished"
     STATE.TargetInfo = "All Quests Done"
     STATE.NextLocation = "Esoteric Island"
@@ -359,14 +415,35 @@ local function ExecuteLeverLogic()
 end
 
 local function AutoBuy()
-    if STATE.Mode == "DeepSea" then
-        local inv = PlayerDataReplion:GetExpect("Inventory")
-        local owned = GetOwnedRods(inv)
-        if not STATE.HasAstralRod then
-            for _, r in ipairs(ShopRods) do
-                if not table.find(owned, r.ID) and STATE.TotalCoins >= r.Price then
-                    RF_PurchaseFishingRod:InvokeServer(r.ID); task.wait(0.5)
+    if not PlayerDataReplion then return end
+    
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local ownedRods = GetOwnedRods(inv)
+    
+    -- Mode farm untuk rod berikutnya
+    if STATE.Mode == "FarmNextRod" then
+        -- Cari rod termurah yang belum dimiliki
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) then
+                -- Jika koin cukup, beli rod ini
+                if STATE.TotalCoins >= rod.Price then
+                    RF_PurchaseFishingRod:InvokeServer(rod.ID)
+                    task.wait(1)
+                    print("✅ Purchased " .. rod.Name)
+                    
+                    -- Update status langsung
+                    STATE.HasAstralRod = (rod.ID == 5)
                 end
+                break  -- Hanya beli satu per cek
+            end
+        end
+        
+    -- Mode Deep Sea (backup - beli jika ada yang missing)
+    elseif STATE.Mode == "DeepSea" then
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) and STATE.TotalCoins >= rod.Price then
+                RF_PurchaseFishingRod:InvokeServer(rod.ID)
+                task.wait(0.5)
                 break
             end
         end
@@ -395,12 +472,19 @@ task.spawn(function()
             pcall(function()
                 RF_SellAllItems:InvokeServer()
 
-                UpdateGameMode()      -- 🧠 QUEST BRAIN (DO NOT TOUCH)
+                UpdateGameMode()      -- 🧠 QUEST BRAIN
                 AutoBuyBestBait()     -- ✅ GLOBAL
                 EquipBestBait()       -- ✅ GLOBAL
+                AutoBuy()             -- ✅ BELI ROD JIKA PERLU
 
-                if STATE.Mode == "DeepSea" then
-                    AutoBuy()
+                if STATE.Mode == "FarmNextRod" then
+                    -- Farm dengan rod terbaik yang sudah dimiliki
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    end
+
+                elseif STATE.Mode == "DeepSea" then
                     EquipRod("Best")
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
