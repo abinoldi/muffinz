@@ -1,0 +1,144 @@
+-- ======================================================
+-- STANDALONE MONITORING WEBHOOK SCRIPT
+-- Mengirim data inventory setiap 15 detik
+-- ======================================================
+
+-- ===============================
+-- 1. INITIALIZATION
+-- ===============================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local lp = Players.LocalPlayer
+
+-- ===============================
+-- 2. LOAD REQUIRED MODULES
+-- ===============================
+local Replion = require(ReplicatedStorage.Packages.Replion).Client
+local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+local PlayerData = Replion:WaitReplion("Data", 10)
+
+-- ===============================
+-- 3. HELPER FUNCTIONS
+-- ===============================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+            end
+        end)
+    end
+
+    if itemData and itemData.Data and itemData.Data.Name then 
+        name = itemData.Data.Name 
+    end
+    
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        pcall(function() 
+            rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name 
+        end) 
+    end
+    
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then 
+        return item.Metadata.VariantId 
+    end
+    if item.Metadata.Shiny == true then return "Shiny" end
+    return "None"
+end
+
+-- ===============================
+-- 4. WEBHOOK FUNCTION
+-- ===============================
+local WEBHOOK_BASE = "http://43.134.116.2:5000/webhook/fishit"
+
+local function SendWebhookData()
+    local function SendHook(pName, data)
+        local json = HttpService:JSONEncode(data)
+        local url = WEBHOOK_BASE .. "?player=" .. HttpService:UrlEncode(pName) .. "&data=" .. HttpService:UrlEncode(json)
+        pcall(function() 
+            game:HttpGet(url)
+            print("[Webhook] Data sent successfully")
+        end)
+    end
+
+    local dataR = Replion:WaitReplion("Data")
+    local inv = dataR:GetExpect("Inventory")
+    local summary = {}
+    
+    if inv then
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+                
+                -- Filter untuk item-item penting
+                local isImportant = false
+                
+                -- 1. Rarity SECRET
+                if string.upper(tostring(rarity)) == "SECRET" then
+                    isImportant = true
+                end
+                
+                -- 2. Mutation Leviathan's Rage
+                if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
+                    isImportant = true
+                end
+                
+                -- 3. Ruby Gemstone
+                if name == "Ruby" and mutation == "Gemstone" then
+                    isImportant = true
+                end
+                
+                -- Tambahkan ke summary jika penting
+                if isImportant then
+                    local displayName = name
+                    if mutation ~= "None" then 
+                        displayName = "[" .. mutation .. "] " .. name 
+                    end
+                    summary[displayName] = (summary[displayName] or 0) + 1
+                end
+            end
+        end
+    end
+    
+    -- Kirim data ke webhook
+    SendHook(lp.Name, summary)
+    
+    -- Print log ke console
+    if next(summary) then
+        print("[Webhook] Items sent:", summary)
+    else
+        print("[Webhook] No important items found")
+    end
+end
+
+-- ===============================
+-- 5. MAIN LOOP
+-- ===============================
+print("[Monitoring Webhook] Script started!")
+print("[Monitoring Webhook] Sending data every 15 seconds...")
+
+-- Jalankan sekali di awal
+SendWebhookData()
+
+-- Loop setiap 15 detik
+while true do
+    task.wait(15)
+    SendWebhookData()
+end
