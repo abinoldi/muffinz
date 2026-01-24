@@ -1,0 +1,85 @@
+-- Konfigurasi
+local TargetName = "Aidditod969" 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+
+-- Hapus UI lama jika ada (agar tidak tumpang tindih saat execute ulang)
+if CoreGui:FindFirstChild("DistanceTrackerGui") then
+    CoreGui.DistanceTrackerGui:Destroy()
+end
+
+-- Membuat UI Sederhana & Clean
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local DistanceLabel = Instance.new("TextLabel")
+local UIStroke = Instance.new("UIStroke")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "DistanceTrackerGui"
+ScreenGui.Parent = CoreGui
+ScreenGui.DisplayOrder = 999
+
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BackgroundTransparency = 0.2
+MainFrame.Position = UDim2.new(0.5, -90, 0, 50) -- Posisi atas tengah
+MainFrame.Size = UDim2.new(0, 180, 0, 35)
+
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+UIStroke.Thickness = 1.5
+UIStroke.Color = Color3.fromRGB(255, 255, 255)
+UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+UIStroke.Parent = MainFrame
+
+DistanceLabel.Name = "DistanceLabel"
+DistanceLabel.Parent = MainFrame
+DistanceLabel.BackgroundTransparency = 1
+DistanceLabel.Size = UDim2.new(1, 0, 1, 0)
+DistanceLabel.Font = Enum.Font.GothamBold
+DistanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistanceLabel.TextSize = 14
+DistanceLabel.Text = "Menunggu..."
+
+-- Fungsi Utama
+RunService.RenderStepped:Connect(function()
+    local targetPlayer = nil
+    
+    -- Mencari player (Insensitive Case)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Name:lower() == TargetName:lower() then
+            targetPlayer = p
+            break
+        end
+    end
+    
+    if not targetPlayer then
+        DistanceLabel.Text = "🔴 Offline: " .. TargetName
+        DistanceLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+        UIStroke.Color = Color3.fromRGB(255, 80, 80)
+    else
+        local char = targetPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        
+        if root and myRoot then
+            -- Hitung Jarak (1 meter = 3.5 studs)
+            local magnitude = (myRoot.Position - root.Position).Magnitude
+            local meters = magnitude / 3.5
+            
+            DistanceLabel.Text = string.format("📍 %s: %.1f m", targetPlayer.Name, meters)
+            DistanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            UIStroke.Color = Color3.fromRGB(80, 255, 80)
+        else
+            -- Jika player ada di server tapi karakter belum spawn/terlalu jauh (StreamingEnabled)
+            DistanceLabel.Text = "🟠 Mencari Posisi..."
+            DistanceLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+            UIStroke.Color = Color3.fromRGB(255, 200, 80)
+        end
+    end
+end)
