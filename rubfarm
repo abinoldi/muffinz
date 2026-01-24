@@ -152,6 +152,10 @@ local GlobalSecretUUIDs = {}
 local CurrentDistanceMeters = 999
 local FishingThreads = {}
 local TradingThread = nil
+local TotemThread = nil
+
+local TOTEM_ID = 2 -- Mutation Totem ID
+local TOTEM_NAME = "Mutation Totem"
 
 local function GetFishRarity(item)
     local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
@@ -167,34 +171,117 @@ local function GetFishRarity(item)
     return tostring(rarity):upper()
 end
 
--- AUTO TOTEM
-task.spawn(function()
-    while true do
-        if AutoTotemEnabled then
-            local activeTotems = workspace:FindFirstChild("ActiveTotems")
-            local hasActive = false
-            if activeTotems then
-                for _, v in pairs(activeTotems:GetChildren()) do
-                    if v:IsA("Model") and v:FindFirstChild("Owner") and v.Owner.Value == lp.Name then
-                        hasActive = true; break
-                    end
-                end
+-- ===============================
+-- 5. SIMPLE AUTO TOTEM SYSTEM (PLACE WHERE CHARACTER STANDS)
+-- ===============================
+local function GetTotemUUID()
+    local success, inventoryData = pcall(function() 
+        local inv = PlayerData:GetExpect("Inventory")
+        return inv and inv.Totems
+    end)
+    
+    if success and inventoryData then 
+        for _, item in ipairs(inventoryData) do 
+            -- Check for Mutation Totem ID and Quantity
+            if tonumber(item.Id) == TOTEM_ID and (item.Count or 1) >= 1 then 
+                return item.UUID 
+            end 
+        end 
+    end
+    return nil
+end
+
+local function SpawnMutationTotem()
+    -- 1. Get Character & RootPart
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if not hrp then 
+        warn("Character/HRP not found.") 
+        return false
+    end
+
+    -- 2. Find Totem UUID
+    local uuid = GetTotemUUID()
+    if not uuid then
+        print("SKIPPING: You do not have a " .. TOTEM_NAME .. " in your inventory!")
+        return false
+    end
+
+    -- 3. Save current position
+    local currentCFrame = hrp.CFrame
+    
+    -- 4. Place totem at current location
+    local success = false
+    pcall(function() 
+        local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
+        if RE_SpawnTotem then
+            RE_SpawnTotem:FireServer(uuid)
+            success = true
+            print("Totem placed successfully at current location.")
+        end
+    end)
+    
+    -- 5. Stay in same position
+    hrp.CFrame = currentCFrame
+    
+    return success
+end
+
+local function StopAutoTotem()
+    if TotemThread then
+        task.cancel(TotemThread)
+        TotemThread = nil
+    end
+    TotemLabel.Text = "Auto Totem: Stopped"
+end
+
+local function StartAutoTotemLoop()
+    StopAutoTotem() -- Stop existing thread
+    
+    TotemThread = task.spawn(function()
+        -- FIRST: Place totem immediately
+        print("[Totem] Placing first totem immediately at current location...")
+        task.wait(2) -- Wait 2 seconds for everything to load
+        
+        local firstSuccess = SpawnMutationTotem()
+        
+        if firstSuccess then
+            print("[Totem] First totem placed successfully. Starting 63-minute timer.")
+        else
+            print("[Totem] Failed to place first totem. Will retry in 5 minutes.")
+            task.wait(300) -- Wait 5 minutes before retry
+        end
+        
+        -- THEN: Start the 63-minute loop (3780 seconds)
+        while AutoTotemEnabled do
+            local waitTime = 3780 -- 63 minutes in seconds
+            
+            for i = waitTime, 1, -1 do
+                if not AutoTotemEnabled then break end
+                task.wait(1)
             end
-            if not hasActive then
-                local inv = PlayerData:GetExpect("Inventory")
-                if inv and inv.Totems then
-                    for _, totem in ipairs(inv.Totems) do
-                        pcall(function() GetRemote("RF/PlaceTotem"):InvokeServer(totem.UUID) end)
-                        break
-                    end
-                end
+            
+            if not AutoTotemEnabled then break end
+            
+            print("[Totem] Attempting to place Mutation Totem at current location...")
+            local success = SpawnMutationTotem()
+            
+            if success then
+                print("[Totem] Successfully placed Mutation Totem. Next placement in 63 minutes.")
+            else
+                print("[Totem] Failed to place Mutation Totem. Retrying in 5 minutes.")
+                task.wait(300) -- Wait 5 minutes before retry
             end
         end
-        task.wait(5)
-    end
-end)
+        
+        TotemThread = nil
+    end)
+end
 
--- FISHING LOOP
+-- ===============================
+-- 6. FISHING LOOP
+-- ===============================
 local function RunInstantFish()
     local ts = os.time() + os.clock()
     pcall(function() GetRemote("RF/ChargeFishingRod"):InvokeServer(ts) end)
@@ -212,7 +299,9 @@ local function StartFishingV1()
     table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) task.wait(0.5) end end))
 end
 
--- TRADE LOGIC < 5M
+-- ===============================
+-- 7. TRADE LOGIC < 5M
+-- ===============================
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
@@ -227,7 +316,9 @@ local function RunAutoTrade()
     end)
 end
 
--- SYNC DATA
+-- ===============================
+-- 8. SYNC DATA
+-- ===============================
 task.spawn(function()
     while true do
         local uuids = {}
@@ -265,11 +356,23 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- WEB SYNC
+-- ===============================
+-- 9. WEB SYNC
+-- ===============================
 local function UpdateFromWeb(new)
-    AutoTotemEnabled = new.AutoTotem or false
-    TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
+    -- Auto Totem Control
+    if new.AutoTotem ~= nil then
+        AutoTotemEnabled = new.AutoTotem
+        TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
+        
+        if AutoTotemEnabled then
+            StartAutoTotemLoop()
+        else
+            StopAutoTotem()
+        end
+    end
     
+    -- Fishing Config
     if new.FishingConfig then
         FishingConfig = new.FishingConfig
         LocationLabel.Text = "Location: " .. FishingConfig.Area
@@ -281,21 +384,35 @@ local function UpdateFromWeb(new)
             if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
         end
 
-        if FishingConfig.Enabled then StartFishingV1() else 
+        if FishingConfig.Enabled then 
+            StartFishingV1() 
+        else 
             for _, t in ipairs(FishingThreads) do task.cancel(t) end
-            FishingThreads = {}; pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
+            FishingThreads = {} 
+            pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
         end
     end
     
+    -- Trading Config
     if new.TradingConfig then
         TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
         TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
         TradingConfig.Delay = new.TradingConfig.Delay or 6.0
         TradeLabel.Text = "Auto Trade: " .. tostring(TradingConfig.AutoTrade)
+        
         if TradingConfig.TargetUsername ~= "" then
-            pcall(function() TradingConfig.TargetId = Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
+            task.spawn(function()
+                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
+                if s then TradingConfig.TargetId = id end
+            end)
         end
-        if TradingConfig.AutoTrade and not TradingThread then RunAutoTrade() end
+        
+        if TradingConfig.AutoTrade and not TradingThread then 
+            RunAutoTrade() 
+        elseif not TradingConfig.AutoTrade and TradingThread then
+            if TradingThread then task.cancel(TradingThread) end
+            TradingThread = nil
+        end
     end
 end
 
@@ -311,5 +428,17 @@ task.spawn(function()
     end
 end)
 
-print("[System] Complete Integrated Version Running.")
+-- ===============================
+-- 10. AUTO START
+-- ===============================
+task.delay(2, function()
+    print("[System] Complete Integrated Version Running.")
+    
+    -- Check if we should start totem immediately
+    if AutoTotemEnabled then
+        StartAutoTotemLoop()
+    end
+end)
+
+print("[System] Initialized.")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
