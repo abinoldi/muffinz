@@ -1,7 +1,6 @@
-
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: ALL-IN-ONE FULL VERSION
--- [FISHING + TELEPORT + TRADE LOCK + BLACK UI + SYNC]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: COMPLETE AREA EDITION
+-- [FISHING + ALL AREAS + AUTO TOTEM + TRADE LOCK < 5M]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json" --
@@ -88,11 +87,11 @@ local function CreateLabel(name, color)
 end
 
 local SecretLabel = CreateLabel("SecretLabel", Color3.fromRGB(255, 215, 0))
-local LocationLabel = CreateLabel("LocationLabel", Color3.fromRGB(0, 180, 255))
-local TradeLabel = CreateLabel("TradeLabel")
-local TotemLabel = CreateLabel("TotemLabel")
-local FishLabel = CreateLabel("FishLabel")
 local DistanceLabel = CreateLabel("DistanceLabel", Color3.fromRGB(80, 255, 80))
+local LocationLabel = CreateLabel("LocationLabel", Color3.fromRGB(0, 180, 255))
+local TotemLabel = CreateLabel("TotemLabel")
+local TradeLabel = CreateLabel("TradeLabel")
+local FishLabel = CreateLabel("FishLabel")
 
 local ToggleBtn = Instance.new("TextButton", ScreenGui)
 ToggleBtn.Size = UDim2.fromOffset(40, 40)
@@ -107,7 +106,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ===============================
--- 3. DATA & AREA COORDINATES
+-- 3. COMPLETE AREA DATA
 -- ===============================
 local Replion = require(ReplicatedStorage.Packages.Replion).Client
 local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
@@ -119,56 +118,46 @@ local AreaData = {
     ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.5, 160.322), Look = Vector3.new(0.984, 0, 0.176)},
     ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.94, 0, 0.342)},
     ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)},
-    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, 0, 1.0)},
     ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0, 0.229)},
     ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.33, 5032.878), Look = Vector3.new(-0.789, 0, 0.615)},
-    ["Cresent Lever"] = {Pos = Vector3.new(1419.75, 31.199, 78.57), Look = Vector3.new(0, 0, -1.0)},
     ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.9, 4370.979), Look = Vector3.new(0.109, 0, 0.994)},
     ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, 0, -0.949)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.93, 8.449, -284.11), Look = Vector3.new(0, 0, -1.0)},
     ["Enchant Room"] = {Pos = Vector3.new(3255.67, -1301.53, 1371.79), Look = Vector3.new(0, 0, -1.0)},
     ["Esoteric Island"] = {Pos = Vector3.new(2164.47, 3.22, 1242.39), Look = Vector3.new(0, 0, -1.0)},
     ["Fisherman Island"] = {Pos = Vector3.new(74.03, 9.53, 2705.23), Look = Vector3.new(0, 0, -1.0)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.61, 8.45, -861.01), Look = Vector3.new(0, 0, -1.0)},
     ["Kohana"] = {Pos = Vector3.new(-668.732, 3.0, 681.58), Look = Vector3.new(0.889, 0, 0.458)},
     ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, 0, 0.433)},
     ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.99, 0, 0.143)},
-    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0, -0.955)},
     ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.31, 0, 0.951)},
     ["Treasure Room"] = {Pos = Vector3.new(-3598.44, -281.274, -1645.855), Look = Vector3.new(-0.065, 0, -0.998)},
     ["Tropical Island"] = {Pos = Vector3.new(-2162.92, 2.825, 3638.445), Look = Vector3.new(0.381, 0, 0.925)},
-    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.8), Look = Vector3.new(0.854, 0, 0.521)},
     ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.01), Look = Vector3.new(0.854, 0, 0.52)},
     ["Weather Machine"] = {Pos = Vector3.new(-1518.55, 2.875, 1916.148), Look = Vector3.new(0.042, 0, 0.999)},
 }
 
 local function GetRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = ReplicatedStorage
-    for _, child in ipairs(path) do current = current:WaitForChild(child, 2) end
-    return current:FindFirstChild(name)
+    local p = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local c = ReplicatedStorage
+    for _, v in ipairs(p) do c = c:WaitForChild(v, 2) end
+    return c:FindFirstChild(name)
 end
 
 -- ===============================
--- 4. FISHING & TRADE STATE
+-- 4. LOGIC & STATE
 -- ===============================
-local FishingConfig = { Enabled = false, Area = "", AutoSell = false, AutoSellDelay = 5 }
+local FishingConfig = { Enabled = false, Area = "" }
 local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
-local FishingThreads = {}
+local AutoTotemEnabled = false
 local GlobalSecretUUIDs = {}
 local CurrentDistanceMeters = 999
+local FishingThreads = {}
 local TradingThread = nil
 
-local function GetFishRarity(item) -- Logika deteksi rarity akurat
+local function GetFishRarity(item)
     local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-    local itemID = item.Id
-    if ItemUtility and itemID then
+    if ItemUtility and item.Id then
         pcall(function()
-            local data = ItemUtility:GetItemData(itemID)
-            if not data then
-                local numID = tonumber(item.Id) or tonumber(item.Identifier)
-                if numID then data = ItemUtility:GetItemData(numID) end
-            end
+            local data = ItemUtility:GetItemData(item.Id)
             if data and data.Probability and TierUtility then
                 local tier = TierUtility:GetTierFromRarity(data.Probability.Chance)
                 if tier and tier.Name then rarity = tier.Name end
@@ -178,11 +167,67 @@ local function GetFishRarity(item) -- Logika deteksi rarity akurat
     return tostring(rarity):upper()
 end
 
--- ===============================
--- 5. AUTO SYNC & LOGIC LOOPS
--- ===============================
+-- AUTO TOTEM
+task.spawn(function()
+    while true do
+        if AutoTotemEnabled then
+            local activeTotems = workspace:FindFirstChild("ActiveTotems")
+            local hasActive = false
+            if activeTotems then
+                for _, v in pairs(activeTotems:GetChildren()) do
+                    if v:IsA("Model") and v:FindFirstChild("Owner") and v.Owner.Value == lp.Name then
+                        hasActive = true; break
+                    end
+                end
+            end
+            if not hasActive then
+                local inv = PlayerData:GetExpect("Inventory")
+                if inv and inv.Totems then
+                    for _, totem in ipairs(inv.Totems) do
+                        pcall(function() GetRemote("RF/PlaceTotem"):InvokeServer(totem.UUID) end)
+                        break
+                    end
+                end
+            end
+        end
+        task.wait(5)
+    end
+end)
 
--- Sync Secret (15s)
+-- FISHING LOOP
+local function RunInstantFish()
+    local ts = os.time() + os.clock()
+    pcall(function() GetRemote("RF/ChargeFishingRod"):InvokeServer(ts) end)
+    pcall(function() GetRemote("RF/RequestFishingMinigameStarted"):InvokeServer(-139.630452165, 0.99647927980797) end)
+    task.wait(1.5)
+    pcall(function() GetRemote("RE/FishingCompleted"):FireServer() end)
+    task.wait(0.3)
+    pcall(function() GetRemote("RF/CancelFishingInputs"):InvokeServer() end)
+end
+
+local function StartFishingV1()
+    if #FishingThreads > 0 then return end
+    pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(true) end)
+    table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do RunInstantFish() task.wait(0.1) end end))
+    table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) task.wait(0.5) end end))
+end
+
+-- TRADE LOGIC < 5M
+local function RunAutoTrade()
+    if TradingThread then task.cancel(TradingThread) end
+    TradingThread = task.spawn(function()
+        local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
+        while TradingConfig.AutoTrade do
+            if CurrentDistanceMeters < 5.0 and #GlobalSecretUUIDs > 0 and TradingConfig.TargetId then
+                pcall(function() RF_InitiateTrade:InvokeServer(TradingConfig.TargetId, GlobalSecretUUIDs[1]) end)
+            end
+            task.wait(TradingConfig.Delay)
+        end
+        TradingThread = nil
+    end)
+end
+
+-- SYNC DATA
 task.spawn(function()
     while true do
         local uuids = {}
@@ -204,7 +249,6 @@ task.spawn(function()
     end
 end)
 
--- Range Tracker
 RunService.RenderStepped:Connect(function()
     local target = Players:FindFirstChild(TradingConfig.TargetUsername)
     if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
@@ -213,7 +257,7 @@ RunService.RenderStepped:Connect(function()
             local mag = (myRoot.Position - target.Character.HumanoidRootPart.Position).Magnitude
             CurrentDistanceMeters = mag / 3.5
             DistanceLabel.Text = string.format("📍 %s: %.1f m", target.Name, CurrentDistanceMeters)
-            DistanceLabel.TextColor3 = (CurrentDistanceMeters < 5.0) and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 80, 80)
+            DistanceLabel.TextColor3 = (CurrentDistanceMeters < 5.0) and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 200, 80)
         end
     else
         DistanceLabel.Text = "📍 " .. TradingConfig.TargetUsername .. ": Offline/Loading"
@@ -221,100 +265,51 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fishing Logic
-local function RunInstantFish()
-    local ts = os.time() + os.clock()
-    pcall(function() GetRemote("RF/ChargeFishingRod"):InvokeServer(ts) end)
-    pcall(function() GetRemote("RF/RequestFishingMinigameStarted"):InvokeServer(-139.630452165, 0.99647927980797) end)
-    task.wait(1.5)
-    pcall(function() GetRemote("RE/FishingCompleted"):FireServer() end)
-    task.wait(0.3)
-    pcall(function() GetRemote("RF/CancelFishingInputs"):InvokeServer() end)
-end
-
-local function StartFishingV1()
-    if #FishingThreads > 0 then return end
-    pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(true) end)
-
-    table.insert(FishingThreads, task.spawn(function()
-        while FishingConfig.Enabled do RunInstantFish() task.wait(0.1) end
-    end))
-
-    table.insert(FishingThreads, task.spawn(function()
-        while FishingConfig.Enabled do
-            pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end)
-            task.wait(0.5)
-        end
-    end))
-end
-
--- Trade Logic
-local function RunAutoTrade()
-    if TradingThread then task.cancel(TradingThread) end
-    TradingThread = task.spawn(function()
-        local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
-        while TradingConfig.AutoTrade do
-            if CurrentDistanceMeters < 5.0 and #GlobalSecretUUIDs > 0 and TradingConfig.TargetId then
-                pcall(function() RF_InitiateTrade:InvokeServer(TradingConfig.TargetId, GlobalSecretUUIDs[1]) end)
-            end
-            task.wait(TradingConfig.Delay)
-        end
-        TradingThread = nil
-    end)
-end
-
--- ===============================
--- 6. WEB UPDATER
--- ===============================
-local LastConfigRaw = ""
+-- WEB SYNC
 local function UpdateFromWeb(new)
-    LocationLabel.Text = "Location: " .. (new.FishingConfig and new.FishingConfig.Area or "None")
-    TradeLabel.Text = "Auto Trade: " .. (new.TradingConfig and tostring(new.TradingConfig.AutoTrade) or "False")
-    TotemLabel.Text = "Auto Totem: " .. tostring(new.AutoTotem or false)
-    FishLabel.Text = "Auto Fishing: " .. (new.FishingConfig and tostring(new.FishingConfig.Enabled) or "False")
-
+    AutoTotemEnabled = new.AutoTotem or false
+    TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
+    
     if new.FishingConfig then
-        local f = new.FishingConfig
-        FishingConfig.Enabled = f.Enabled
-        if f.Area and f.Area ~= FishingConfig.Area then
-            FishingConfig.Area = f.Area
-            local data = AreaData[f.Area]
-            if data then
-                local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-                if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
-            end
+        FishingConfig = new.FishingConfig
+        LocationLabel.Text = "Location: " .. FishingConfig.Area
+        FishLabel.Text = "Auto Fishing: " .. tostring(FishingConfig.Enabled)
+        
+        if FishingConfig.Area and AreaData[FishingConfig.Area] then
+            local data = AreaData[FishingConfig.Area]
+            local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
         end
+
         if FishingConfig.Enabled then StartFishingV1() else 
             for _, t in ipairs(FishingThreads) do task.cancel(t) end
-            FishingThreads = {}
-            pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
+            FishingThreads = {}; pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
         end
     end
-
+    
     if new.TradingConfig then
         TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
         TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
         TradingConfig.Delay = new.TradingConfig.Delay or 6.0
+        TradeLabel.Text = "Auto Trade: " .. tostring(TradingConfig.AutoTrade)
         if TradingConfig.TargetUsername ~= "" then
-            task.spawn(function()
-                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
-                if s then TradingConfig.TargetId = id end
-            end)
+            pcall(function() TradingConfig.TargetId = Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
         end
         if TradingConfig.AutoTrade and not TradingThread then RunAutoTrade() end
     end
 end
 
 task.spawn(function()
+    local lastRaw = ""
     while true do
         local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
-        if success and res ~= LastConfigRaw then
+        if success and res ~= lastRaw then
             local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
-            if ds then LastConfigRaw = res; UpdateFromWeb(data) end
+            if ds then lastRaw = res; UpdateFromWeb(data) end
         end
         task.wait(10)
     end
 end)
 
-print("[System] All-In-One Script Active.")
+print("[System] Complete Integrated Version Running.")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
