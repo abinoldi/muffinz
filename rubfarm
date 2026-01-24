@@ -146,8 +146,97 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. LOGIC & STATE
+-- 4. FIXED SECRET DETECTION (FROM EXAMPLE SCRIPT)
 -- ===============================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then 
+                    itemData = ItemUtility:GetItemData(numericID) 
+                end
+            end
+        end)
+    end
+
+    if itemData and itemData.Data and itemData.Data.Name then 
+        name = itemData.Data.Name 
+    end
+    
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        local tier
+        pcall(function() 
+            tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) 
+        end) 
+        if tier and tier.Name then 
+            rarity = tier.Name 
+        end 
+    end
+    
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then 
+        return item.Metadata.VariantId 
+    end
+    if item.Metadata.Shiny == true then 
+        return "Shiny" 
+    end
+    return "None"
+end
+
+local function IsSecretFish(item)
+    if not item.UUID then return false end
+    local _, rarity = GetFishNameAndRarity(item)
+    return string.upper(tostring(rarity)) == "SECRET"
+end
+
+local function IsRubyGemstoneFish(item)
+    if not item.UUID then return false end
+    local fishName, _ = GetFishNameAndRarity(item)
+    local mutation = GetMutation(item)
+    
+    local isRuby = string.upper(tostring(fishName)) == "RUBY"
+    local isGemstone = string.upper(tostring(mutation)) == "GEMSTONE"
+    
+    if isRuby and isGemstone then
+        return true, fishName, mutation
+    end
+    return false, fishName, mutation
+end
+
+local function GetSecretUUIDs()
+    local uuids = {}
+    local fishInfo = {}
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return uuids, fishInfo end
+    
+    for _, items in pairs(inv) do
+        if type(items) == "table" then
+            for _, item in ipairs(items) do
+                if item and IsSecretFish(item) then
+                    table.insert(uuids, item.UUID)
+                    local fishName, rarity = GetFishNameAndRarity(item)
+                    table.insert(fishInfo, {uuid = item.UUID, name = fishName, rarity = rarity})
+                end
+            end
+        end
+    end
+    return uuids, fishInfo
+end
+
+-- LOGIC & STATE
 local FishingConfig = { Enabled = false, Area = "" }
 local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
 local AutoTotemEnabled = false
@@ -464,15 +553,21 @@ local function StopFishing()
 end
 
 -- ===============================
--- 8. TRADE LOGIC < 5M
+-- 8. TRADE LOGIC < 5M (WITH FIXED SECRET DETECTION)
 -- ===============================
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
         local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
         while TradingConfig.AutoTrade do
-            if CurrentDistanceMeters < 5.0 and #GlobalSecretUUIDs > 0 and TradingConfig.TargetId then
-                pcall(function() RF_InitiateTrade:InvokeServer(TradingConfig.TargetId, GlobalSecretUUIDs[1]) end)
+            -- Gunakan GetSecretUUIDs() yang sudah fix
+            local secretUUIDs, _ = GetSecretUUIDs()
+            
+            if CurrentDistanceMeters < 5.0 and #secretUUIDs > 0 and TradingConfig.TargetId then
+                pcall(function() 
+                    RF_InitiateTrade:InvokeServer(TradingConfig.TargetId, secretUUIDs[1]) 
+                    print(string.format("[Trade] Trading secret #%d of %d", 1, #secretUUIDs))
+                end)
             end
             task.wait(TradingConfig.Delay)
         end
@@ -481,25 +576,22 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 9. SYNC DATA
+-- 9. SYNC DATA (FIXED VERSION)
 -- ===============================
 task.spawn(function()
     while true do
         local uuids = {}
+        local secretCount = 0
+        
         pcall(function()
-            local inv = PlayerData:GetExpect("Inventory")
-            if inv then
-                for _, category in pairs(inv) do
-                    if type(category) == "table" then
-                        for _, item in ipairs(category) do
-                            if GetFishRarity(item) == "SECRET" then table.insert(uuids, item.UUID) end
-                        end
-                    end
-                end
-            end
+            local secretUUIDs, fishInfo = GetSecretUUIDs()
+            uuids = secretUUIDs
+            secretCount = #secretUUIDs
         end)
+        
         GlobalSecretUUIDs = uuids
-        SecretLabel.Text = "Total Secrets: " .. tostring(#GlobalSecretUUIDs)
+        SecretLabel.Text = "Total Secrets: " .. tostring(secretCount)
+        
         task.wait(15)
     end
 end)
@@ -615,62 +707,7 @@ local function LoadInitialConfig()
         
         if ds then
             print("[System] Config loaded successfully from web")
-            
-            -- Apply all settings from web config
-            AutoTotemEnabled = data.AutoTotem or false
-            PotatoModeEnabled = data.PotatoMode or false
-            
-            if data.FishingConfig then
-                FishingConfig = data.FishingConfig
-            end
-            
-            if data.TradingConfig then
-                TradingConfig = data.TradingConfig
-            end
-            
-            -- Start systems based on web config
-            if AutoTotemEnabled then
-                StartAutoTotemLoop()
-                TotemLabel.Text = "Auto Totem: true"
-            end
-            
-            if PotatoModeEnabled then
-                StartInvisiblePotatoLoop()
-                PotatoLabel.Text = "Invisible Mode: ACTIVE"
-            end
-            
-            if FishingConfig.Enabled then
-                -- Teleport to fishing area from web config
-                if FishingConfig.Area and AreaData[FishingConfig.Area] then
-                    local data = AreaData[FishingConfig.Area]
-                    local char = lp.Character
-                    if char then
-                        local root = char:FindFirstChild("HumanoidRootPart")
-                        if root then
-                            root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look)
-                            task.wait(1)
-                        end
-                    end
-                end
-                StartFishingV1()
-                LocationLabel.Text = "Location: " .. FishingConfig.Area
-                FishLabel.Text = "Auto Fishing: true"
-            end
-            
-            if TradingConfig.AutoTrade then
-                task.spawn(function()
-                    local s, id = pcall(function() 
-                        return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) 
-                    end)
-                    if s then 
-                        TradingConfig.TargetId = id
-                        RunAutoTrade()
-                    end
-                end)
-                TradeLabel.Text = "Auto Trade: true"
-            end
-            
-            print("[System] All systems started from web config")
+            UpdateFromWeb(data)
             return true
         else
             print("[System] Failed to parse JSON from web")
