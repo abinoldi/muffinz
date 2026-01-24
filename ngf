@@ -1,0 +1,288 @@
+-- ======================================================
+-- ULTIMATE WEB-CONTROLLED OVERLAY: FIXED FULL EDITION
+-- ======================================================
+
+local CONFIG_URL = "http://165.232.148.115:5000/config.json" --
+
+-- ===============================
+-- 1. GLOBAL SERVICES & BYPASSES
+-- ===============================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local lp = Players.LocalPlayer
+
+-- ANTI-AFK
+pcall(function()
+    for _, v in pairs(getconnections(lp.Idled)) do
+        if v.Disable then v:Disable() end
+    end
+end)
+
+-- CLIENT BYPASSES
+task.spawn(function()
+    local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
+    if S1 and FishingController then
+        FishingController.RequestChargeFishingRod = function(...) return nil end
+        FishingController.SendFishingRequestToServer = function(...) return false, "Blocked" end
+    end
+end)
+
+-- ===============================
+-- 2. FULL BLACK UI OVERLAY & TOGGLE
+-- ===============================
+if CoreGui:FindFirstChild("MainOverlayGui") then CoreGui.MainOverlayGui:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "MainOverlayGui"
+ScreenGui.IgnoreGuiInset = true 
+ScreenGui.DisplayOrder = 9999
+
+local Background = Instance.new("Frame", ScreenGui)
+Background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Background.Size = UDim2.new(1, 0, 1, 0)
+Background.BorderSizePixel = 0
+
+local ContentFrame = Instance.new("Frame", Background)
+ContentFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+ContentFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+ContentFrame.Size = UDim2.new(0.9, 0, 0.7, 0)
+ContentFrame.BackgroundTransparency = 1
+
+local UIListLayout = Instance.new("UIListLayout", ContentFrame)
+UIListLayout.Padding = UDim.new(0, 12)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local function CreateLabel(name, color)
+    local label = Instance.new("TextLabel", ContentFrame)
+    label.Name = name
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 0, 30)
+    label.Font = Enum.Font.GothamBold
+    label.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    label.TextSize = 20
+    label.Text = "Loading..."
+    return label
+end
+
+local SecretLabel = CreateLabel("SecretLabel", Color3.fromRGB(255, 215, 0))
+local LocationLabel = CreateLabel("LocationLabel", Color3.fromRGB(0, 180, 255))
+local TradeLabel = CreateLabel("TradeLabel")
+local TotemLabel = CreateLabel("TotemLabel")
+local FishLabel = CreateLabel("FishLabel")
+local DistanceLabel = CreateLabel("DistanceLabel", Color3.fromRGB(80, 255, 80))
+
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.Name = "ToggleUI"
+ToggleBtn.Size = UDim2.fromOffset(40, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleBtn.BackgroundTransparency = 0.5
+ToggleBtn.Text = "👁️"
+ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.ZIndex = 10000
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    Background.Visible = not Background.Visible
+    ToggleBtn.Text = Background.Visible and "👁️" or "❌"
+end)
+
+-- ===============================
+-- 3. SHARED DATA & AREA DATA
+-- ===============================
+local Replion = require(ReplicatedStorage.Packages.Replion).Client
+local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+local PlayerData = Replion:WaitReplion("Data", 10)
+
+local AreaData = {
+    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.0, 230.642), Look = Vector3.new(0.718, 0.0, 0.696)},
+    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.5, 160.322), Look = Vector3.new(0.984, 0.0, 0.176)},
+    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.94, 0.0, 0.342)},
+    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0.0, 0.863)},
+    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, 0.0, 1.0)},
+    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.0, 0.229)},
+    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.33, 5032.878), Look = Vector3.new(-0.789, 0.0, 0.615)},
+    ["Cresent Lever"] = {Pos = Vector3.new(1419.75, 31.199, 78.57), Look = Vector3.new(0.0, 0.0, -1.0)},
+    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.9, 4370.979), Look = Vector3.new(0.109, 0.0, 0.994)},
+    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, 0.0, -0.949)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.93, 8.449, -284.11), Look = Vector3.new(0.0, 0.0, -1.0)},
+    ["Enchant Room"] = {Pos = Vector3.new(3255.67, -1301.53, 1371.79), Look = Vector3.new(0.0, 0.0, -1.0)},
+    ["Esoteric Island"] = {Pos = Vector3.new(2164.47, 3.22, 1242.39), Look = Vector3.new(0.0, 0.0, -1.0)},
+    ["Fisherman Island"] = {Pos = Vector3.new(74.03, 9.53, 2705.23), Look = Vector3.new(0.0, 0.0, -1.0)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.61, 8.45, -861.01), Look = Vector3.new(0.0, 0.0, -1.0)},
+    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.0, 681.58), Look = Vector3.new(0.889, 0.0, 0.458)},
+    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, 0.0, 0.433)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.99, 0.0, 0.143)},
+    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.0, -0.955)},
+    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.31, 0.0, 0.951)},
+    ["Treasure Room"] = {Pos = Vector3.new(-3598.44, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.0, -0.998)},
+    ["Tropical Island"] = {Pos = Vector3.new(-2162.92, 2.825, 3638.445), Look = Vector3.new(0.381, 0.0, 0.925)},
+    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.8), Look = Vector3.new(0.854, 0.0, 0.521)},
+    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.01), Look = Vector3.new(0.854, 0.0, 0.52)},
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.55, 2.875, 1916.148), Look = Vector3.new(0.042, 0.0, 0.999)},
+}
+
+local function GetRemote(name)
+    local p = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local c = ReplicatedStorage
+    for _, v in ipairs(p) do c = c:WaitForChild(v, 2) end
+    return c:FindFirstChild(name)
+end
+
+-- ===============================
+-- 4. CORE CONFIG & LOGIC
+-- ===============================
+local FishingConfig = { Enabled = false, Area = "", AutoFavorite = true, AutoUnfavoriteRuby = false, AutoSell = false, AutoSellDelay = 5 }
+local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
+local FishingThreads = {}
+local CurrentDistanceMeters = 999
+local TradingThread = nil
+
+RunService.RenderStepped:Connect(function()
+    local targetName = TradingConfig.TargetUsername
+    if targetName == "" then return end
+
+    local targetPlayer = nil
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Name:lower() == targetName:lower() then targetPlayer = p; break end
+    end
+
+    if not targetPlayer then
+        DistanceLabel.Text = "📍 " .. targetName .. ": Offline"
+        CurrentDistanceMeters = 999
+    else
+        local char = targetPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+
+        if root and myRoot then
+            local magnitude = (myRoot.Position - root.Position).Magnitude
+            CurrentDistanceMeters = magnitude / 3.5 
+            DistanceLabel.Text = string.format("📍 %s: %.1f m", targetPlayer.Name, CurrentDistanceMeters)
+        else
+            DistanceLabel.Text = "📍 " .. targetName .. ": In Loading"
+            CurrentDistanceMeters = 999
+        end
+    end
+end)
+
+local function RunInstantFish() --
+    local ts = os.time() + os.clock()
+    local s1 = pcall(function() GetRemote("RF/ChargeFishingRod"):InvokeServer(ts) end)
+    if not s1 then return end
+    pcall(function() GetRemote("RF/RequestFishingMinigameStarted"):InvokeServer(-139.630452165, 0.99647927980797) end)
+    task.wait(1.5) --
+    pcall(function() GetRemote("RE/FishingCompleted"):FireServer() end)
+    task.wait(0.3)
+    pcall(function() GetRemote("RF/CancelFishingInputs"):InvokeServer() end)
+end
+
+local function StartFishingV1()
+    if #FishingThreads > 0 then return end
+    pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(true) end)
+
+    table.insert(FishingThreads, task.spawn(function()
+        while FishingConfig.Enabled do RunInstantFish() task.wait(0.1) end
+    end))
+
+    table.insert(FishingThreads, task.spawn(function()
+        while FishingConfig.Enabled do
+            pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end)
+            task.wait(0.5)
+        end
+    end))
+
+    table.insert(FishingThreads, task.spawn(function()
+        local lastSell = os.time()
+        while FishingConfig.Enabled do
+            local secrets = 0
+            pcall(function()
+                local inv = PlayerData:GetExpect("Inventory")
+                for _, items in pairs(inv) do
+                    for _, item in ipairs(items) do
+                        if item.Metadata and item.Metadata.Rarity == "SECRET" then secrets = secrets + 1 end
+                    end
+                end
+            end)
+            SecretLabel.Text = "Total Secrets: " .. secrets
+            
+            if FishingConfig.AutoSell and (os.time() - lastSell >= FishingConfig.AutoSellDelay * 60) then
+                pcall(function() GetRemote("RF/SellAllItems"):InvokeServer() end)
+                lastSell = os.time()
+            end
+            task.wait(2)
+        end
+    end))
+end
+
+-- ===============================
+-- 5. WEB SYNC MANAGER
+-- ===============================
+local LastConfigRaw = ""
+local function UpdateFromWeb(new)
+    LocationLabel.Text = "Location: " .. (new.FishingConfig and new.FishingConfig.Area or "None")
+    TradeLabel.Text = "Auto Trade: " .. (new.TradingConfig and tostring(new.TradingConfig.AutoTrade) or "False")
+    TotemLabel.Text = "Auto Totem: " .. tostring(new.AutoTotem or false)
+    FishLabel.Text = "Auto Fishing: " .. (new.FishingConfig and tostring(new.FishingConfig.Enabled) or "False")
+
+    if new.FishingConfig then
+        local f = new.FishingConfig
+        FishingConfig.Enabled = f.Enabled
+        FishingConfig.AutoFavorite = f.AutoFavorite
+        FishingConfig.AutoUnfavoriteRuby = f.AutoUnfavoriteRuby
+        FishingConfig.AutoSell = f.AutoSell
+        FishingConfig.AutoSellDelay = f.AutoSellDelay or 5
+        
+        if f.Area and f.Area ~= FishingConfig.Area then
+            FishingConfig.Area = f.Area
+            local data = AreaData[f.Area]
+            if data then
+                local char = lp.Character or lp.CharacterAdded:Wait()
+                local root = char:WaitForChild("HumanoidRootPart", 5)
+                if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
+            end
+        end
+
+        if FishingConfig.Enabled then StartFishingV1() else 
+            for _, t in ipairs(FishingThreads) do task.cancel(t) end
+            FishingThreads = {}
+            pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
+        end
+    end
+
+    if new.TradingConfig then
+        TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
+        TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
+        TradingConfig.Delay = new.TradingConfig.Delay or 6.0
+        
+        if TradingConfig.AutoTrade and CurrentDistanceMeters < 0.5 and not TradingThread then
+             TradingThread = task.spawn(function()
+                 -- Logika Trade
+             end)
+        end
+    end
+
+    if new.PotatoMode then
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") then v.Transparency = 1 
+            elseif v:IsA("Decal") or v:IsA("ParticleEmitter") then v:Destroy() end
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
+        if success and res ~= LastConfigRaw then
+            local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
+            if ds then LastConfigRaw = res; UpdateFromWeb(data) end
+        end
+        task.wait(10)
+    end
+end)
+
+print("[System] Final Overlay + Fixed Syntax Loaded.")
