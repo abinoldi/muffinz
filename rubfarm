@@ -1,12 +1,12 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: POTATO V2 EDITION
--- [INTEGRATED STANDALONE OPTIMIZER]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: POTATO V2 + AUTO SELL
+-- [FIXED: UNFAVORITE RUBY NON-GEMSTONE ONLY]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json"
 
 -- ===============================
--- 1. GLOBAL SERVICES & BYPASSES
+-- 1. GLOBAL SERVICES
 -- ===============================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,7 +14,7 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
-local Workspace = game:GetService("Workspace") -- Added for Potato Mode
+local Workspace = game:GetService("Workspace")
 local lp = Players.LocalPlayer
 
 -- ANTI-AFK
@@ -102,6 +102,7 @@ local LocationLabel = CreateLabel("LocationLabel", Color3.fromRGB(0, 180, 255))
 local TotemLabel = CreateLabel("TotemLabel", Color3.fromRGB(200, 0, 200))
 local TradeLabel = CreateLabel("TradeLabel")
 local FishLabel = CreateLabel("FishLabel")
+local SellLabel = CreateLabel("SellLabel", Color3.fromRGB(100, 255, 100))
 local PotatoLabel = CreateLabel("PotatoLabel", Color3.fromRGB(255, 165, 0))
 
 local ToggleBtn = Instance.new("TextButton", ScreenGui)
@@ -154,7 +155,7 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. SECRET DETECTION
+-- 4. UTILS: FISH & RUBY DETECTION
 -- ===============================
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -180,6 +181,17 @@ local function GetFishNameAndRarity(item)
         if tier and tier.Name then rarity = tier.Name end 
     end
     return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then 
+        return item.Metadata.VariantId 
+    end
+    if item.Metadata.Shiny == true then 
+        return "Shiny" 
+    end
+    return "None"
 end
 
 local function IsSecretFish(item)
@@ -209,13 +221,21 @@ local function GetSecretUUIDs()
 end
 
 -- CONFIG STATE
-local FishingConfig = { Enabled = false, Area = "" }
-local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
+local FishingConfig = { 
+    Enabled = false, 
+    Area = "",
+    AutoFavorite = false,
+    AutoSell = false,
+    AutoSellDelay = 2,
+    AutoUnfavoriteRuby = false
+}
+local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0, Mode = "SECRETS_FIRST" }
 local AutoTotemEnabled = false
 local PotatoModeEnabled = false
 local GlobalSecretUUIDs = {}
 local CurrentDistanceMeters = 999
 local FishingThreads = {}
+local SellThread = nil
 local TradingThread = nil
 local TotemThread = nil
 
@@ -224,142 +244,70 @@ local TOTEM_NAME = "Mutation Totem"
 local TOTEM_INTERVAL = 3700
 
 -- =======================================================
--- 5. NEW POTATO MODE (INTEGRATED STANDALONE SCRIPT)
+-- 5. POTATO MODE (OPTIMIZED)
 -- =======================================================
-local OptimizerApplied = false -- Penanda agar tidak spam run
-local OptimizationConfig = {
-    DisableAnims = true,
-    FPSBoost = true,
-    RemoveVFX = true
-}
-
--- [A] DISABLE ANIMATION CORE
+local OptimizerApplied = false
 local function NukeAnimations(char)
     if not PotatoModeEnabled then return end
-    
     local hum = char:WaitForChild("Humanoid", 5)
     if hum then
-        -- 1. Matikan Script Animate Bawaan
         local animate = char:FindFirstChild("Animate")
-        if animate and animate:IsA("LocalScript") then
-            animate.Enabled = false
-        end
-        -- 2. Hancurkan Animator
+        if animate and animate:IsA("LocalScript") then animate.Enabled = false end
         local animator = hum:FindFirstChildOfClass("Animator")
-        if animator then
-            animator:Destroy()
-        end
+        if animator then animator:Destroy() end
     end
 end
 
--- [B] FPS ULTRA BOOST
 local function RunFPSBoost()
     if not PotatoModeEnabled then return end
-
-    -- 1. Bersihkan Visual Workspace (Sekali jalan)
     task.spawn(function()
         for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Explosion") then
-                v.Enabled = false
-            elseif v:IsA("Beam") or v:IsA("Light") then
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
                 v.Enabled = false
             elseif v:IsA("Decal") or v:IsA("Texture") then
                 v.Transparency = 1
             end
         end
     end)
-
-    -- 2. Lighting Nuke
     pcall(function()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
         Lighting.ClockTime = 14
         Lighting.Ambient = Color3.new(0,0,0)
-        Lighting.OutdoorAmbient = Color3.new(0,0,0)
-        
-        for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("PostEffect") then v.Enabled = false end
-        end
     end)
-
-    -- 3. Ratakan Terrain
-    local Terrain = Workspace:FindFirstChildOfClass("Terrain")
-    if Terrain then
-        pcall(function()
-            Terrain.WaterWaveSize = 0
-            Terrain.WaterWaveSpeed = 0
-            Terrain.WaterReflectance = 0
-            Terrain.WaterTransparency = 1
-            Terrain.Decoration = false
-        end)
-    end
-
-    -- 4. Paksa Low Quality
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
         settings().Rendering.TextureQuality = Enum.TextureQuality.Low
     end)
 end
 
--- [C] REMOVE SKIN/VFX
-local function RemoveSkinsAndVFX()
-    if not PotatoModeEnabled then return end
-
-    local success, VFXControllerModule = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("VFXController"))
-    end)
-
-    if success and VFXControllerModule then
-        VFXControllerModule.Handle = function(...) return nil end
-        if VFXControllerModule.RenderAtPoint then VFXControllerModule.RenderAtPoint = function(...) end end
-        if VFXControllerModule.RenderInstance then VFXControllerModule.RenderInstance = function(...) end end
-        
-        local cosmeticFolder = Workspace:FindFirstChild("CosmeticFolder")
-        if cosmeticFolder then
-            pcall(function() cosmeticFolder:ClearAllChildren() end)
-        end
-    end
-end
-
 local function EnablePotatoMode()
-    if OptimizerApplied then return end -- Mencegah run ulang jika sudah aktif
+    if OptimizerApplied then return end
     OptimizerApplied = true
-    
     PotatoLabel.Text = "Invisible Mode: ACTIVATED"
-    print("[Potato] Activating optimizations...")
-
-    -- Jalankan fungsi optimasi
     task.spawn(function()
         if lp.Character then NukeAnimations(lp.Character) end
         RunFPSBoost()
-        RemoveSkinsAndVFX()
     end)
 end
 
 local function DisablePotatoMode()
-    -- Catatan: Beberapa efek (seperti delete texture) tidak bisa dikembalikan tanpa rejoin.
-    -- Kita hanya restore Lighting dasar agar layar tidak terlalu gelap/aneh.
     OptimizerApplied = false
-    PotatoLabel.Text = "Invisible Mode: Inactive (Rejoin to fully reset)"
-    
+    PotatoLabel.Text = "Invisible Mode: Inactive"
     pcall(function()
         Lighting.GlobalShadows = true
         Lighting.Brightness = 2
         Lighting.ClockTime = 14
-        Lighting.FogEnd = 100000
     end)
 end
 
--- Koneksi Respawn untuk Potato Mode
 lp.CharacterAdded:Connect(function(char)
     if PotatoModeEnabled then
-        task.wait(1) -- Tunggu char load
+        task.wait(1)
         NukeAnimations(char)
     end
 end)
-
 
 -- ===============================
 -- 6. AUTO TOTEM SYSTEM
@@ -381,45 +329,25 @@ local function SpawnMutationTotem()
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-
     local uuid = GetTotemUUID()
     if not uuid then return false end
-
     local currentCFrame = hrp.CFrame
     local success = false
-    
     pcall(function() 
         local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
-        if RE_SpawnTotem then
-            RE_SpawnTotem:FireServer(uuid)
-            success = true
-        end
+        if RE_SpawnTotem then RE_SpawnTotem:FireServer(uuid) success = true end
     end)
     hrp.CFrame = currentCFrame
     return success
 end
 
-local function StopAutoTotem()
-    if TotemThread then
-        task.cancel(TotemThread)
-        TotemThread = nil
-    end
-    TotemLabel.Text = "Auto Totem: Stopped"
-end
-
 local function StartAutoTotemLoop()
-    StopAutoTotem()
+    if TotemThread then task.cancel(TotemThread) end
     TotemThread = task.spawn(function()
         local firstSuccess = SpawnMutationTotem()
-        if firstSuccess then
-            TotemLabel.Text = "Totem: First placed!"
-        else
-            TotemLabel.Text = "Totem: Retrying..."
-            task.wait(30)
-            SpawnMutationTotem()
-        end
+        TotemLabel.Text = firstSuccess and "Totem: First placed!" or "Totem: Retrying..."
+        if not firstSuccess then task.wait(30) SpawnMutationTotem() end
         task.wait(5)
-        
         while AutoTotemEnabled do
             for i = TOTEM_INTERVAL, 0, -1 do
                 if not AutoTotemEnabled then break end
@@ -431,7 +359,6 @@ local function StartAutoTotemLoop()
                 task.wait(1)
             end
             if not AutoTotemEnabled then break end
-            
             SpawnMutationTotem()
             TotemLabel.Text = "Totem: Placed! (Wait)"
         end
@@ -440,7 +367,71 @@ local function StartAutoTotemLoop()
 end
 
 -- ===============================
--- 7. FISHING LOOP
+-- 7. AUTO SELL & UNFAVORITE RUBY LOGIC (FIXED)
+-- ===============================
+local function RunAutoSellLogic()
+    if not FishingConfig.AutoSell then return end
+    
+    -- 1. Unfavorite Ruby NON-GEMSTONE Logic
+    if FishingConfig.AutoUnfavoriteRuby then
+        pcall(function()
+            local inv = PlayerData:GetExpect("Inventory")
+            if inv then
+                for _, items in pairs(inv) do
+                    if type(items) == "table" then
+                        for _, item in ipairs(items) do
+                            if item and item.UUID then
+                                local fishName, _ = GetFishNameAndRarity(item)
+                                local mutation = GetMutation(item)
+                                
+                                -- FIX: Cek apakah Nama Ruby TAPI Mutasi BUKAN Gemstone
+                                local isRuby = string.upper(tostring(fishName)) == "RUBY"
+                                local isGemstone = string.upper(tostring(mutation)) == "GEMSTONE"
+                                
+                                if isRuby and (not isGemstone) and item.Locked then
+                                    -- Unlock Ruby biasa agar terjual
+                                    pcall(function()
+                                        GetRemote("RF/ToggleFavorite"):InvokeServer(item.UUID)
+                                    end)
+                                    task.wait(0.05)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- 2. Trigger Sell All
+    pcall(function()
+        local sellRemote = GetRemote("RF/SellEverything") or GetRemote("RF/SellAll")
+        if sellRemote then
+            sellRemote:InvokeServer()
+        else
+            local rsEvents = ReplicatedStorage:FindFirstChild("events")
+            if rsEvents and rsEvents:FindFirstChild("merchant") and rsEvents.merchant:FindFirstChild("sell") then
+                rsEvents.merchant.sell:InvokeServer()
+            end
+        end
+    end)
+end
+
+local function StartSellingLoop()
+    if SellThread then task.cancel(SellThread) end
+    SellThread = task.spawn(function()
+        while FishingConfig.AutoSell do
+            RunAutoSellLogic()
+            SellLabel.Text = string.format("Auto Sell: ON (Delay %ds)", FishingConfig.AutoSellDelay or 2)
+            task.wait(FishingConfig.AutoSellDelay or 2)
+        end
+        SellLabel.Text = "Auto Sell: OFF"
+        SellThread = nil
+    end)
+end
+
+-- ===============================
+-- 8. FISHING LOOP
 -- ===============================
 local function RunInstantFish()
     local ts = os.time() + os.clock()
@@ -455,28 +446,36 @@ end
 local function StartFishingV1()
     if #FishingThreads > 0 then return end
     pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(true) end)
+    
     table.insert(FishingThreads, task.spawn(function() 
         while FishingConfig.Enabled do 
             RunInstantFish() 
             task.wait(0.1) 
         end 
     end))
+    
     table.insert(FishingThreads, task.spawn(function() 
         while FishingConfig.Enabled do 
             pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) 
             task.wait(0.5) 
         end 
     end))
+    
+    if FishingConfig.AutoSell then
+        StartSellingLoop()
+    end
 end
 
 local function StopFishing()
     for _, t in ipairs(FishingThreads) do task.cancel(t) end
     FishingThreads = {} 
+    if SellThread then task.cancel(SellThread) SellThread = nil end
+    SellLabel.Text = "Auto Sell: OFF"
     pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
 end
 
 -- ===============================
--- 8. TRADE LOGIC < 5M
+-- 9. TRADE LOGIC
 -- ===============================
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
@@ -496,20 +495,15 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 9. UI UPDATE & DISTANCE CHECK
+-- 10. UI & SYNC
 -- ===============================
 task.spawn(function()
     while true do
-        -- Sync Secret Count
         local uuids = {}
-        pcall(function()
-            local secretUUIDs, _ = GetSecretUUIDs()
-            uuids = secretUUIDs
-        end)
+        pcall(function() uuids = GetSecretUUIDs() end)
         GlobalSecretUUIDs = uuids
         SecretLabel.Text = "Total Secrets: " .. tostring(#uuids)
         
-        -- Check Distance (1 second delay)
         local target = Players:FindFirstChild(TradingConfig.TargetUsername)
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
@@ -523,19 +517,15 @@ task.spawn(function()
             DistanceLabel.Text = "📍 " .. TradingConfig.TargetUsername .. ": Offline"
             CurrentDistanceMeters = 999
         end
-
         task.wait(1)
     end
 end)
 
--- ===============================
--- 10. WEB SYNC FUNCTION
--- ===============================
 local function UpdateFromWeb(new)
     if new.AutoTotem ~= nil then
         AutoTotemEnabled = new.AutoTotem
         TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
-        if AutoTotemEnabled then StartAutoTotemLoop() else StopAutoTotem() end
+        if AutoTotemEnabled then StartAutoTotemLoop() else if TotemThread then task.cancel(TotemThread) end end
     end
     
     if new.PotatoMode ~= nil then
@@ -547,7 +537,15 @@ local function UpdateFromWeb(new)
     if new.FishingConfig then
         local oldEnabled = FishingConfig.Enabled
         local oldArea = FishingConfig.Area
-        FishingConfig = new.FishingConfig
+        local oldSell = FishingConfig.AutoSell
+        
+        FishingConfig.Enabled = new.FishingConfig.Enabled
+        FishingConfig.Area = new.FishingConfig.Area
+        FishingConfig.AutoSell = new.FishingConfig.AutoSell
+        FishingConfig.AutoSellDelay = new.FishingConfig.AutoSellDelay
+        FishingConfig.AutoUnfavoriteRuby = new.FishingConfig.AutoUnfavoriteRuby
+        FishingConfig.AutoFavorite = new.FishingConfig.AutoFavorite
+        
         LocationLabel.Text = "Location: " .. FishingConfig.Area
         FishLabel.Text = "Auto Fishing: " .. tostring(FishingConfig.Enabled)
         
@@ -557,8 +555,18 @@ local function UpdateFromWeb(new)
             if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
         end
 
-        if FishingConfig.Enabled and not oldEnabled then StartFishingV1()
-        elseif not FishingConfig.Enabled and oldEnabled then StopFishing() end
+        if FishingConfig.Enabled and not oldEnabled then 
+            StartFishingV1()
+        elseif not FishingConfig.Enabled and oldEnabled then 
+            StopFishing()
+        end
+        
+        if FishingConfig.Enabled and FishingConfig.AutoSell and not oldSell then
+            StartSellingLoop()
+        elseif not FishingConfig.AutoSell and oldSell then
+            if SellThread then task.cancel(SellThread) SellThread = nil end
+            SellLabel.Text = "Auto Sell: OFF"
+        end
     end
     
     if new.TradingConfig then
@@ -586,14 +594,12 @@ end
 -- 11. WEB SYNC LOOP
 -- ===============================
 task.spawn(function()
-    -- Initial Load
     local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
     if success then
         local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
         if ds then UpdateFromWeb(data) end
     end
     
-    -- Sync Loop (Every 10s)
     local lastRaw = ""
     while true do
         task.wait(10)
@@ -610,5 +616,5 @@ task.spawn(function()
     end
 end)
 
-print("[System] POTATO V2 OVERLAY LOADED")
+print("[System] POTATO V2 + AUTO SELL (FIXED RUBY) LOADED")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
