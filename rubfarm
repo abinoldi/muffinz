@@ -621,4 +621,4 @@ task.spawn(function()
 end)
 
 print("[System] POTATO V2 + AUTO SELL (FINAL UNFAV) LOADED")
-loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
