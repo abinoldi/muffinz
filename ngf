@@ -205,24 +205,26 @@ local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
         while TradingConfig.AutoTrade do
-            -- Syarat 1: Target harus dalam jangkauan 0.0m
-            -- Syarat 2: Harus ada Secret di inventory
-            if CurrentDistanceMeters < 0.5 then
+            -- Syarat 1: Target harus dalam jangkauan kurang dari 5 meter
+            -- Syarat 2: Harus ada Secret di inventory (Sync setiap 15 detik) 
+            if CurrentDistanceMeters < 5.0 then
                 if GlobalSecretCount > 0 then
-                    print("[Trade] Target detected & Secrets found. Initiating trade...")
-                    -- Logika trade asli dijalankan di sini
+                    print("[Trade] Target within 5m & Secrets found. Initiating trade...")
+                    -- Mengambil ID target dan UUID item untuk memulai trade
+                    pcall(function() 
+                        GetRemote("RF/InitiateTrade"):InvokeServer(TradingConfig.TargetId, "ITEM_UUID_HERE") 
+                    end)
                 else
-                    print("[Trade] Waiting for Secrets to sync...")
+                    print("[Trade] Waiting for Secrets to sync (15s loop)...")
                 end
             else
-                print("[Trade] Waiting for Target (0.0m)...")
+                print(string.format("[Trade] Target too far: %.1f m. Need < 5.0 m", CurrentDistanceMeters))
             end
             task.wait(TradingConfig.Delay)
         end
         TradingThread = nil
     end)
 end
-
 -- ===============================
 -- 7. ORIGINAL FISHING LOGIC
 -- ===============================
