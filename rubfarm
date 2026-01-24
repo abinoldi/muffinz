@@ -1,9 +1,11 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: COMPLETE AREA EDITION
--- [FISHING + ALL AREAS + AUTO TOTEM + TRADE LOCK < 5M]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: TOTAL EDITION V2
+-- [FISHING + ALL AREAS + NEW AUTO TOTEM + TRADE + POTATO]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json" --
+local TOTEM_ID = 69 -- ID untuk Mutation Totem sesuai script Anda
+local TOTEM_NAME = "Mutation Totem"
 
 -- ===============================
 -- 1. GLOBAL SERVICES & BYPASSES
@@ -143,19 +145,28 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. LOGIC & STATE
+-- 4. POTATO MODE & LOGIC
 -- ===============================
 local FishingConfig = { Enabled = false, Area = "" }
 local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
 local AutoTotemEnabled = false
+local PotatoModeActive = false
 local GlobalSecretUUIDs = {}
 local CurrentDistanceMeters = 999
 local FishingThreads = {}
 local TradingThread = nil
 local TotemThread = nil
 
-local TOTEM_ID = 2 -- Mutation Totem ID
-local TOTEM_NAME = "Mutation Totem"
+local function ApplyPotatoMode()
+    for _, v in ipairs(game:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") then
+            v:Destroy()
+        end
+    end
+end
 
 local function GetFishRarity(item)
     local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
@@ -172,17 +183,15 @@ local function GetFishRarity(item)
 end
 
 -- ===============================
--- 5. SIMPLE AUTO TOTEM SYSTEM (PLACE WHERE CHARACTER STANDS)
+-- 5. NEW AUTO TOTEM SYSTEM
 -- ===============================
 local function GetTotemUUID()
     local success, inventoryData = pcall(function() 
         local inv = PlayerData:GetExpect("Inventory")
         return inv and inv.Totems
     end)
-    
     if success and inventoryData then 
         for _, item in ipairs(inventoryData) do 
-            -- Check for Mutation Totem ID and Quantity
             if tonumber(item.Id) == TOTEM_ID and (item.Count or 1) >= 1 then 
                 return item.UUID 
             end 
@@ -192,95 +201,44 @@ local function GetTotemUUID()
 end
 
 local function SpawnMutationTotem()
-    -- 1. Get Character & RootPart
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if not hrp then 
-        warn("Character/HRP not found.") 
-        return false
-    end
-
-    -- 2. Find Totem UUID
+    if not hrp then return false end
     local uuid = GetTotemUUID()
-    if not uuid then
-        print("SKIPPING: You do not have a " .. TOTEM_NAME .. " in your inventory!")
-        return false
-    end
-
-    -- 3. Save current position
+    if not uuid then return false end
     local currentCFrame = hrp.CFrame
-    
-    -- 4. Place totem at current location
     local success = false
     pcall(function() 
         local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
         if RE_SpawnTotem then
             RE_SpawnTotem:FireServer(uuid)
             success = true
-            print("Totem placed successfully at current location.")
         end
     end)
-    
-    -- 5. Stay in same position
     hrp.CFrame = currentCFrame
-    
     return success
 end
 
-local function StopAutoTotem()
-    if TotemThread then
-        task.cancel(TotemThread)
-        TotemThread = nil
+task.spawn(function()
+    while true do
+        if AutoTotemEnabled then
+            local activeTotems = workspace:FindFirstChild("ActiveTotems")
+            local hasActive = false
+            if activeTotems then
+                for _, v in pairs(activeTotems:GetChildren()) do
+                    if v:IsA("Model") and v:FindFirstChild("Owner") and v.Owner.Value == lp.Name then
+                        hasActive = true; break
+                    end
+                end
+            end
+            if not hasActive then SpawnMutationTotem() end
+        end
+        task.wait(5)
     end
-    TotemLabel.Text = "Auto Totem: Stopped"
-end
-
-local function StartAutoTotemLoop()
-    StopAutoTotem() -- Stop existing thread
-    
-    TotemThread = task.spawn(function()
-        -- FIRST: Place totem immediately
-        print("[Totem] Placing first totem immediately at current location...")
-        task.wait(2) -- Wait 2 seconds for everything to load
-        
-        local firstSuccess = SpawnMutationTotem()
-        
-        if firstSuccess then
-            print("[Totem] First totem placed successfully. Starting 63-minute timer.")
-        else
-            print("[Totem] Failed to place first totem. Will retry in 5 minutes.")
-            task.wait(300) -- Wait 5 minutes before retry
-        end
-        
-        -- THEN: Start the 63-minute loop (3780 seconds)
-        while AutoTotemEnabled do
-            local waitTime = 3780 -- 63 minutes in seconds
-            
-            for i = waitTime, 1, -1 do
-                if not AutoTotemEnabled then break end
-                task.wait(1)
-            end
-            
-            if not AutoTotemEnabled then break end
-            
-            print("[Totem] Attempting to place Mutation Totem at current location...")
-            local success = SpawnMutationTotem()
-            
-            if success then
-                print("[Totem] Successfully placed Mutation Totem. Next placement in 63 minutes.")
-            else
-                print("[Totem] Failed to place Mutation Totem. Retrying in 5 minutes.")
-                task.wait(300) -- Wait 5 minutes before retry
-            end
-        end
-        
-        TotemThread = nil
-    end)
-end
+end)
 
 -- ===============================
--- 6. FISHING LOOP
+-- 6. FISHING & TRADE LOGIC
 -- ===============================
 local function RunInstantFish()
     local ts = os.time() + os.clock()
@@ -299,9 +257,6 @@ local function StartFishingV1()
     table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) task.wait(0.5) end end))
 end
 
--- ===============================
--- 7. TRADE LOGIC < 5M
--- ===============================
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
@@ -317,7 +272,7 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 8. SYNC DATA
+-- 7. SYNC & UPDATER
 -- ===============================
 task.spawn(function()
     while true do
@@ -356,63 +311,39 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ===============================
--- 9. WEB SYNC
--- ===============================
 local function UpdateFromWeb(new)
-    -- Auto Totem Control
-    if new.AutoTotem ~= nil then
-        AutoTotemEnabled = new.AutoTotem
-        TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
-        
-        if AutoTotemEnabled then
-            StartAutoTotemLoop()
-        else
-            StopAutoTotem()
-        end
-    end
+    AutoTotemEnabled = new.AutoTotem or false
+    TotemLabel.Text = "Auto Totem: " .. (AutoTotemEnabled and "Running" or "Stopped")
     
-    -- Fishing Config
+    if new.PotatoMode and not PotatoModeActive then 
+        PotatoModeActive = true
+        ApplyPotatoMode()
+    end
+
     if new.FishingConfig then
         FishingConfig = new.FishingConfig
         LocationLabel.Text = "Location: " .. FishingConfig.Area
         FishLabel.Text = "Auto Fishing: " .. tostring(FishingConfig.Enabled)
-        
         if FishingConfig.Area and AreaData[FishingConfig.Area] then
             local data = AreaData[FishingConfig.Area]
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
         end
-
-        if FishingConfig.Enabled then 
-            StartFishingV1() 
-        else 
+        if FishingConfig.Enabled then StartFishingV1() else 
             for _, t in ipairs(FishingThreads) do task.cancel(t) end
-            FishingThreads = {} 
-            pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
+            FishingThreads = {}; pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
         end
     end
     
-    -- Trading Config
     if new.TradingConfig then
         TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
         TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
         TradingConfig.Delay = new.TradingConfig.Delay or 6.0
         TradeLabel.Text = "Auto Trade: " .. tostring(TradingConfig.AutoTrade)
-        
         if TradingConfig.TargetUsername ~= "" then
-            task.spawn(function()
-                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
-                if s then TradingConfig.TargetId = id end
-            end)
+            pcall(function() TradingConfig.TargetId = Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
         end
-        
-        if TradingConfig.AutoTrade and not TradingThread then 
-            RunAutoTrade() 
-        elseif not TradingConfig.AutoTrade and TradingThread then
-            if TradingThread then task.cancel(TradingThread) end
-            TradingThread = nil
-        end
+        if TradingConfig.AutoTrade and not TradingThread then RunAutoTrade() end
     end
 end
 
@@ -428,17 +359,5 @@ task.spawn(function()
     end
 end)
 
--- ===============================
--- 10. AUTO START
--- ===============================
-task.delay(2, function()
-    print("[System] Complete Integrated Version Running.")
-    
-    -- Check if we should start totem immediately
-    if AutoTotemEnabled then
-        StartAutoTotemLoop()
-    end
-end)
-
-print("[System] Initialized.")
+print("[System] V2 Total Integrated Version Running.")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
