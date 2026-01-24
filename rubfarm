@@ -1,11 +1,9 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: TOTAL EDITION V2
--- [FISHING + ALL AREAS + NEW AUTO TOTEM + TRADE + POTATO]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: COMPLETE AREA EDITION
+-- [FISHING + ALL AREAS + AUTO TOTEM + TRADE LOCK < 5M + POTATO MODE]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json" --
-local TOTEM_ID = 69 -- ID untuk Mutation Totem sesuai script Anda
-local TOTEM_NAME = "Mutation Totem"
 
 -- ===============================
 -- 1. GLOBAL SERVICES & BYPASSES
@@ -15,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
 local lp = Players.LocalPlayer
 
 -- ANTI-AFK
@@ -94,6 +93,7 @@ local LocationLabel = CreateLabel("LocationLabel", Color3.fromRGB(0, 180, 255))
 local TotemLabel = CreateLabel("TotemLabel")
 local TradeLabel = CreateLabel("TradeLabel")
 local FishLabel = CreateLabel("FishLabel")
+local PotatoLabel = CreateLabel("PotatoLabel", Color3.fromRGB(255, 165, 0))
 
 local ToggleBtn = Instance.new("TextButton", ScreenGui)
 ToggleBtn.Size = UDim2.fromOffset(40, 40)
@@ -145,28 +145,21 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. POTATO MODE & LOGIC
+-- 4. LOGIC & STATE
 -- ===============================
 local FishingConfig = { Enabled = false, Area = "" }
 local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
 local AutoTotemEnabled = false
-local PotatoModeActive = false
+local PotatoModeEnabled = false
 local GlobalSecretUUIDs = {}
 local CurrentDistanceMeters = 999
 local FishingThreads = {}
 local TradingThread = nil
 local TotemThread = nil
+local PotatoLoop = nil
 
-local function ApplyPotatoMode()
-    for _, v in ipairs(game:GetDescendants()) do
-        if v:IsA("BasePart") or v:IsA("MeshPart") then
-            v.Material = Enum.Material.SmoothPlastic
-            v.Reflectance = 0
-        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") then
-            v:Destroy()
-        end
-    end
-end
+local TOTEM_ID = 2 -- Mutation Totem ID
+local TOTEM_NAME = "Mutation Totem"
 
 local function GetFishRarity(item)
     local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
@@ -183,13 +176,92 @@ local function GetFishRarity(item)
 end
 
 -- ===============================
--- 5. NEW AUTO TOTEM SYSTEM
+-- 5. POTATO MODE SYSTEM
+-- ===============================
+local function ApplyPotatoMode()
+    -- Optimize Lighting
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.Brightness = 0
+        
+        if workspace.Terrain then
+            workspace.Terrain.WaterWaveSize = 0
+            workspace.Terrain.WaterTransparency = 1 
+            workspace.Terrain.WaterReflectance = 0
+        end
+    end)
+    
+    -- Optimize all parts in the game
+    for _, v in ipairs(game:GetDescendants()) do
+        pcall(function()
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
+                v.Material = Enum.Material.SmoothPlastic
+                v.Reflectance = 0
+                v.CastShadow = false
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+                v:Destroy()
+            end
+        end)
+    end
+    
+    -- Optimize player's character
+    local char = lp.Character
+    if char then
+        for _, v in ipairs(char:GetDescendants()) do
+            pcall(function()
+                if v:IsA("BasePart") or v:IsA("MeshPart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                    v.CastShadow = false
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    v:Destroy()
+                end
+            end)
+        end
+    end
+end
+
+local function StartPotatoLoop()
+    if PotatoLoop then return end
+    
+    ApplyPotatoMode() -- Apply immediately
+    PotatoLabel.Text = "Potato Mode: Active"
+    
+    PotatoLoop = task.spawn(function()
+        while PotatoModeEnabled do
+            ApplyPotatoMode()
+            task.wait(3) -- Reapply every 3 seconds
+        end
+        PotatoLoop = nil
+    end)
+end
+
+local function StopPotatoMode()
+    if PotatoLoop then
+        task.cancel(PotatoLoop)
+        PotatoLoop = nil
+    end
+    PotatoLabel.Text = "Potato Mode: Inactive"
+end
+
+-- Auto reapply when character changes
+lp.CharacterAdded:Connect(function()
+    if PotatoModeEnabled then
+        task.wait(0.5)
+        ApplyPotatoMode()
+    end
+end)
+
+-- ===============================
+-- 6. AUTO TOTEM SYSTEM (PLACE WHERE CHARACTER STANDS)
 -- ===============================
 local function GetTotemUUID()
     local success, inventoryData = pcall(function() 
         local inv = PlayerData:GetExpect("Inventory")
         return inv and inv.Totems
     end)
+    
     if success and inventoryData then 
         for _, item in ipairs(inventoryData) do 
             if tonumber(item.Id) == TOTEM_ID and (item.Count or 1) >= 1 then 
@@ -203,11 +275,19 @@ end
 local function SpawnMutationTotem()
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
+    
+    if not hrp then 
+        return false
+    end
+
     local uuid = GetTotemUUID()
-    if not uuid then return false end
+    if not uuid then
+        return false
+    end
+
     local currentCFrame = hrp.CFrame
     local success = false
+    
     pcall(function() 
         local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
         if RE_SpawnTotem then
@@ -215,30 +295,62 @@ local function SpawnMutationTotem()
             success = true
         end
     end)
+    
     hrp.CFrame = currentCFrame
     return success
 end
 
-task.spawn(function()
-    while true do
-        if AutoTotemEnabled then
-            local activeTotems = workspace:FindFirstChild("ActiveTotems")
-            local hasActive = false
-            if activeTotems then
-                for _, v in pairs(activeTotems:GetChildren()) do
-                    if v:IsA("Model") and v:FindFirstChild("Owner") and v.Owner.Value == lp.Name then
-                        hasActive = true; break
-                    end
-                end
-            end
-            if not hasActive then SpawnMutationTotem() end
-        end
-        task.wait(5)
+local function StopAutoTotem()
+    if TotemThread then
+        task.cancel(TotemThread)
+        TotemThread = nil
     end
-end)
+    TotemLabel.Text = "Auto Totem: Stopped"
+end
+
+local function StartAutoTotemLoop()
+    StopAutoTotem()
+    
+    TotemThread = task.spawn(function()
+        print("[Totem] Placing first totem immediately...")
+        task.wait(2)
+        
+        local firstSuccess = SpawnMutationTotem()
+        
+        if firstSuccess then
+            print("[Totem] First totem placed. Starting 63-minute timer.")
+        else
+            print("[Totem] Failed to place first totem. Will retry in 5 minutes.")
+            task.wait(300)
+        end
+        
+        while AutoTotemEnabled do
+            local waitTime = 3780 -- 63 minutes
+            
+            for i = waitTime, 1, -1 do
+                if not AutoTotemEnabled then break end
+                task.wait(1)
+            end
+            
+            if not AutoTotemEnabled then break end
+            
+            print("[Totem] Attempting to place Mutation Totem...")
+            local success = SpawnMutationTotem()
+            
+            if success then
+                print("[Totem] Successfully placed Mutation Totem.")
+            else
+                print("[Totem] Failed to place Mutation Totem. Retrying in 5 minutes.")
+                task.wait(300)
+            end
+        end
+        
+        TotemThread = nil
+    end)
+end
 
 -- ===============================
--- 6. FISHING & TRADE LOGIC
+-- 7. FISHING LOOP
 -- ===============================
 local function RunInstantFish()
     local ts = os.time() + os.clock()
@@ -257,6 +369,15 @@ local function StartFishingV1()
     table.insert(FishingThreads, task.spawn(function() while FishingConfig.Enabled do pcall(function() GetRemote("RE/EquipToolFromHotbar"):FireServer(1) end) task.wait(0.5) end end))
 end
 
+local function StopFishing()
+    for _, t in ipairs(FishingThreads) do task.cancel(t) end
+    FishingThreads = {} 
+    pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
+end
+
+-- ===============================
+-- 8. TRADE LOGIC < 5M
+-- ===============================
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
@@ -272,7 +393,7 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 7. SYNC & UPDATER
+-- 9. SYNC DATA
 -- ===============================
 task.spawn(function()
     while true do
@@ -311,53 +432,140 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- ===============================
+-- 10. WEB SYNC
+-- ===============================
 local function UpdateFromWeb(new)
-    AutoTotemEnabled = new.AutoTotem or false
-    TotemLabel.Text = "Auto Totem: " .. (AutoTotemEnabled and "Running" or "Stopped")
-    
-    if new.PotatoMode and not PotatoModeActive then 
-        PotatoModeActive = true
-        ApplyPotatoMode()
+    -- Auto Totem Control
+    if new.AutoTotem ~= nil then
+        AutoTotemEnabled = new.AutoTotem
+        TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
+        
+        if AutoTotemEnabled then
+            StartAutoTotemLoop()
+        else
+            StopAutoTotem()
+        end
     end
-
+    
+    -- Potato Mode Control
+    if new.PotatoMode ~= nil then
+        PotatoModeEnabled = new.PotatoMode
+        PotatoLabel.Text = "Potato Mode: " .. tostring(PotatoModeEnabled)
+        
+        if PotatoModeEnabled then
+            StartPotatoLoop()
+        else
+            StopPotatoMode()
+        end
+    end
+    
+    -- Fishing Config
     if new.FishingConfig then
+        local oldEnabled = FishingConfig.Enabled
+        local oldArea = FishingConfig.Area
+        
         FishingConfig = new.FishingConfig
         LocationLabel.Text = "Location: " .. FishingConfig.Area
         FishLabel.Text = "Auto Fishing: " .. tostring(FishingConfig.Enabled)
-        if FishingConfig.Area and AreaData[FishingConfig.Area] then
+        
+        -- Teleport to new area if area changed
+        if FishingConfig.Area and FishingConfig.Area ~= oldArea and AreaData[FishingConfig.Area] then
             local data = AreaData[FishingConfig.Area]
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
         end
-        if FishingConfig.Enabled then StartFishingV1() else 
-            for _, t in ipairs(FishingThreads) do task.cancel(t) end
-            FishingThreads = {}; pcall(function() GetRemote("RF/UpdateAutoFishingState"):InvokeServer(false) end)
+
+        if FishingConfig.Enabled and not oldEnabled then
+            StartFishingV1()
+        elseif not FishingConfig.Enabled and oldEnabled then
+            StopFishing()
         end
     end
     
+    -- Trading Config
     if new.TradingConfig then
+        local oldAutoTrade = TradingConfig.AutoTrade
+        
         TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
         TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
         TradingConfig.Delay = new.TradingConfig.Delay or 6.0
         TradeLabel.Text = "Auto Trade: " .. tostring(TradingConfig.AutoTrade)
+        
         if TradingConfig.TargetUsername ~= "" then
-            pcall(function() TradingConfig.TargetId = Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
+            task.spawn(function()
+                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) end)
+                if s then TradingConfig.TargetId = id end
+            end)
         end
-        if TradingConfig.AutoTrade and not TradingThread then RunAutoTrade() end
+        
+        if TradingConfig.AutoTrade and not oldAutoTrade then
+            RunAutoTrade()
+        elseif not TradingConfig.AutoTrade and oldAutoTrade then
+            if TradingThread then 
+                task.cancel(TradingThread) 
+                TradingThread = nil
+            end
+        end
     end
 end
 
+-- Initial sync from web
 task.spawn(function()
     local lastRaw = ""
     while true do
         local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
         if success and res ~= lastRaw then
             local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
-            if ds then lastRaw = res; UpdateFromWeb(data) end
+            if ds then 
+                lastRaw = res
+                UpdateFromWeb(data)
+            end
         end
         task.wait(10)
     end
 end)
 
-print("[System] V2 Total Integrated Version Running.")
+-- ===============================
+-- 11. INITIALIZATION
+-- ===============================
+print("[System] Complete Integrated Version Loading...")
+
+-- Start with initial web sync
+task.delay(1, function()
+    local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
+    if success then
+        local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
+        if ds then
+            UpdateFromWeb(data)
+            print("[System] Initial config loaded from web")
+        end
+    end
+    
+    -- Default values if web fails
+    if not success then
+        -- Start with config.json values
+        AutoTotemEnabled = true
+        PotatoModeEnabled = true
+        FishingConfig = {Enabled = true, Area = "Crater Island"}
+        TradingConfig = {AutoTrade = true, TargetUsername = "mm3kenak", Delay = 6}
+        
+        -- Start systems
+        if AutoTotemEnabled then StartAutoTotemLoop() end
+        if PotatoModeEnabled then StartPotatoLoop() end
+        if FishingConfig.Enabled then StartFishingV1() end
+        if TradingConfig.AutoTrade then RunAutoTrade() end
+        
+        -- Update UI
+        TotemLabel.Text = "Auto Totem: true"
+        PotatoLabel.Text = "Potato Mode: true"
+        LocationLabel.Text = "Location: Crater Island"
+        FishLabel.Text = "Auto Fishing: true"
+        TradeLabel.Text = "Auto Trade: true"
+        
+        print("[System] Using default config values")
+    end
+end)
+
+print("[System] Initialized - Ready for web control")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
