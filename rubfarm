@@ -1,6 +1,6 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: COMPLETE AREA EDITION
--- [FISHING + ALL AREAS + AUTO TOTEM + TRADE LOCK < 5M + INVISIBLE POTATO]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: OPTIMIZED EDITION
+-- [LAG FIXED + ANTI-CRASH + CPU SAVER]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json"
@@ -17,16 +17,24 @@ local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local lp = Players.LocalPlayer
 
--- ANTI-AFK
+-- ANTI-AFK (Optimized)
 pcall(function()
     for _, v in pairs(getconnections(lp.Idled)) do
         if v.Disable then v:Disable() end
+    end
+end)
+task.spawn(function()
+    while true do
+        task.wait(60)
+        local bb = game:GetService("VirtualUser")
+        pcall(function() bb:CaptureController() bb:ClickButton2(Vector2.new()) end)
     end
 end)
 
 -- CLIENT BYPASSES
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
+    
     if S1 and FishingController then
         FishingController.RequestChargeFishingRod = function(...) return nil end
         FishingController.SendFishingRequestToServer = function(...) return false, "Blocked" end
@@ -146,7 +154,7 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. FIXED SECRET DETECTION (FROM EXAMPLE SCRIPT)
+-- 4. FIXED SECRET DETECTION
 -- ===============================
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -202,20 +210,6 @@ local function IsSecretFish(item)
     return string.upper(tostring(rarity)) == "SECRET"
 end
 
-local function IsRubyGemstoneFish(item)
-    if not item.UUID then return false end
-    local fishName, _ = GetFishNameAndRarity(item)
-    local mutation = GetMutation(item)
-    
-    local isRuby = string.upper(tostring(fishName)) == "RUBY"
-    local isGemstone = string.upper(tostring(mutation)) == "GEMSTONE"
-    
-    if isRuby and isGemstone then
-        return true, fishName, mutation
-    end
-    return false, fishName, mutation
-end
-
 local function GetSecretUUIDs()
     local uuids = {}
     local fishInfo = {}
@@ -248,124 +242,75 @@ local TradingThread = nil
 local TotemThread = nil
 local PotatoLoop = nil
 
-local TOTEM_ID = 2 -- Mutation Totem ID
+local TOTEM_ID = 2
 local TOTEM_NAME = "Mutation Totem"
-local TOTEM_INTERVAL = 3700 -- 3700 detik (61.67 menit)
+local TOTEM_INTERVAL = 3700
 
 -- ===============================
--- 5. EXTREME INVISIBLE POTATO MODE
+-- 5. EXTREME INVISIBLE POTATO MODE (OPTIMIZED)
 -- ===============================
 local function ApplyExtremeInvisibleMode()
-    -- EXTREME LIGHTING OPTIMIZATION
+    -- EXTREME LIGHTING (Fast)
     pcall(function()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
         Lighting.ClockTime = 12
-        Lighting.GeographicLatitude = 0
-        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-        Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
-        Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
-        Lighting.ExposureCompensation = 0
-        
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
             workspace.Terrain.WaterTransparency = 1
             workspace.Terrain.WaterReflectance = 0
-            workspace.Terrain.WaterColor = Color3.fromRGB(0, 0, 0)
         end
     end)
     
-    -- INVISIBLE PLAYER
+    -- INVISIBLE PLAYER (Fast)
     local char = lp.Character
     if char then
         for _, v in ipairs(char:GetDescendants()) do
-            pcall(function()
-                if v:IsA("BasePart") or v:IsA("MeshPart") then
-                    v.Transparency = 1
-                    v.Reflectance = 0
-                    v.CastShadow = false
-                    v.Material = Enum.Material.SmoothPlastic
-                elseif v:IsA("Decal") or v:IsA("Texture") then
-                    v:Destroy()
-                elseif v:IsA("Accessory") then
-                    local handle = v:FindFirstChild("Handle")
-                    if handle and (handle:IsA("BasePart") or handle:IsA("MeshPart")) then
-                        handle.Transparency = 1
-                    end
-                end
-            end)
-        end
-        
-        -- Make humanoid invisible
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            pcall(function()
-                humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-            end)
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
+                v.Transparency = 1
+            elseif v:IsA("Decal") then
+                v:Destroy()
+            end
         end
     end
     
-    -- INVISIBLE MAP & OBJECTS
+    -- HEAVY LOOP: OPTIMIZED WITH YIELDS
+    local count = 0
     for _, v in ipairs(workspace:GetDescendants()) do
+        count = count + 1
+        if count % 500 == 0 then task.wait() end -- JEDA SETIAP 500 ITEM AGAR TIDAK FREEZE
+        
         pcall(function()
-            if v:IsA("BasePart") or v:IsA("MeshPart") or v:IsA("Part") then
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
                 v.Transparency = 1
                 v.Reflectance = 0
                 v.CastShadow = false
                 v.Material = Enum.Material.SmoothPlastic
-                
-                -- Remove any surface appearances
-                for _, face in pairs(Enum.NormalId:GetEnumItems()) do
-                    local surface = v:FindFirstChild(face.Name .. "Surface")
-                    if surface then surface:Destroy() end
-                end
-            elseif v:IsA("Model") and not v:IsA("Tool") then
-                v.PrimaryPart = nil
-            elseif v:IsA("Decal") or v:IsA("Texture") or 
-                   v:IsA("ParticleEmitter") or v:IsA("Trail") or 
-                   v:IsA("Beam") or v:IsA("Smoke") or 
-                   v:IsA("Fire") or v:IsA("Sparkles") then
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then
                 v:Destroy()
             end
         end)
     end
     
-    -- REMOVE ALL VISUAL EFFECTS
-    local effects = workspace:FindFirstChild("Effects")
-    if effects then effects:ClearAllChildren() end
-    
-    local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
-    if cosmeticFolder then cosmeticFolder:ClearAllChildren() end
-    
-    -- DISABLE ANIMATIONS
-    if char then
-        local animateScript = char:FindFirstChild("Animate")
-        if animateScript and animateScript:IsA("LocalScript") then
-            animateScript.Enabled = false
-        end
-        local animator = char:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator")
-        if animator then animator:Destroy() end
-    end
-    
     -- FPS CAP
-    if setfpscap then
-        pcall(function()
-            setfpscap(10) -- Ultra low FPS for maximum performance
-        end)
-    end
+    if setfpscap then pcall(function() setfpscap(15) end) end
 end
 
 local function StartInvisiblePotatoLoop()
     if PotatoLoop then return end
     
-    ApplyExtremeInvisibleMode() -- Apply immediately
     PotatoLabel.Text = "Invisible Mode: ACTIVE"
     
     PotatoLoop = task.spawn(function()
+        -- Jalankan sekali di awal
+        ApplyExtremeInvisibleMode()
+        
         while PotatoModeEnabled do
-            ApplyExtremeInvisibleMode()
-            task.wait(2) -- Reapply every 2 seconds for maximum effect
+            task.wait(30) -- JEDA DIPERPANJANG JADI 30 DETIK (BUKAN 2 DETIK)
+            if PotatoModeEnabled then
+                ApplyExtremeInvisibleMode()
+            end
         end
         PotatoLoop = nil
     end)
@@ -377,37 +322,27 @@ local function StopInvisibleMode()
         PotatoLoop = nil
     end
     PotatoLabel.Text = "Invisible Mode: Inactive"
-    
-    -- Reset FPS cap
-    if setfpscap then
-        pcall(function()
-            setfpscap(60)
-        end)
-    end
+    if setfpscap then pcall(function() setfpscap(60) end) end
 end
 
--- Auto reapply when character changes
 lp.CharacterAdded:Connect(function(newChar)
     if PotatoModeEnabled then
-        task.wait(0.3)
+        task.wait(1)
         ApplyExtremeInvisibleMode()
     end
 end)
 
 -- ===============================
--- 6. AUTO TOTEM SYSTEM - PASANG SEKARANG, LALU 3700 DETIK
+-- 6. AUTO TOTEM SYSTEM
 -- ===============================
 local function GetTotemUUID()
     local success, inventoryData = pcall(function() 
         local inv = PlayerData:GetExpect("Inventory")
         return inv and inv.Totems
     end)
-    
     if success and inventoryData then 
         for _, item in ipairs(inventoryData) do 
-            if tonumber(item.Id) == TOTEM_ID and (item.Count or 1) >= 1 then 
-                return item.UUID 
-            end 
+            if tonumber(item.Id) == TOTEM_ID and (item.Count or 1) >= 1 then return item.UUID end 
         end 
     end
     return nil
@@ -416,17 +351,10 @@ end
 local function SpawnMutationTotem()
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if not hrp then 
-        print("[Totem] No character/HRP found")
-        return false
-    end
+    if not hrp then return false end
 
     local uuid = GetTotemUUID()
-    if not uuid then
-        print("[Totem] No Mutation Totem in inventory")
-        return false
-    end
+    if not uuid then return false end
 
     local currentCFrame = hrp.CFrame
     local success = false
@@ -436,12 +364,8 @@ local function SpawnMutationTotem()
         if RE_SpawnTotem then
             RE_SpawnTotem:FireServer(uuid)
             success = true
-            print("[Totem] Successfully placed at current position")
-        else
-            print("[Totem] RE/SpawnTotem remote not found")
         end
     end)
-    
     hrp.CFrame = currentCFrame
     return success
 end
@@ -456,62 +380,32 @@ end
 
 local function StartAutoTotemLoop()
     StopAutoTotem()
-    
     TotemThread = task.spawn(function()
-        -- PASANG TOTEM PERTAMA SEKARANG
-        print("[Totem] Placing FIRST totem immediately...")
         local firstSuccess = SpawnMutationTotem()
-        
         if firstSuccess then
-            print("[Totem] First totem placed successfully!")
             TotemLabel.Text = "Totem: First placed!"
         else
-            print("[Totem] Failed to place first totem, will retry in 30 seconds")
-            TotemLabel.Text = "Totem: Failed - Retrying..."
-            task.wait(30) -- Retry first totem after 30 seconds
+            TotemLabel.Text = "Totem: Retrying..."
+            task.wait(30)
             SpawnMutationTotem()
         end
+        task.wait(5)
         
-        task.wait(5) -- Tunggu sebentar sebelum mulai countdown
-        
-        -- SEKARANG MULAI LOOP 3700 DETIK UNTUK TOTEM BERIKUTNYA
         while AutoTotemEnabled do
-            local countdown = TOTEM_INTERVAL
-            
-            -- COUNTDOWN 3700 DETIK
-            for i = countdown, 0, -1 do
+            for i = TOTEM_INTERVAL, 0, -1 do
                 if not AutoTotemEnabled then break end
-                
-                local hours = math.floor(i / 3600)
-                local minutes = math.floor((i % 3600) / 60)
-                local seconds = i % 60
-                
-                if hours > 0 then
-                    TotemLabel.Text = string.format("Totem: %dh %02dm %02ds", hours, minutes, seconds)
-                else
-                    TotemLabel.Text = string.format("Totem: %02dm %02ds", minutes, seconds)
+                if i % 60 == 0 then -- UPDATE TEKS SETIAP MENIT SAJA (HEMAT CPU)
+                   local hours = math.floor(i / 3600)
+                   local minutes = math.floor((i % 3600) / 60)
+                   TotemLabel.Text = string.format("Totem: %dh %02dm", hours, minutes)
                 end
-                
                 task.wait(1)
             end
-            
             if not AutoTotemEnabled then break end
             
-            -- PASANG TOTEM BERIKUTNYA SETELAH 3700 DETIK
-            print(string.format("[Totem] Placing next totem (every %d seconds)", TOTEM_INTERVAL))
-            local success = SpawnMutationTotem()
-            
-            if success then
-                print("[Totem] Successfully placed next Mutation Totem")
-                TotemLabel.Text = "Totem: Placed! (next in 3700s)"
-            else
-                print("[Totem] Failed to place totem, retrying in 60 seconds")
-                TotemLabel.Text = "Totem: Failed - Retry in 60s"
-                task.wait(60) -- Retry after 60 seconds if failed
-                SpawnMutationTotem() -- Coba lagi
-            end
+            SpawnMutationTotem()
+            TotemLabel.Text = "Totem: Placed! (Wait)"
         end
-        
         TotemThread = nil
     end)
 end
@@ -553,20 +447,17 @@ local function StopFishing()
 end
 
 -- ===============================
--- 8. TRADE LOGIC < 5M (WITH FIXED SECRET DETECTION)
+-- 8. TRADE LOGIC < 5M
 -- ===============================
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
         local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
         while TradingConfig.AutoTrade do
-            -- Gunakan GetSecretUUIDs() yang sudah fix
             local secretUUIDs, _ = GetSecretUUIDs()
-            
             if CurrentDistanceMeters < 5.0 and #secretUUIDs > 0 and TradingConfig.TargetId then
                 pcall(function() 
                     RF_InitiateTrade:InvokeServer(TradingConfig.TargetId, secretUUIDs[1]) 
-                    print(string.format("[Trade] Trading secret #%d of %d", 1, #secretUUIDs))
                 end)
             end
             task.wait(TradingConfig.Delay)
@@ -576,39 +467,35 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 9. SYNC DATA (FIXED VERSION)
+-- 9. UI UPDATE & DISTANCE CHECK (OPTIMIZED FROM RENDERSTEPPED)
 -- ===============================
 task.spawn(function()
     while true do
+        -- 1. Sync Secret Count
         local uuids = {}
-        local secretCount = 0
-        
         pcall(function()
-            local secretUUIDs, fishInfo = GetSecretUUIDs()
+            local secretUUIDs, _ = GetSecretUUIDs()
             uuids = secretUUIDs
-            secretCount = #secretUUIDs
         end)
-        
         GlobalSecretUUIDs = uuids
-        SecretLabel.Text = "Total Secrets: " .. tostring(secretCount)
+        SecretLabel.Text = "Total Secrets: " .. tostring(#uuids)
         
-        task.wait(15)
-    end
-end)
-
-RunService.RenderStepped:Connect(function()
-    local target = Players:FindFirstChild(TradingConfig.TargetUsername)
-    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-        local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-        if myRoot then
-            local mag = (myRoot.Position - target.Character.HumanoidRootPart.Position).Magnitude
-            CurrentDistanceMeters = mag / 3.5
-            DistanceLabel.Text = string.format("📍 %s: %.1f m", target.Name, CurrentDistanceMeters)
-            DistanceLabel.TextColor3 = (CurrentDistanceMeters < 5.0) and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 200, 80)
+        -- 2. Check Distance (Hanya setiap 1 detik, bukan setiap frame)
+        local target = Players:FindFirstChild(TradingConfig.TargetUsername)
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if myRoot then
+                local mag = (myRoot.Position - target.Character.HumanoidRootPart.Position).Magnitude
+                CurrentDistanceMeters = mag / 3.5
+                DistanceLabel.Text = string.format("📍 %s: %.1f m", target.Name, CurrentDistanceMeters)
+                DistanceLabel.TextColor3 = (CurrentDistanceMeters < 5.0) and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 200, 80)
+            end
+        else
+            DistanceLabel.Text = "📍 " .. TradingConfig.TargetUsername .. ": Offline"
+            CurrentDistanceMeters = 999
         end
-    else
-        DistanceLabel.Text = "📍 " .. TradingConfig.TargetUsername .. ": Offline/Loading"
-        CurrentDistanceMeters = 999
+
+        task.wait(1) -- UPDATE UI SETIAP 1 DETIK SAJA
     end
 end)
 
@@ -616,57 +503,37 @@ end)
 -- 10. WEB SYNC FUNCTION
 -- ===============================
 local function UpdateFromWeb(new)
-    -- Auto Totem Control (3700 detik)
     if new.AutoTotem ~= nil then
         AutoTotemEnabled = new.AutoTotem
         TotemLabel.Text = "Auto Totem: " .. tostring(AutoTotemEnabled)
-        
-        if AutoTotemEnabled then
-            StartAutoTotemLoop()
-        else
-            StopAutoTotem()
-        end
+        if AutoTotemEnabled then StartAutoTotemLoop() else StopAutoTotem() end
     end
     
-    -- Invisible Potato Mode Control
     if new.PotatoMode ~= nil then
         PotatoModeEnabled = new.PotatoMode
         PotatoLabel.Text = "Invisible Mode: " .. tostring(PotatoModeEnabled)
-        
-        if PotatoModeEnabled then
-            StartInvisiblePotatoLoop()
-        else
-            StopInvisibleMode()
-        end
+        if PotatoModeEnabled then StartInvisiblePotatoLoop() else StopInvisibleMode() end
     end
     
-    -- Fishing Config
     if new.FishingConfig then
         local oldEnabled = FishingConfig.Enabled
         local oldArea = FishingConfig.Area
-        
         FishingConfig = new.FishingConfig
         LocationLabel.Text = "Location: " .. FishingConfig.Area
         FishLabel.Text = "Auto Fishing: " .. tostring(FishingConfig.Enabled)
         
-        -- Teleport to new area if area changed
         if FishingConfig.Area and FishingConfig.Area ~= oldArea and AreaData[FishingConfig.Area] then
             local data = AreaData[FishingConfig.Area]
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look) end
         end
 
-        if FishingConfig.Enabled and not oldEnabled then
-            StartFishingV1()
-        elseif not FishingConfig.Enabled and oldEnabled then
-            StopFishing()
-        end
+        if FishingConfig.Enabled and not oldEnabled then StartFishingV1()
+        elseif not FishingConfig.Enabled and oldEnabled then StopFishing() end
     end
     
-    -- Trading Config
     if new.TradingConfig then
         local oldAutoTrade = TradingConfig.AutoTrade
-        
         TradingConfig.AutoTrade = new.TradingConfig.AutoTrade
         TradingConfig.TargetUsername = new.TradingConfig.TargetUsername or ""
         TradingConfig.Delay = new.TradingConfig.Delay or 6.0
@@ -679,105 +546,45 @@ local function UpdateFromWeb(new)
             end)
         end
         
-        if TradingConfig.AutoTrade and not oldAutoTrade then
-            RunAutoTrade()
-        elseif not TradingConfig.AutoTrade and oldAutoTrade then
-            if TradingThread then 
-                task.cancel(TradingThread) 
-                TradingThread = nil
-            end
+        if TradingConfig.AutoTrade and not oldAutoTrade then RunAutoTrade()
+        elseif not TradingConfig.AutoTrade and oldAutoTrade then 
+            if TradingThread then task.cancel(TradingThread) TradingThread = nil end
         end
     end
 end
 
 -- ===============================
--- 11. INITIAL LOAD FROM WEB CONFIG
--- ===============================
-local function LoadInitialConfig()
-    print("[System] Loading initial config from web...")
-    
-    local success, res = pcall(function() 
-        return game:HttpGet(CONFIG_URL)
-    end)
-    
-    if success then
-        local ds, data = pcall(function() 
-            return HttpService:JSONDecode(res)
-        end)
-        
-        if ds then
-            print("[System] Config loaded successfully from web")
-            UpdateFromWeb(data)
-            return true
-        else
-            print("[System] Failed to parse JSON from web")
-        end
-    else
-        print("[System] Failed to fetch config from web")
-    end
-    
-    return false
-end
-
--- ===============================
--- 12. WEB SYNC LOOP (REALTIME)
+-- 11. WEB SYNC LOOP (REALTIME)
 -- ===============================
 task.spawn(function()
-    local lastRaw = ""
-    
-    -- First, wait a moment for everything to initialize
-    task.wait(2)
-    
-    -- Try to load initial config
-    local loaded = LoadInitialConfig()
-    
-    if not loaded then
-        print("[System] Using fallback values, will retry in 10s")
-        -- Set default values if web fails
-        TotemLabel.Text = "Auto Totem: Waiting for web"
-        PotatoLabel.Text = "Invisible Mode: Waiting for web"
-        LocationLabel.Text = "Location: Waiting for web"
-        FishLabel.Text = "Auto Fishing: Waiting for web"
-        TradeLabel.Text = "Auto Trade: Waiting for web"
+    -- Initial Load
+    local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
+    if success then
+        local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
+        if ds then UpdateFromWeb(data) end
     end
     
-    -- Start real-time sync loop
-    print("[System] Starting real-time web sync (every 10s)")
-    
+    -- Sync Loop (Every 10s)
+    local lastRaw = ""
     while true do
-        local success, res = pcall(function() 
-            return game:HttpGet(CONFIG_URL) 
-        end)
-        
-        if success and res ~= lastRaw then
-            local ds, data = pcall(function() 
-                return HttpService:JSONDecode(res) 
-            end)
-            
-            if ds then 
-                lastRaw = res
-                print("[System] Web config updated, applying changes...")
-                UpdateFromWeb(data)
+        task.wait(10)
+        task.spawn(function() -- Bungkus di thread baru agar tidak blocking jika lag
+            local s, r = pcall(function() return game:HttpGet(CONFIG_URL) end)
+            if s and r ~= lastRaw then
+                local ds, d = pcall(function() return HttpService:JSONDecode(r) end)
+                if ds then 
+                    lastRaw = r
+                    UpdateFromWeb(d)
+                end
             end
-        end
-        
-        task.wait(10) -- Check every 10 seconds
+        end)
     end
 end)
 
 -- ===============================
--- 13. INITIALIZATION
+-- 12. INITIALIZATION
 -- ===============================
-print("[System] ULTIMATE WEB-CONTROLLED OVERLAY Loading...")
-print("[System] Waiting for initial web config...")
-
--- Just show loading status
-TotemLabel.Text = "Auto Totem: Loading..."
-PotatoLabel.Text = "Invisible Mode: Loading..."
-LocationLabel.Text = "Location: Loading..."
-FishLabel.Text = "Auto Fishing: Loading..."
-TradeLabel.Text = "Auto Trade: Loading..."
-
-print("[System] Ready - Web Controlled Overlay Active")
-print("[System] Config URL: " .. CONFIG_URL)
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
+print("[System] OPTIMIZED OVERLAY LOADED")
+TotemLabel.Text = "System Ready"
+-- Load the first script immediately (if you want it always)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
