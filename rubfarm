@@ -1,6 +1,6 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: POTATO V2 + AUTO SELL
--- [FIXED: RUBY UNFAVORITE LOGIC MATCHING YOUR SCRIPT]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: POTATO V2 + INVISIBLE
+-- [AUTO SELL + RUBY FIX + INVISIBLE MAP/CHAR]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json"
@@ -244,11 +244,16 @@ local TOTEM_NAME = "Mutation Totem"
 local TOTEM_INTERVAL = 3700
 
 -- =======================================================
--- 5. POTATO MODE (OPTIMIZED)
+-- 5. POTATO MODE (INVISIBLE MAP & CHARACTER ADDED)
 -- =======================================================
 local OptimizerApplied = false
-local function NukeAnimations(char)
+
+-- A. Invisible Character Logic
+local function MakeCharacterInvisible(char)
     if not PotatoModeEnabled then return end
+    if not char then return end
+    
+    -- Nuke Animations
     local hum = char:WaitForChild("Humanoid", 5)
     if hum then
         local animate = char:FindFirstChild("Animate")
@@ -256,19 +261,55 @@ local function NukeAnimations(char)
         local animator = hum:FindFirstChildOfClass("Animator")
         if animator then animator:Destroy() end
     end
+    
+    -- Make Invisible
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Transparency = 1
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v:Destroy()
+        elseif v:IsA("Accessory") then
+            local h = v:FindFirstChild("Handle")
+            if h then h.Transparency = 1 end
+        end
+    end
+end
+
+-- B. Invisible Map Logic (With Anti-Freeze)
+local function MakeMapInvisible()
+    if not PotatoModeEnabled then return end
+    
+    -- Run in separate thread to prevent freeze
+    task.spawn(function()
+        local count = 0
+        -- Loop through everything in workspace
+        for _, v in ipairs(Workspace:GetDescendants()) do
+            if not PotatoModeEnabled then break end
+            
+            -- Don't delete LocalPlayer's stuff (handled separately)
+            if v:IsDescendantOf(lp.Character) then continue end
+            
+            pcall(function()
+                if v:IsA("BasePart") or v:IsA("MeshPart") then
+                    v.Transparency = 1
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                    v.Enabled = false
+                    -- v:Destroy() -- Avoid destroying map assets, just disable/hide
+                end
+            end)
+            
+            count = count + 1
+            if count % 500 == 0 then task.wait() end -- Anti-Freeze (Yield every 500 items)
+        end
+    end)
 end
 
 local function RunFPSBoost()
     if not PotatoModeEnabled then return end
-    task.spawn(function()
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
-                v.Enabled = false
-            elseif v:IsA("Decal") or v:IsA("Texture") then
-                v.Transparency = 1
-            end
-        end
-    end)
+    
+    -- Lighting Nuke
     pcall(function()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
@@ -276,6 +317,8 @@ local function RunFPSBoost()
         Lighting.ClockTime = 14
         Lighting.Ambient = Color3.new(0,0,0)
     end)
+    
+    -- Rendering Nuke
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         settings().Rendering.TextureQuality = Enum.TextureQuality.Low
@@ -286,15 +329,17 @@ local function EnablePotatoMode()
     if OptimizerApplied then return end
     OptimizerApplied = true
     PotatoLabel.Text = "Invisible Mode: ACTIVATED"
+    
     task.spawn(function()
-        if lp.Character then NukeAnimations(lp.Character) end
+        MakeCharacterInvisible(lp.Character)
+        MakeMapInvisible() -- Trigger Map Invisibility
         RunFPSBoost()
     end)
 end
 
 local function DisablePotatoMode()
     OptimizerApplied = false
-    PotatoLabel.Text = "Invisible Mode: Inactive"
+    PotatoLabel.Text = "Invisible Mode: Inactive (Rejoin to fix map)"
     pcall(function()
         Lighting.GlobalShadows = true
         Lighting.Brightness = 2
@@ -302,10 +347,11 @@ local function DisablePotatoMode()
     end)
 end
 
+-- Auto-Apply when Respawn
 lp.CharacterAdded:Connect(function(char)
     if PotatoModeEnabled then
         task.wait(1)
-        NukeAnimations(char)
+        MakeCharacterInvisible(char)
     end
 end)
 
@@ -372,7 +418,6 @@ end
 local function RunAutoSellLogic()
     if not FishingConfig.AutoSell then return end
     
-    -- [CORRECTED] 1. Unfavorite Ruby Smart Logic
     if FishingConfig.AutoUnfavoriteRuby then
         pcall(function()
             local inv = PlayerData:GetExpect("Inventory")
@@ -380,23 +425,16 @@ local function RunAutoSellLogic()
                 for _, items in pairs(inv) do
                     if type(items) == "table" then
                         for _, item in ipairs(items) do
-                            -- LOGIC FROM YOUR EXAMPLE:
-                            -- Check item.IsFavorite OR item.Favorited OR item.Locked
                             if item.IsFavorite or item.Favorited or item.Locked then
-                                local name = GetFishNameAndRarity(item) -- Uses our helper
+                                local name = GetFishNameAndRarity(item)
                                 if name == "Ruby" then
-                                    local mutation = GetMutation(item) -- Uses our helper
+                                    local mutation = GetMutation(item)
                                     if mutation ~= "Gemstone" then
-                                        -- Fire Remote Event (FireServer)
                                         pcall(function()
-                                            -- Try to find the Event. Usually "ToggleFavorite" or "FavoriteItem"
                                             local favRemote = GetRemote("RE/ToggleFavorite") or GetRemote("RE/FavoriteItem") or GetRemote("FavoriteItem")
-                                            if favRemote then
-                                                favRemote:FireServer(item.UUID)
-                                                -- print("Unfavorited Ruby: " .. mutation)
-                                            end
+                                            if favRemote then favRemote:FireServer(item.UUID) end
                                         end)
-                                        task.wait(0.3) -- Delay as per your script
+                                        task.wait(0.3)
                                     end
                                 end
                             end
@@ -407,7 +445,6 @@ local function RunAutoSellLogic()
         end)
     end
     
-    -- 2. Trigger Sell All
     pcall(function()
         local sellRemote = GetRemote("RF/SellEverything") or GetRemote("RF/SellAll")
         if sellRemote then
@@ -620,5 +657,5 @@ task.spawn(function()
     end
 end)
 
-print("[System] POTATO V2 + AUTO SELL (FINAL UNFAV) LOADED")
+print("[System] POTATO V2 (FULL INVISIBLE) LOADED")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
