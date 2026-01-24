@@ -1,6 +1,6 @@
 -- ======================================================
--- ULTIMATE WEB-CONTROLLED OVERLAY: OPTIMIZED EDITION
--- [LAG FIXED + ANTI-CRASH + CPU SAVER]
+-- ULTIMATE WEB-CONTROLLED OVERLAY: POTATO V2 EDITION
+-- [INTEGRATED STANDALONE OPTIMIZER]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json"
@@ -14,10 +14,10 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace") -- Added for Potato Mode
 local lp = Players.LocalPlayer
 
--- ANTI-AFK (Optimized)
+-- ANTI-AFK
 pcall(function()
     for _, v in pairs(getconnections(lp.Idled)) do
         if v.Disable then v:Disable() end
@@ -61,7 +61,7 @@ end)
 setreadonly(mt, true)
 
 -- ===============================
--- 2. FULL BLACK UI OVERLAY & TOGGLE
+-- 2. UI OVERLAY SETUP
 -- ===============================
 if CoreGui:FindFirstChild("MainOverlayGui") then CoreGui.MainOverlayGui:Destroy() end
 
@@ -117,7 +117,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ===============================
--- 3. COMPLETE AREA DATA
+-- 3. DATA & CONFIG
 -- ===============================
 local Replion = require(ReplicatedStorage.Packages.Replion).Client
 local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
@@ -154,7 +154,7 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. FIXED SECRET DETECTION
+-- 4. SECRET DETECTION
 -- ===============================
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -167,41 +167,19 @@ local function GetFishNameAndRarity(item)
             itemData = ItemUtility:GetItemData(itemID)
             if not itemData then
                 local numericID = tonumber(item.Id) or tonumber(item.Identifier)
-                if numericID then 
-                    itemData = ItemUtility:GetItemData(numericID) 
-                end
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
             end
         end)
     end
 
-    if itemData and itemData.Data and itemData.Data.Name then 
-        name = itemData.Data.Name 
-    end
-    
-    if item.Metadata and item.Metadata.Rarity then 
-        rarity = item.Metadata.Rarity 
+    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity 
     elseif itemData and itemData.Probability and TierUtility then 
         local tier
-        pcall(function() 
-            tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) 
-        end) 
-        if tier and tier.Name then 
-            rarity = tier.Name 
-        end 
+        pcall(function() tier = TierUtility:GetTierFromRarity(itemData.Probability.Chance) end) 
+        if tier and tier.Name then rarity = tier.Name end 
     end
-    
     return name, rarity
-end
-
-local function GetMutation(item)
-    if not item.Metadata then return "None" end
-    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then 
-        return item.Metadata.VariantId 
-    end
-    if item.Metadata.Shiny == true then 
-        return "Shiny" 
-    end
-    return "None"
 end
 
 local function IsSecretFish(item)
@@ -230,7 +208,7 @@ local function GetSecretUUIDs()
     return uuids, fishInfo
 end
 
--- LOGIC & STATE
+-- CONFIG STATE
 local FishingConfig = { Enabled = false, Area = "" }
 local TradingConfig = { AutoTrade = false, TargetUsername = "", TargetId = nil, Delay = 6.0 }
 local AutoTotemEnabled = false
@@ -240,97 +218,148 @@ local CurrentDistanceMeters = 999
 local FishingThreads = {}
 local TradingThread = nil
 local TotemThread = nil
-local PotatoLoop = nil
 
 local TOTEM_ID = 2
 local TOTEM_NAME = "Mutation Totem"
 local TOTEM_INTERVAL = 3700
 
--- ===============================
--- 5. EXTREME INVISIBLE POTATO MODE (OPTIMIZED)
--- ===============================
-local function ApplyExtremeInvisibleMode()
-    -- EXTREME LIGHTING (Fast)
+-- =======================================================
+-- 5. NEW POTATO MODE (INTEGRATED STANDALONE SCRIPT)
+-- =======================================================
+local OptimizerApplied = false -- Penanda agar tidak spam run
+local OptimizationConfig = {
+    DisableAnims = true,
+    FPSBoost = true,
+    RemoveVFX = true
+}
+
+-- [A] DISABLE ANIMATION CORE
+local function NukeAnimations(char)
+    if not PotatoModeEnabled then return end
+    
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        -- 1. Matikan Script Animate Bawaan
+        local animate = char:FindFirstChild("Animate")
+        if animate and animate:IsA("LocalScript") then
+            animate.Enabled = false
+        end
+        -- 2. Hancurkan Animator
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            animator:Destroy()
+        end
+    end
+end
+
+-- [B] FPS ULTRA BOOST
+local function RunFPSBoost()
+    if not PotatoModeEnabled then return end
+
+    -- 1. Bersihkan Visual Workspace (Sekali jalan)
+    task.spawn(function()
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Explosion") then
+                v.Enabled = false
+            elseif v:IsA("Beam") or v:IsA("Light") then
+                v.Enabled = false
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                v.Transparency = 1
+            end
+        end
+    end)
+
+    -- 2. Lighting Nuke
     pcall(function()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
-        Lighting.ClockTime = 12
-        if workspace.Terrain then
-            workspace.Terrain.WaterWaveSize = 0
-            workspace.Terrain.WaterTransparency = 1
-            workspace.Terrain.WaterReflectance = 0
+        Lighting.ClockTime = 14
+        Lighting.Ambient = Color3.new(0,0,0)
+        Lighting.OutdoorAmbient = Color3.new(0,0,0)
+        
+        for _, v in pairs(Lighting:GetChildren()) do
+            if v:IsA("PostEffect") then v.Enabled = false end
         end
     end)
-    
-    -- INVISIBLE PLAYER (Fast)
-    local char = lp.Character
-    if char then
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("BasePart") or v:IsA("MeshPart") then
-                v.Transparency = 1
-            elseif v:IsA("Decal") then
-                v:Destroy()
-            end
-        end
-    end
-    
-    -- HEAVY LOOP: OPTIMIZED WITH YIELDS
-    local count = 0
-    for _, v in ipairs(workspace:GetDescendants()) do
-        count = count + 1
-        if count % 500 == 0 then task.wait() end -- JEDA SETIAP 500 ITEM AGAR TIDAK FREEZE
-        
+
+    -- 3. Ratakan Terrain
+    local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+    if Terrain then
         pcall(function()
-            if v:IsA("BasePart") or v:IsA("MeshPart") then
-                v.Transparency = 1
-                v.Reflectance = 0
-                v.CastShadow = false
-                v.Material = Enum.Material.SmoothPlastic
-            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then
-                v:Destroy()
-            end
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterWaveSpeed = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 1
+            Terrain.Decoration = false
         end)
     end
-    
-    -- FPS CAP
-    if setfpscap then pcall(function() setfpscap(15) end) end
-end
 
-local function StartInvisiblePotatoLoop()
-    if PotatoLoop then return end
-    
-    PotatoLabel.Text = "Invisible Mode: ACTIVE"
-    
-    PotatoLoop = task.spawn(function()
-        -- Jalankan sekali di awal
-        ApplyExtremeInvisibleMode()
-        
-        while PotatoModeEnabled do
-            task.wait(30) -- JEDA DIPERPANJANG JADI 30 DETIK (BUKAN 2 DETIK)
-            if PotatoModeEnabled then
-                ApplyExtremeInvisibleMode()
-            end
-        end
-        PotatoLoop = nil
+    -- 4. Paksa Low Quality
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+        settings().Rendering.TextureQuality = Enum.TextureQuality.Low
     end)
 end
 
-local function StopInvisibleMode()
-    if PotatoLoop then
-        task.cancel(PotatoLoop)
-        PotatoLoop = nil
+-- [C] REMOVE SKIN/VFX
+local function RemoveSkinsAndVFX()
+    if not PotatoModeEnabled then return end
+
+    local success, VFXControllerModule = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("VFXController"))
+    end)
+
+    if success and VFXControllerModule then
+        VFXControllerModule.Handle = function(...) return nil end
+        if VFXControllerModule.RenderAtPoint then VFXControllerModule.RenderAtPoint = function(...) end end
+        if VFXControllerModule.RenderInstance then VFXControllerModule.RenderInstance = function(...) end end
+        
+        local cosmeticFolder = Workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then
+            pcall(function() cosmeticFolder:ClearAllChildren() end)
+        end
     end
-    PotatoLabel.Text = "Invisible Mode: Inactive"
-    if setfpscap then pcall(function() setfpscap(60) end) end
 end
 
-lp.CharacterAdded:Connect(function(newChar)
+local function EnablePotatoMode()
+    if OptimizerApplied then return end -- Mencegah run ulang jika sudah aktif
+    OptimizerApplied = true
+    
+    PotatoLabel.Text = "Invisible Mode: ACTIVATED"
+    print("[Potato] Activating optimizations...")
+
+    -- Jalankan fungsi optimasi
+    task.spawn(function()
+        if lp.Character then NukeAnimations(lp.Character) end
+        RunFPSBoost()
+        RemoveSkinsAndVFX()
+    end)
+end
+
+local function DisablePotatoMode()
+    -- Catatan: Beberapa efek (seperti delete texture) tidak bisa dikembalikan tanpa rejoin.
+    -- Kita hanya restore Lighting dasar agar layar tidak terlalu gelap/aneh.
+    OptimizerApplied = false
+    PotatoLabel.Text = "Invisible Mode: Inactive (Rejoin to fully reset)"
+    
+    pcall(function()
+        Lighting.GlobalShadows = true
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+    end)
+end
+
+-- Koneksi Respawn untuk Potato Mode
+lp.CharacterAdded:Connect(function(char)
     if PotatoModeEnabled then
-        task.wait(1)
-        ApplyExtremeInvisibleMode()
+        task.wait(1) -- Tunggu char load
+        NukeAnimations(char)
     end
 end)
+
 
 -- ===============================
 -- 6. AUTO TOTEM SYSTEM
@@ -394,7 +423,7 @@ local function StartAutoTotemLoop()
         while AutoTotemEnabled do
             for i = TOTEM_INTERVAL, 0, -1 do
                 if not AutoTotemEnabled then break end
-                if i % 60 == 0 then -- UPDATE TEKS SETIAP MENIT SAJA (HEMAT CPU)
+                if i % 60 == 0 then 
                    local hours = math.floor(i / 3600)
                    local minutes = math.floor((i % 3600) / 60)
                    TotemLabel.Text = string.format("Totem: %dh %02dm", hours, minutes)
@@ -467,11 +496,11 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 9. UI UPDATE & DISTANCE CHECK (OPTIMIZED FROM RENDERSTEPPED)
+-- 9. UI UPDATE & DISTANCE CHECK
 -- ===============================
 task.spawn(function()
     while true do
-        -- 1. Sync Secret Count
+        -- Sync Secret Count
         local uuids = {}
         pcall(function()
             local secretUUIDs, _ = GetSecretUUIDs()
@@ -480,7 +509,7 @@ task.spawn(function()
         GlobalSecretUUIDs = uuids
         SecretLabel.Text = "Total Secrets: " .. tostring(#uuids)
         
-        -- 2. Check Distance (Hanya setiap 1 detik, bukan setiap frame)
+        -- Check Distance (1 second delay)
         local target = Players:FindFirstChild(TradingConfig.TargetUsername)
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
@@ -495,7 +524,7 @@ task.spawn(function()
             CurrentDistanceMeters = 999
         end
 
-        task.wait(1) -- UPDATE UI SETIAP 1 DETIK SAJA
+        task.wait(1)
     end
 end)
 
@@ -512,7 +541,7 @@ local function UpdateFromWeb(new)
     if new.PotatoMode ~= nil then
         PotatoModeEnabled = new.PotatoMode
         PotatoLabel.Text = "Invisible Mode: " .. tostring(PotatoModeEnabled)
-        if PotatoModeEnabled then StartInvisiblePotatoLoop() else StopInvisibleMode() end
+        if PotatoModeEnabled then EnablePotatoMode() else DisablePotatoMode() end
     end
     
     if new.FishingConfig then
@@ -554,7 +583,7 @@ local function UpdateFromWeb(new)
 end
 
 -- ===============================
--- 11. WEB SYNC LOOP (REALTIME)
+-- 11. WEB SYNC LOOP
 -- ===============================
 task.spawn(function()
     -- Initial Load
@@ -568,7 +597,7 @@ task.spawn(function()
     local lastRaw = ""
     while true do
         task.wait(10)
-        task.spawn(function() -- Bungkus di thread baru agar tidak blocking jika lag
+        task.spawn(function()
             local s, r = pcall(function() return game:HttpGet(CONFIG_URL) end)
             if s and r ~= lastRaw then
                 local ds, d = pcall(function() return HttpService:JSONDecode(r) end)
@@ -581,10 +610,5 @@ task.spawn(function()
     end
 end)
 
--- ===============================
--- 12. INITIALIZATION
--- ===============================
-print("[System] OPTIMIZED OVERLAY LOADED")
-TotemLabel.Text = "System Ready"
--- Load the first script immediately (if you want it always)
+print("[System] POTATO V2 OVERLAY LOADED")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
