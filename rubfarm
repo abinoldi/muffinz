@@ -306,7 +306,7 @@ lp.CharacterAdded:Connect(function(newChar)
 end)
 
 -- ===============================
--- 6. AUTO TOTEM SYSTEM - 3700 DETIK
+-- 6. AUTO TOTEM SYSTEM - PASANG SEKARANG, LALU 3700 DETIK
 -- ===============================
 local function GetTotemUUID()
     local success, inventoryData = pcall(function() 
@@ -369,36 +369,58 @@ local function StartAutoTotemLoop()
     StopAutoTotem()
     
     TotemThread = task.spawn(function()
-        local countdown = TOTEM_INTERVAL
+        -- PASANG TOTEM PERTAMA SEKARANG
+        print("[Totem] Placing FIRST totem immediately...")
+        local firstSuccess = SpawnMutationTotem()
         
+        if firstSuccess then
+            print("[Totem] First totem placed successfully!")
+            TotemLabel.Text = "Totem: First placed!"
+        else
+            print("[Totem] Failed to place first totem, will retry in 30 seconds")
+            TotemLabel.Text = "Totem: Failed - Retrying..."
+            task.wait(30) -- Retry first totem after 30 seconds
+            SpawnMutationTotem()
+        end
+        
+        task.wait(5) -- Tunggu sebentar sebelum mulai countdown
+        
+        -- SEKARANG MULAI LOOP 3700 DETIK UNTUK TOTEM BERIKUTNYA
         while AutoTotemEnabled do
-            -- Update timer display
+            local countdown = TOTEM_INTERVAL
+            
+            -- COUNTDOWN 3700 DETIK
             for i = countdown, 0, -1 do
                 if not AutoTotemEnabled then break end
                 
-                local minutes = math.floor(i / 60)
+                local hours = math.floor(i / 3600)
+                local minutes = math.floor((i % 3600) / 60)
                 local seconds = i % 60
-                TotemLabel.Text = string.format("Totem: %02d:%02d", minutes, seconds)
+                
+                if hours > 0 then
+                    TotemLabel.Text = string.format("Totem: %dh %02dm %02ds", hours, minutes, seconds)
+                else
+                    TotemLabel.Text = string.format("Totem: %02dm %02ds", minutes, seconds)
+                end
                 
                 task.wait(1)
             end
             
             if not AutoTotemEnabled then break end
             
-            -- Place totem
-            print(string.format("[Totem] Placing Mutation Totem (every %d seconds)", TOTEM_INTERVAL))
+            -- PASANG TOTEM BERIKUTNYA SETELAH 3700 DETIK
+            print(string.format("[Totem] Placing next totem (every %d seconds)", TOTEM_INTERVAL))
             local success = SpawnMutationTotem()
             
             if success then
-                print("[Totem] Successfully placed Mutation Totem")
-                TotemLabel.Text = "Totem: Placed! (3700s)"
+                print("[Totem] Successfully placed next Mutation Totem")
+                TotemLabel.Text = "Totem: Placed! (next in 3700s)"
             else
                 print("[Totem] Failed to place totem, retrying in 60 seconds")
                 TotemLabel.Text = "Totem: Failed - Retry in 60s"
                 task.wait(60) -- Retry after 60 seconds if failed
+                SpawnMutationTotem() -- Coba lagi
             end
-            
-            countdown = TOTEM_INTERVAL
         end
         
         TotemThread = nil
@@ -499,7 +521,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ===============================
--- 10. WEB SYNC
+-- 10. WEB SYNC FUNCTION
 -- ===============================
 local function UpdateFromWeb(new)
     -- Auto Totem Control (3700 detik)
@@ -576,72 +598,149 @@ local function UpdateFromWeb(new)
     end
 end
 
--- Initial sync from web
+-- ===============================
+-- 11. INITIAL LOAD FROM WEB CONFIG
+-- ===============================
+local function LoadInitialConfig()
+    print("[System] Loading initial config from web...")
+    
+    local success, res = pcall(function() 
+        return game:HttpGet(CONFIG_URL)
+    end)
+    
+    if success then
+        local ds, data = pcall(function() 
+            return HttpService:JSONDecode(res)
+        end)
+        
+        if ds then
+            print("[System] Config loaded successfully from web")
+            
+            -- Apply all settings from web config
+            AutoTotemEnabled = data.AutoTotem or false
+            PotatoModeEnabled = data.PotatoMode or false
+            
+            if data.FishingConfig then
+                FishingConfig = data.FishingConfig
+            end
+            
+            if data.TradingConfig then
+                TradingConfig = data.TradingConfig
+            end
+            
+            -- Start systems based on web config
+            if AutoTotemEnabled then
+                StartAutoTotemLoop()
+                TotemLabel.Text = "Auto Totem: true"
+            end
+            
+            if PotatoModeEnabled then
+                StartInvisiblePotatoLoop()
+                PotatoLabel.Text = "Invisible Mode: ACTIVE"
+            end
+            
+            if FishingConfig.Enabled then
+                -- Teleport to fishing area from web config
+                if FishingConfig.Area and AreaData[FishingConfig.Area] then
+                    local data = AreaData[FishingConfig.Area]
+                    local char = lp.Character
+                    if char then
+                        local root = char:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look)
+                            task.wait(1)
+                        end
+                    end
+                end
+                StartFishingV1()
+                LocationLabel.Text = "Location: " .. FishingConfig.Area
+                FishLabel.Text = "Auto Fishing: true"
+            end
+            
+            if TradingConfig.AutoTrade then
+                task.spawn(function()
+                    local s, id = pcall(function() 
+                        return Players:GetUserIdFromNameAsync(TradingConfig.TargetUsername) 
+                    end)
+                    if s then 
+                        TradingConfig.TargetId = id
+                        RunAutoTrade()
+                    end
+                end)
+                TradeLabel.Text = "Auto Trade: true"
+            end
+            
+            print("[System] All systems started from web config")
+            return true
+        else
+            print("[System] Failed to parse JSON from web")
+        end
+    else
+        print("[System] Failed to fetch config from web")
+    end
+    
+    return false
+end
+
+-- ===============================
+-- 12. WEB SYNC LOOP (REALTIME)
+-- ===============================
 task.spawn(function()
     local lastRaw = ""
+    
+    -- First, wait a moment for everything to initialize
+    task.wait(2)
+    
+    -- Try to load initial config
+    local loaded = LoadInitialConfig()
+    
+    if not loaded then
+        print("[System] Using fallback values, will retry in 10s")
+        -- Set default values if web fails
+        TotemLabel.Text = "Auto Totem: Waiting for web"
+        PotatoLabel.Text = "Invisible Mode: Waiting for web"
+        LocationLabel.Text = "Location: Waiting for web"
+        FishLabel.Text = "Auto Fishing: Waiting for web"
+        TradeLabel.Text = "Auto Trade: Waiting for web"
+    end
+    
+    -- Start real-time sync loop
+    print("[System] Starting real-time web sync (every 10s)")
+    
     while true do
-        local success, res = pcall(function() return game:HttpGet(CONFIG_URL) end)
+        local success, res = pcall(function() 
+            return game:HttpGet(CONFIG_URL) 
+        end)
+        
         if success and res ~= lastRaw then
-            local ds, data = pcall(function() return HttpService:JSONDecode(res) end)
+            local ds, data = pcall(function() 
+                return HttpService:JSONDecode(res) 
+            end)
+            
             if ds then 
                 lastRaw = res
+                print("[System] Web config updated, applying changes...")
                 UpdateFromWeb(data)
             end
         end
-        task.wait(10)
+        
+        task.wait(10) -- Check every 10 seconds
     end
 end)
 
 -- ===============================
--- 11. INITIALIZATION
+-- 13. INITIALIZATION
 -- ===============================
-print("[System] ULTIMATE INVISIBLE EDITION Loading...")
+print("[System] ULTIMATE WEB-CONTROLLED OVERLAY Loading...")
+print("[System] Waiting for initial web config...")
 
--- Auto-start all features based on your config
-task.delay(2, function()
-    -- Start Invisible Potato Mode immediately
-    PotatoModeEnabled = true
-    StartInvisiblePotatoLoop()
-    PotatoLabel.Text = "Invisible Mode: ACTIVE"
-    
-    -- Start Auto Totem (3700 detik)
-    AutoTotemEnabled = true
-    StartAutoTotemLoop()
-    
-    -- Start Fishing at Crater Island
-    FishingConfig = {Enabled = true, Area = "Crater Island"}
-    if AreaData["Crater Island"] then
-        local data = AreaData["Crater Island"]
-        local char = lp.Character
-        if char then
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                root.CFrame = CFrame.new(data.Pos, data.Pos + data.Look)
-                task.wait(1)
-            end
-        end
-    end
-    StartFishingV1()
-    LocationLabel.Text = "Location: Crater Island"
-    FishLabel.Text = "Auto Fishing: true"
-    
-    -- Start Trading
-    TradingConfig = {AutoTrade = true, TargetUsername = "mm3kenak", Delay = 6}
-    task.spawn(function()
-        local s, id = pcall(function() return Players:GetUserIdFromNameAsync("mm3kenak") end)
-        if s then 
-            TradingConfig.TargetId = id
-            RunAutoTrade()
-        end
-    end)
-    TradeLabel.Text = "Auto Trade: true"
-    
-    print("[System] ALL SYSTEMS ACTIVE:")
-    print("- Invisible Potato Mode: ON")
-    print("- Auto Totem: EVERY 3700s")
-    print("- Auto Fishing: Crater Island")
-    print("- Auto Trade: mm3kenak")
-end)
+-- Just show loading status
+TotemLabel.Text = "Auto Totem: Loading..."
+PotatoLabel.Text = "Invisible Mode: Loading..."
+LocationLabel.Text = "Location: Loading..."
+FishLabel.Text = "Auto Fishing: Loading..."
+TradeLabel.Text = "Auto Trade: Loading..."
 
-print("[System] READY - Web Controlled Overlay Active")
+print("[System] Ready - Web Controlled Overlay Active")
+print("[System] Config URL: " .. CONFIG_URL)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/tormoni"))()
