@@ -1,6 +1,6 @@
 -- ======================================================
 -- ULTIMATE WEB-CONTROLLED OVERLAY: POTATO V2 + AUTO SELL
--- [FIXED: UNFAVORITE RUBY NON-GEMSTONE ONLY]
+-- [FIXED: RUBY UNFAVORITE LOGIC MATCHING YOUR SCRIPT]
 -- ======================================================
 
 local CONFIG_URL = "http://165.232.148.115:5000/config.json"
@@ -155,7 +155,7 @@ local function GetRemote(name)
 end
 
 -- ===============================
--- 4. UTILS: FISH & RUBY DETECTION
+-- 4. UTILS & HELPERS
 -- ===============================
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -367,12 +367,12 @@ local function StartAutoTotemLoop()
 end
 
 -- ===============================
--- 7. AUTO SELL & UNFAVORITE RUBY LOGIC (FIXED)
+-- 7. AUTO SELL & UNFAVORITE (CORRECTED LOGIC)
 -- ===============================
 local function RunAutoSellLogic()
     if not FishingConfig.AutoSell then return end
     
-    -- 1. Unfavorite Ruby NON-GEMSTONE Logic
+    -- [CORRECTED] 1. Unfavorite Ruby Smart Logic
     if FishingConfig.AutoUnfavoriteRuby then
         pcall(function()
             local inv = PlayerData:GetExpect("Inventory")
@@ -380,20 +380,24 @@ local function RunAutoSellLogic()
                 for _, items in pairs(inv) do
                     if type(items) == "table" then
                         for _, item in ipairs(items) do
-                            if item and item.UUID then
-                                local fishName, _ = GetFishNameAndRarity(item)
-                                local mutation = GetMutation(item)
-                                
-                                -- FIX: Cek apakah Nama Ruby TAPI Mutasi BUKAN Gemstone
-                                local isRuby = string.upper(tostring(fishName)) == "RUBY"
-                                local isGemstone = string.upper(tostring(mutation)) == "GEMSTONE"
-                                
-                                if isRuby and (not isGemstone) and item.Locked then
-                                    -- Unlock Ruby biasa agar terjual
-                                    pcall(function()
-                                        GetRemote("RF/ToggleFavorite"):InvokeServer(item.UUID)
-                                    end)
-                                    task.wait(0.05)
+                            -- LOGIC FROM YOUR EXAMPLE:
+                            -- Check item.IsFavorite OR item.Favorited OR item.Locked
+                            if item.IsFavorite or item.Favorited or item.Locked then
+                                local name = GetFishNameAndRarity(item) -- Uses our helper
+                                if name == "Ruby" then
+                                    local mutation = GetMutation(item) -- Uses our helper
+                                    if mutation ~= "Gemstone" then
+                                        -- Fire Remote Event (FireServer)
+                                        pcall(function()
+                                            -- Try to find the Event. Usually "ToggleFavorite" or "FavoriteItem"
+                                            local favRemote = GetRemote("RE/ToggleFavorite") or GetRemote("RE/FavoriteItem") or GetRemote("FavoriteItem")
+                                            if favRemote then
+                                                favRemote:FireServer(item.UUID)
+                                                -- print("Unfavorited Ruby: " .. mutation)
+                                            end
+                                        end)
+                                        task.wait(0.3) -- Delay as per your script
+                                    end
                                 end
                             end
                         end
@@ -616,5 +620,5 @@ task.spawn(function()
     end
 end)
 
-print("[System] POTATO V2 + AUTO SELL (FIXED RUBY) LOADED")
+print("[System] POTATO V2 + AUTO SELL (FINAL UNFAV) LOADED")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
