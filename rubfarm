@@ -353,24 +353,22 @@ local function StopFishingV1()
 end
 
 -- ===============================
--- 5. AUTO MUTATION TOTEM SPAWNER (KEEP ORIGINAL LOCATION)
+-- 5. AUTO MUTATION TOTEM SPAWNER (PLACED WHERE YOU STAND)
 -- ===============================
 local TOTEM_ID = 2 -- ID for Mutation Totem
 local TOTEM_NAME = "Mutation Totem"
-local REF_CENTER = Vector3.new(93.932, 9.532, 2684.134)
-local REF_TARGET = Vector3.new(45.0468979, 9.51625347, 2730.19067)
 
 local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
 local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 -- Teleport Location for FISHING (Crater Island)
-local TreasureRoomLocation = {
+local FishingLocation = {
     Pos = Vector3.new(1058.976, 2.330, 5032.878), 
     Look = Vector3.new(-0.789, 0.000, 0.615)
 }
 
-local function TeleportToTreasureRoom()
+local function TeleportToFishingLocation()
     if FishingState.Teleporting then return end
     FishingState.Teleporting = true
     FishingState.CurrentLocation = "Teleporting..."
@@ -379,7 +377,7 @@ local function TeleportToTreasureRoom()
         local char = lp.Character or lp.CharacterAdded:Wait()
         local root = char:WaitForChild("HumanoidRootPart", 5)
         if root then 
-            root.CFrame = CFrame.new(TreasureRoomLocation.Pos, TreasureRoomLocation.Pos + TreasureRoomLocation.Look)
+            root.CFrame = CFrame.new(FishingLocation.Pos, FishingLocation.Pos + FishingLocation.Look)
             FishingState.CurrentLocation = "Crater Island"
         end
     end)
@@ -422,28 +420,16 @@ local function SpawnMutationTotem()
     end
 
     print("Starting Mutation Totem Placement...")
-    local startPos = hrp.Position
-
+    
     -- 3. Equip Oxygen (Prevent Drowning)
     if RF_EquipOxygenTank then 
         pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) 
     end
 
-    -- 4. Anchor (Freeze)
-    hrp.Anchored = true
-    hrp.Velocity = Vector3.zero
-    hrp.AssemblyLinearVelocity = Vector3.zero
-
-    -- 5. Calculate Position (Relative to current spot - KEEP ORIGINAL LOCATION)
-    local relativeOffset = REF_TARGET - REF_CENTER
-    local teleportPos = startPos + relativeOffset
+    -- 4. Place Totem RIGHT WHERE YOU STAND
+    local currentPosition = hrp.Position
+    print("Placing totem at current position:", currentPosition)
     
-    -- 6. Teleport & Place (AT ORIGINAL TOTEM LOCATION)
-    hrp.CFrame = CFrame.new(teleportPos, teleportPos + hrp.CFrame.LookVector)
-    task.wait(0.4) -- Wait for server sync
-
-    -- Double check UUID (Safety)
-    uuid = GetTotemUUID(TOTEM_ID) 
     local success = false
     if uuid then
         pcall(function() 
@@ -451,28 +437,27 @@ local function SpawnMutationTotem()
             success = true
         end)
         
-        -- Force update inventory/animation
-        task.spawn(function()
-            for i = 1, 5 do 
-                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
-                task.wait(0.05)
-            end
-        end)
-        print("Totem Placed at original location.")
+        if success then
+            print("Totem Placed successfully at current location!")
+            
+            -- Small visual confirmation (move slightly and back)
+            task.wait(0.3)
+            local originalCF = hrp.CFrame
+            hrp.CFrame = originalCF + Vector3.new(0, 5, 0)
+            task.wait(0.2)
+            hrp.CFrame = originalCF
+        else
+            print("Failed to place totem")
+        end
     end
 
-    task.wait(0.8)
-
-    -- 7. Return to FISHING LOCATION (Crater Island)
-    hrp.CFrame = CFrame.new(TreasureRoomLocation.Pos, TreasureRoomLocation.Pos + TreasureRoomLocation.Look)
-    task.wait(0.3)
+    task.wait(0.5)
     
-    hrp.Anchored = false
     if RF_UnequipOxygenTank then 
         pcall(function() RF_UnequipOxygenTank:InvokeServer() end) 
     end
     
-    print("Totem Action Completed. Returned to Crater Island.")
+    print("Totem Action Completed.")
     return success
 end
 
@@ -481,7 +466,7 @@ local function StartAutoTotemLoop()
     task.spawn(function()
         -- FIRST: Place totem immediately (within 10 seconds of script start)
         print("[Totem] Placing first totem immediately...")
-        task.wait(2) -- Wait 2 seconds for everything to load
+        task.wait(3) -- Wait 3 seconds for everything to load
         
         local firstSuccess = SpawnMutationTotem()
         
@@ -499,7 +484,6 @@ local function StartAutoTotemLoop()
             
             for i = waitTime, 1, -1 do
                 task.wait(1)
-                -- Countdown happens here
             end
             
             print("[Totem] Attempting to place Mutation Totem...")
@@ -956,20 +940,29 @@ task.spawn(function()
 end)
 
 -- Auto-Start Feature (Executes Immediately)
-task.delay(1, function()
+task.delay(2, function() -- Increased delay to prevent freeze
     print("[AutoStart] Initiating System...")
     
-    -- 1. Start Auto Totem Loop (places first totem within 10 seconds)
+    -- 1. Wait for character to load
+    if not lp.Character then
+        lp.CharacterAdded:Wait()
+        task.wait(1)
+    end
+    
+    -- 2. Start Auto Totem Loop (places first totem where you stand)
     StartAutoTotemLoop()
     totemStatus.Text = "Auto Totem: Placing first..."
     
-    -- 2. Start Potato Mode
+    -- 3. Start Potato Mode
+    task.wait(1)
     StartPotatoLoop()
     potatoBtn.Text = "Disable Potato Mode"
     potatoBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     
-    -- 3. Teleport to CRATER ISLAND & Start Fishing
-    TeleportToTreasureRoom() -- This teleports to Crater Island
+    -- 4. Teleport to CRATER ISLAND & Start Fishing
+    task.wait(1)
+    TeleportToFishingLocation()
+    task.wait(1)
     StartFishingV1()
     
     statusLabel.Text = "System Status: Auto-Started Fishing (Crater Island)"
