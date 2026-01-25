@@ -1,19 +1,20 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Termux Script: Run Roblox Client Clone with Process Detection
-# Save as: run_roblox.sh
-# Make executable: chmod +x run_roblox.sh
+# Ultimate Roblox Clone Launcher & Detective
+# Combines launching multiple clones with deep scanning
 
 echo "========================================"
-echo "Roblox Client Clone Runner - Multiple Apps"
+echo "Roblox Ultimate Multi-Clone Manager"
 echo "========================================"
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
 # Check if termux-am is available
 if ! command -v am &> /dev/null; then
@@ -22,115 +23,220 @@ if ! command -v am &> /dev/null; then
     exit 1
 fi
 
-# Deep link configuration
+# Configuration
 DEEP_LINK="roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388"
+APPS_TO_LAUNCH=("com.roblox.clienb" "com.roblox.clienc")
+APP_NAMES=("Roblox Clone B" "Roblox Clone C")
 
-# Function to find and display running processes
-detect_running_app() {
-    echo -e "\n${BLUE}[*] Searching for running processes...${NC}"
-    
-    echo -e "${YELLOW}[1] Checking via termux-am:${NC}"
-    am stack list 2>/dev/null | grep -i "roblox\|client" || echo "No Roblox found in activity stack"
-    
-    echo -e "\n${YELLOW}[2] Checking via termux-ps:${NC}"
-    ps -A 2>/dev/null | grep -i "roblox\|client\|com.roblox" || echo "No Roblox processes found in ps"
-    
-    echo -e "\n${YELLOW}[3] Checking via pidof:${NC}"
-    pidof com.roblox.client 2>/dev/null && echo "Found PID for com.roblox.client"
-    pidof com.roblox.clienb 2>/dev/null && echo "Found PID for com.roblox.clienb"
-    pidof com.roblox.clienc 2>/dev/null && echo "Found PID for com.roblox.clienc"
-    
-    echo -e "\n${YELLOW}[4] Checking all packages with 'roblox' in name:${NC}"
-    pm list packages | grep -i roblox
-    
-    echo -e "\n${YELLOW}[5] Checking running services:${NC}"
-    am service list 2>/dev/null | grep -i roblox || echo "No Roblox services found"
-}
-
-# Function to launch a specific app
+# ========== LAUNCH FUNCTIONS ==========
 launch_app() {
     local app_name=$1
     local app_package=$2
     
     echo -e "\n${GREEN}[+] Launching $app_name...${NC}"
-    echo "Attempting to launch: $app_package with deep link"
+    echo "Package: $app_package"
+    echo "Deep Link: $DEEP_LINK"
     
-    # Try first method
+    # Method 1: Standard launch
+    echo -e "${CYAN}Attempting Method 1...${NC}"
     am start -n $app_package/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}[✓] $app_name launched successfully${NC}"
         return 0
-    else
-        echo -e "${YELLOW}[!] First method failed for $app_name, trying alternate...${NC}"
-        # Try alternative launch method
-        am start --user 0 -a android.intent.action.VIEW -d "$DEEP_LINK" -c android.intent.category.LAUNCHER -n $app_package/com.roblox.client.ActivityProtocolLaunch 2>/dev/null
-        
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}[✓] $app_name launched with alternate method${NC}"
-            return 0
-        else
-            echo -e "${RED}[✗] Failed to launch $app_name${NC}"
-            return 1
-        fi
     fi
+    
+    # Method 2: Alternate launch
+    echo -e "${CYAN}Attempting Method 2...${NC}"
+    am start --user 0 -a android.intent.action.VIEW -d "$DEEP_LINK" -c android.intent.category.LAUNCHER -n $app_package/com.roblox.client.ActivityProtocolLaunch 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[✓] $app_name launched with alternate method${NC}"
+        return 0
+    fi
+    
+    # Method 3: Generic launch
+    echo -e "${CYAN}Attempting Method 3...${NC}"
+    am start -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[✓] $app_name launched with generic method${NC}"
+        return 0
+    fi
+    
+    echo -e "${RED}[✗] All launch methods failed for $app_name${NC}"
+    return 1
 }
 
-# Main execution
-echo -e "${GREEN}[+] Starting Roblox Client Clones...${NC}"
+# ========== BASIC DETECTION ==========
+basic_detection() {
+    echo -e "\n${BLUE}[*] Basic Process Detection${NC}"
+    
+    echo -e "${YELLOW}[1] Activity Stack:${NC}"
+    am stack list 2>/dev/null | grep -i "roblox\|client" || echo "No Roblox in activity stack"
+    
+    echo -e "\n${YELLOW}[2] Process List:${NC}"
+    ps -A 2>/dev/null | grep -i "roblox\|client\|com.roblox" || echo "No Roblox processes in ps"
+    
+    echo -e "\n${YELLOW}[3] PID Detection:${NC}"
+    for app in "${APPS_TO_LAUNCH[@]}"; do
+        pidof $app 2>/dev/null && echo "Found PID for $app"
+    done
+    
+    echo -e "\n${YELLOW}[4] Installed Packages:${NC}"
+    pm list packages | grep -i roblox
+    
+    echo -e "\n${YELLOW}[5] Running Services:${NC}"
+    am service list 2>/dev/null | grep -i roblox || echo "No Roblox services"
+}
 
-# Launch both apps
-launch_app "Roblox Clone B" "com.roblox.clienb"
-sleep 2  # Small delay between launches
-launch_app "Roblox Clone C" "com.roblox.clienc"
+# ========== ENHANCED DETECTION ==========
+enhanced_detection() {
+    echo -e "\n${PURPLE}[*] Enhanced Deep Scanning${NC}"
+    
+    # Find ALL Roblox-related processes in /proc
+    echo -e "${CYAN}[A] All Roblox-related PIDs:${NC}"
+    ROBLOX_PIDS=$(find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | grep -o '[0-9]\+')
+    
+    if [ -z "$ROBLOX_PIDS" ]; then
+        echo "No Roblox PIDs found in /proc"
+    else
+        echo "Found PIDs: $ROBLOX_PIDS"
+        
+        # Show details for each PID
+        for pid in $ROBLOX_PIDS; do
+            echo -e "\n${GREEN}--- PID $pid Details ---${NC}"
+            
+            # Get command line
+            CMDLINE=$(cat /proc/$pid/cmdline 2>/dev/null | tr '\0' ' ')
+            echo "Command: ${CMDLINE:-Unable to read}"
+            
+            # Get process name
+            PROC_NAME=$(cat /proc/$pid/comm 2>/dev/null)
+            echo "Process Name: ${PROC_NAME:-Unknown}"
+            
+            # Check parent PID
+            PPID=$(cat /proc/$pid/status 2>/dev/null | grep PPid | awk '{print $2}')
+            echo "Parent PID: ${PPID:-Unknown}"
+            
+            # Check user ID
+            UID=$(cat /proc/$pid/status 2>/dev/null | grep Uid | awk '{print $2}')
+            echo "User ID: ${UID:-Unknown}"
+        done
+    fi
+    
+    # Check each installed package
+    echo -e "\n${CYAN}[B] Package-Specific Checks:${NC}"
+    PACKAGES=$(pm list packages | grep roblox | cut -d: -f2)
+    
+    for pkg in $PACKAGES; do
+        echo -e "\n${BLUE}Package: $pkg${NC}"
+        
+        # Multiple detection methods
+        am stack list 2>/dev/null | grep -q "$pkg" && echo "  ✓ In activity stack"
+        
+        for pid in $(pidof $pkg 2>/dev/null); do
+            echo "  ✓ Running as PID: $pid"
+        done
+        
+        ps -A -o pid,args 2>/dev/null | grep -q "$pkg" && echo "  ✓ In process list"
+        
+        # Check if package has activities
+        dumpsys package $pkg 2>/dev/null | grep -q "Activity" && echo "  ✓ Has activities"
+    done
+    
+    # Check Android activity manager
+    echo -e "\n${CYAN}[C] Android Activity Manager Check:${NC}"
+    dumpsys activity activities 2>/dev/null | grep -A2 -B2 "roblox\|clien" || echo "Not in activity manager"
+    
+    # Memory usage
+    echo -e "\n${CYAN}[D] Memory Usage:${NC}"
+    for pkg in $PACKAGES; do
+        MEM=$(dumpsys meminfo $pkg 2>/dev/null | grep -E "TOTAL|TOTAL PSS" | head -1)
+        if [ ! -z "$MEM" ]; then
+            echo "$pkg: $MEM"
+        fi
+    done
+    
+    # Check /proc for roblox processes
+    echo -e "\n${CYAN}[E] /proc Directory Scan:${NC}"
+    find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | head -10
+    
+    # Package info
+    echo -e "\n${CYAN}[F] Package Information:${NC}"
+    for pkg in "${APPS_TO_LAUNCH[@]}"; do
+        echo -e "\n--- $pkg ---"
+        dumpsys package $pkg 2>/dev/null | head -15
+    done
+}
 
-echo -e "\n${YELLOW}[*] Waiting 40 seconds for apps to initialize...${NC}"
-echo "Countdown:"
-for i in {40..1}
-do
+# ========== MAIN EXECUTION ==========
+echo -e "${GREEN}[+] PHASE 1: Launching Roblox Clones${NC}"
+echo "Apps to launch: ${APPS_TO_LAUNCH[@]}"
+echo "Deep link: $DEEP_LINK"
+
+# Launch all configured apps
+LAUNCH_COUNT=0
+for i in "${!APPS_TO_LAUNCH[@]}"; do
+    launch_app "${APP_NAMES[$i]}" "${APPS_TO_LAUNCH[$i]}"
+    if [ $? -eq 0 ]; then
+        LAUNCH_COUNT=$((LAUNCH_COUNT + 1))
+    fi
+    sleep 3  # Delay between launches
+done
+
+echo -e "\n${GREEN}[✓] Launched $LAUNCH_COUNT out of ${#APPS_TO_LAUNCH[@]} apps${NC}"
+
+# Wait for initialization
+echo -e "\n${YELLOW}[*] Waiting 40 seconds for initialization...${NC}"
+for i in {40..1}; do
     echo -ne "\rWaiting: $i seconds... "
     sleep 1
 done
 echo -e "\n"
 
-# Initial process detection
-detect_running_app
+# Run detections
+echo -e "${GREEN}[+] PHASE 2: Basic Detection${NC}"
+basic_detection
 
-# Enhanced monitoring attempt
-echo -e "\n${BLUE}[*] Performing enhanced monitoring...${NC}"
+echo -e "\n${GREEN}[+] PHASE 3: Enhanced Detection${NC}"
+enhanced_detection
 
-# Check if app is in recent tasks
-echo -e "${YELLOW}[6] Checking recent tasks:${NC}"
-am stack list tasks 2>/dev/null | grep -i roblox || echo "Not in recent tasks"
-
-# Check for any process with roblox in command line
-echo -e "\n${YELLOW}[7] Checking /proc directory for roblox processes:${NC}"
-find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | head -10
-
-# Try to get detailed package info for both
-echo -e "\n${YELLOW}[8] Package information:${NC}"
-echo "--- com.roblox.clienb ---"
-dumpsys package com.roblox.clienb 2>/dev/null | head -10
-echo -e "\n--- com.roblox.clienc ---"
-dumpsys package com.roblox.clienc 2>/dev/null | head -10
-
-echo -e "\n${GREEN}[✓] Detection complete!${NC}"
-echo "========================================"
-echo "Summary:"
-echo "- Launched both com.roblox.clienb and com.roblox.clienc"
-echo "- Used same deep link for both: $DEEP_LINK"
-echo "- Both apps should open to the same Roblox place"
-echo "========================================"
-
-# Optional: Continuous monitoring
-read -p "Enable continuous monitoring? (y/n): " choice
+# Optional monitoring
+echo -e "\n${PURPLE}[*] Additional Options${NC}"
+read -p "Enable continuous monitoring (10 cycles)? (y/n): " choice
 if [[ $choice == "y" || $choice == "Y" ]]; then
-    echo -e "\n${BLUE}[*] Starting continuous monitoring (Ctrl+C to stop)...${NC}"
-    for ((i=1; i<=10; i++))
-    do
-        echo -e "\n--- Monitor Cycle $i ---"
-        echo "Processes found:"
-        ps -A | grep -i roblox
+    echo -e "\n${CYAN}[*] Continuous Monitoring (Ctrl+C to stop)${NC}"
+    for ((i=1; i<=10; i++)); do
+        echo -e "\n--- Cycle $i ---"
+        echo "Current time: $(date)"
+        echo "Roblox PIDs: $(pidof com.roblox.clienb com.roblox.clienc 2>/dev/null)"
         sleep 5
     done
 fi
+
+# Final summary
+echo -e "\n${GREEN}[✓] ULTIMATE SCAN COMPLETE!${NC}"
+echo "========================================"
+echo "SUMMARY:"
+echo "- Attempted to launch ${#APPS_TO_LAUNCH[@]} apps"
+echo "- Successfully launched: $LAUNCH_COUNT apps"
+echo "- Deep link used: $DEEP_LINK"
+echo "- Detection methods: Basic + Enhanced"
+echo "========================================"
+echo "ANALYSIS TIPS:"
+echo "1. If 1 PID for 2+ apps → Shared runtime/container"
+echo "2. Check /proc/[PID]/ for detailed info"
+echo "3. Different UIDs indicate separate instances"
+echo "4. Parent PID shows if apps are related"
+echo "========================================"
+
+# Quick status check
+echo -e "\n${BLUE}[*] Quick Status Check:${NC}"
+for app in "${APPS_TO_LAUNCH[@]}"; do
+    if pidof $app &>/dev/null; then
+        echo -e "${GREEN}✓ $app is running${NC}"
+    else
+        echo -e "${RED}✗ $app not detected${NC}"
+    fi
+done
