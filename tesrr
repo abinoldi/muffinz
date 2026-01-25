@@ -1,10 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Ultimate Roblox Clone Launcher & Detective
-# Combines launching multiple clones with deep scanning
+# Ultimate Roblox Clone Launcher with Auto-Restart & Monitoring
+# Launches ALL clones, monitors, and auto-restarts
 
 echo "========================================"
-echo "Roblox Ultimate Multi-Clone Manager"
+echo "Roblox Auto-Launcher with Monitor & Restart"
 echo "========================================"
 
 # Colors
@@ -16,228 +16,280 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Check if termux-am is available
-if ! command -v am &> /dev/null; then
-    echo -e "${RED}Error: termux-am not found!${NC}"
-    echo "Make sure you're running this in Termux"
-    exit 1
-fi
-
-# Configuration
-# Configuration
-DEEP_LINK="roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388"
-APPS_TO_LAUNCH=("com.roblox.clienb" "com.roblox.clienc" "com.roblox.cliend" "com.roblox.cliene")
-APP_NAMES=("Roblox Clone B" "Roblox Clone C" "Roblox Clone D" "Roblox Clone E")
-
-# ========== LAUNCH FUNCTIONS ==========
-launch_app() {
-    local app_name=$1
-    local app_package=$2
-    
-    echo -e "\n${GREEN}[+] Launching $app_name...${NC}"
-    echo "Package: $app_package"
-    echo "Deep Link: $DEEP_LINK"
-    
-    # Method 1: Standard launch
-    echo -e "${CYAN}Attempting Method 1...${NC}"
-    am start -n $app_package/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[✓] $app_name launched successfully${NC}"
+# Check for root/su access
+check_root() {
+    if command -v su &> /dev/null && su -c "id" | grep -q "uid=0"; then
+        echo -e "${GREEN}[✓] Root access available${NC}"
         return 0
+    else
+        echo -e "${RED}[✗] Root access NOT available${NC}"
+        echo "Some features may not work without root"
+        return 1
     fi
-    
-    # Method 2: Alternate launch
-    echo -e "${CYAN}Attempting Method 2...${NC}"
-    am start --user 0 -a android.intent.action.VIEW -d "$DEEP_LINK" -c android.intent.category.LAUNCHER -n $app_package/com.roblox.client.ActivityProtocolLaunch 2>/dev/null
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[✓] $app_name launched with alternate method${NC}"
-        return 0
-    fi
-    
-    # Method 3: Generic launch
-    echo -e "${CYAN}Attempting Method 3...${NC}"
-    am start -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[✓] $app_name launched with generic method${NC}"
-        return 0
-    fi
-    
-    echo -e "${RED}[✗] All launch methods failed for $app_name${NC}"
-    return 1
 }
 
-# ========== BASIC DETECTION ==========
-basic_detection() {
-    echo -e "\n${BLUE}[*] Basic Process Detection${NC}"
-    
-    echo -e "${YELLOW}[1] Activity Stack:${NC}"
-    am stack list 2>/dev/null | grep -i "roblox\|client" || echo "No Roblox in activity stack"
-    
-    echo -e "\n${YELLOW}[2] Process List:${NC}"
-    ps -A 2>/dev/null | grep -i "roblox\|client\|com.roblox" || echo "No Roblox processes in ps"
-    
-    echo -e "\n${YELLOW}[3] PID Detection:${NC}"
-    for app in "${APPS_TO_LAUNCH[@]}"; do
-        pidof $app 2>/dev/null && echo "Found PID for $app"
-    done
-    
-    echo -e "\n${YELLOW}[4] Installed Packages:${NC}"
-    pm list packages | grep -i roblox
-    
-    echo -e "\n${YELLOW}[5] Running Services:${NC}"
-    am service list 2>/dev/null | grep -i roblox || echo "No Roblox services"
-}
+# ========== CONFIGURATION ==========
+DEEP_LINK="roblox://placeID=121864768012064&linkCode=15722060451108192164607998273789"
+WAIT_BETWEEN_APPS=8
+WAIT_FOR_INPUT=15
+WAIT_BETWEEN_CYCLES=7200  # 2 hours in seconds
 
-# ========== ENHANCED DETECTION ==========
-enhanced_detection() {
-    echo -e "\n${PURPLE}[*] Enhanced Deep Scanning${NC}"
+# ========== MONITORING FUNCTIONS ==========
+monitor_processes() {
+    echo -e "\n${CYAN}[*] Current Status Monitor${NC}"
+    echo "Time: $(date '+%H:%M:%S')"
     
-    # Find ALL Roblox-related processes in /proc
-    echo -e "${CYAN}[A] All Roblox-related PIDs:${NC}"
-    ROBLOX_PIDS=$(find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | grep -o '[0-9]\+')
+    # Get all Roblox packages
+    if command -v su &> /dev/null; then
+        PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2" 2>/dev/null)
+    else
+        PACKAGES=$(pm list packages | grep -i roblox | cut -d: -f2)
+    fi
+    
+    if [ -z "$PACKAGES" ]; then
+        echo -e "${RED}No Roblox packages found!${NC}"
+        return
+    fi
+    
+    echo -e "${YELLOW}Found packages:${NC}"
+    echo "$PACKAGES"
+    
+    # Check running processes
+    echo -e "\n${YELLOW}Running processes:${NC}"
+    ROBLOX_PIDS=$(find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | grep -o '[0-9]\+' | sort -n | uniq)
     
     if [ -z "$ROBLOX_PIDS" ]; then
-        echo "No Roblox PIDs found in /proc"
+        echo -e "${RED}No Roblox processes running${NC}"
     else
-        echo "Found PIDs: $ROBLOX_PIDS"
+        echo -e "${GREEN}Active PIDs: $ROBLOX_PIDS${NC}"
+        echo "Total unique processes: $(echo "$ROBLOX_PIDS" | wc -w)"
         
-        # Show details for each PID
+        # Detailed process info
         for pid in $ROBLOX_PIDS; do
-            echo -e "\n${GREEN}--- PID $pid Details ---${NC}"
-            
-            # Get command line
-            CMDLINE=$(cat /proc/$pid/cmdline 2>/dev/null | tr '\0' ' ')
-            echo "Command: ${CMDLINE:-Unable to read}"
-            
-            # Get process name
-            PROC_NAME=$(cat /proc/$pid/comm 2>/dev/null)
-            echo "Process Name: ${PROC_NAME:-Unknown}"
-            
-            # Check parent PID
-            PPID=$(cat /proc/$pid/status 2>/dev/null | grep PPid | awk '{print $2}')
-            echo "Parent PID: ${PPID:-Unknown}"
-            
-            # Check user ID
-            UID=$(cat /proc/$pid/status 2>/dev/null | grep Uid | awk '{print $2}')
-            echo "User ID: ${UID:-Unknown}"
+            CMD=$(cat /proc/$pid/cmdline 2>/dev/null | tr '\0' ' ' | head -c 80)
+            NAME=$(cat /proc/$pid/comm 2>/dev/null)
+            echo "  PID $pid: $NAME - ${CMD:0:60}..."
         done
     fi
     
-    # Check each installed package
-    echo -e "\n${CYAN}[B] Package-Specific Checks:${NC}"
-    PACKAGES=$(pm list packages | grep roblox | cut -d: -f2)
-    
-    for pkg in $PACKAGES; do
-        echo -e "\n${BLUE}Package: $pkg${NC}"
-        
-        # Multiple detection methods
-        am stack list 2>/dev/null | grep -q "$pkg" && echo "  ✓ In activity stack"
-        
-        for pid in $(pidof $pkg 2>/dev/null); do
-            echo "  ✓ Running as PID: $pid"
-        done
-        
-        ps -A -o pid,args 2>/dev/null | grep -q "$pkg" && echo "  ✓ In process list"
-        
-        # Check if package has activities
-        dumpsys package $pkg 2>/dev/null | grep -q "Activity" && echo "  ✓ Has activities"
-    done
-    
-    # Check Android activity manager
-    echo -e "\n${CYAN}[C] Android Activity Manager Check:${NC}"
-    dumpsys activity activities 2>/dev/null | grep -A2 -B2 "roblox\|clien" || echo "Not in activity manager"
-    
     # Memory usage
-    echo -e "\n${CYAN}[D] Memory Usage:${NC}"
+    echo -e "\n${YELLOW}Memory usage:${NC}"
     for pkg in $PACKAGES; do
-        MEM=$(dumpsys meminfo $pkg 2>/dev/null | grep -E "TOTAL|TOTAL PSS" | head -1)
+        if command -v su &> /dev/null; then
+            MEM=$(su -c "dumpsys meminfo $pkg 2>/dev/null | grep -E 'TOTAL.*PSS|TOTAL'" | head -1)
+        else
+            MEM=$(dumpsys meminfo $pkg 2>/dev/null | grep -E 'TOTAL.*PSS|TOTAL' | head -1)
+        fi
         if [ ! -z "$MEM" ]; then
-            echo "$pkg: $MEM"
+            echo "  $pkg: $MEM"
+        fi
+    done
+}
+
+# ========== LAUNCH FUNCTION ==========
+launch_all_clones() {
+    echo -e "\n${GREEN}[+] Launching ALL Roblox Clones${NC}"
+    
+    # Get all packages
+    if command -v su &> /dev/null; then
+        PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2" 2>/dev/null)
+    else
+        PACKAGES=$(pm list packages | grep -i roblox | cut -d: -f2)
+    fi
+    
+    if [ -z "$PACKAGES" ]; then
+        echo -e "${RED}No Roblox packages found to launch!${NC}"
+        return 0
+    fi
+    
+    TOTAL_PACKAGES=$(echo "$PACKAGES" | wc -l)
+    echo "Found $TOTAL_PACKAGES Roblox clone(s)"
+    
+    COUNT=0
+    for pkg in $PACKAGES; do
+        COUNT=$((COUNT + 1))
+        echo -e "\n${BLUE}[$COUNT/$TOTAL_PACKAGES] Launching $pkg${NC}"
+        
+        # Launch the app
+        if command -v su &> /dev/null; then
+            su -c "am start -n $pkg/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d '$DEEP_LINK'" 2>/dev/null
+        else
+            am start -n $pkg/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
+        fi
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}[✓] Launch command sent${NC}"
+        else
+            echo -e "${RED}[✗] Failed to launch $pkg${NC}"
+        fi
+        
+        # Wait between apps
+        if [ $COUNT -lt $TOTAL_PACKAGES ]; then
+            echo -e "${YELLOW}Waiting ${WAIT_BETWEEN_APPS}s before next app...${NC}"
+            sleep $WAIT_BETWEEN_APPS
         fi
     done
     
-    # Check /proc for roblox processes
-    echo -e "\n${CYAN}[E] /proc Directory Scan:${NC}"
-    find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | head -10
+    echo -e "\n${GREEN}[✓] All clones launched${NC}"
+    return $COUNT
+}
+
+# ========== RESTART LOOP ==========
+restart_loop() {
+    CYCLE=1
     
-    # Package info
-    echo -e "\n${CYAN}[F] Package Information:${NC}"
-    for pkg in "${APPS_TO_LAUNCH[@]}"; do
-        echo -e "\n--- $pkg ---"
-        dumpsys package $pkg 2>/dev/null | head -15
+    while true; do
+        echo -e "\n${PURPLE}════════════════════════════════════════${NC}"
+        echo -e "${PURPLE}[ CYCLE $CYCLE ] Starting at $(date)${NC}"
+        echo -e "${PURPLE}════════════════════════════════════════${NC}"
+        
+        # ========== STOP PHASE ==========
+        echo -e "\n${RED}[🛑] Stopping all Roblox clones...${NC}"
+        STOP_COUNT=0
+        
+        if command -v su &> /dev/null; then
+            PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2" 2>/dev/null)
+            for pkg in $PACKAGES; do
+                su -c "am force-stop $pkg" 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    STOP_COUNT=$((STOP_COUNT + 1))
+                    echo "  Stopped: $pkg"
+                fi
+            done
+        else
+            PACKAGES=$(pm list packages | grep -i roblox | cut -d: -f2)
+            for pkg in $PACKAGES; do
+                am force-stop $pkg 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    STOP_COUNT=$((STOP_COUNT + 1))
+                    echo "  Stopped: $pkg"
+                fi
+            done
+        fi
+        
+        echo -e "${GREEN}[✓] Stopped $STOP_COUNT package(s)${NC}"
+        sleep 3
+        
+        # ========== LAUNCH PHASE ==========
+        echo -e "\n${GREEN}[🚀] Starting Roblox apps...${NC}"
+        LAUNCHED_COUNT=0
+        
+        if command -v su &> /dev/null; then
+            PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2" 2>/dev/null)
+            TOTAL=$(echo "$PACKAGES" | wc -l)
+            
+            for pkg in $PACKAGES; do
+                LAUNCHED_COUNT=$((LAUNCHED_COUNT + 1))
+                echo -e "\n${BLUE}[$LAUNCHED_COUNT/$TOTAL] Launching $pkg...${NC}"
+                
+                # Launch with deep link
+                su -c "am start -n $pkg/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d '$DEEP_LINK'" 2>/dev/null
+                
+                if [ $? -eq 0 ]; then
+                    echo -e "${GREEN}[✓] Launched${NC}"
+                else
+                    echo -e "${RED}[✗] Failed${NC}"
+                fi
+                
+                # Wait before sending DPAD key
+                echo -e "${YELLOW}Waiting ${WAIT_BETWEEN_APPS}s...${NC}"
+                sleep $WAIT_BETWEEN_APPS
+                
+                # Send DPAD_CENTER key (Enter key)
+                if command -v su &> /dev/null; then
+                    su -c "input keyevent KEYCODE_DPAD_CENTER" 2>/dev/null
+                    echo -e "${CYAN}[→] Sent ENTER key${NC}"
+                fi
+                
+                # Wait for app initialization
+                echo -e "${YELLOW}Waiting ${WAIT_FOR_INPUT}s for initialization...${NC}"
+                sleep $WAIT_FOR_INPUT
+            done
+        else
+            PACKAGES=$(pm list packages | grep -i roblox | cut -d: -f2)
+            TOTAL=$(echo "$PACKAGES" | wc -l)
+            
+            for pkg in $PACKAGES; do
+                LAUNCHED_COUNT=$((LAUNCHED_COUNT + 1))
+                echo -e "\n${BLUE}[$LAUNCHED_COUNT/$TOTAL] Launching $pkg...${NC}"
+                
+                # Launch with deep link
+                am start -n $pkg/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
+                
+                if [ $? -eq 0 ]; then
+                    echo -e "${GREEN}[✓] Launched${NC}"
+                else
+                    echo -e "${RED}[✗] Failed${NC}"
+                fi
+                
+                # Wait before sending DPAD key
+                echo -e "${YELLOW}Waiting ${WAIT_BETWEEN_APPS}s...${NC}"
+                sleep $WAIT_BETWEEN_APPS
+                
+                # Send DPAD_CENTER key if we have input access
+                if [ -f /data/data/com.termux/files/home/.termux/termux.properties ]; then
+                    input keyevent KEYCODE_DPAD_CENTER 2>/dev/null && echo -e "${CYAN}[→] Sent ENTER key${NC}"
+                fi
+                
+                # Wait for app initialization
+                echo -e "${YELLOW}Waiting ${WAIT_FOR_INPUT}s for initialization...${NC}"
+                sleep $WAIT_FOR_INPUT
+            done
+        fi
+        
+        echo -e "\n${GREEN}[✓] Launched $LAUNCHED_COUNT/$TOTAL package(s)${NC}"
+        
+        # ========== MONITORING PHASE ==========
+        echo -e "\n${CYAN}[📊] Running detailed monitor...${NC}"
+        monitor_processes
+        
+        # ========== WAIT PHASE ==========
+        echo -e "\n${PURPLE}[⏳] Waiting 2 hours until next cycle...${NC}"
+        echo "Next restart at: $(date -d "+2 hours" '+%H:%M:%S')"
+        
+        # Countdown display
+        for ((i=1; i<=120; i++)); do  # 120 minutes = 2 hours
+            for ((j=0; j<60; j+=10)); do  # Update every 10 seconds
+                echo -ne "\rTime until next cycle: $((119 - i + 1))h $((59 - j))m $(printf "%02d" $((59 - (j/10)*10)))s remaining"
+                sleep 10
+            done
+        done
+        
+        CYCLE=$((CYCLE + 1))
     done
 }
 
-# ========== MAIN EXECUTION ==========
-echo -e "${GREEN}[+] PHASE 1: Launching Roblox Clones${NC}"
-echo "Apps to launch: ${APPS_TO_LAUNCH[@]}"
-echo "Deep link: $DEEP_LINK"
+# ========== MAIN MENU ==========
+echo "Select mode:"
+echo "1. Launch once with monitoring"
+echo "2. Auto-restart loop (2-hour cycles)"
+echo "3. Just monitor current status"
+echo -n "Choose (1-3): "
+read CHOICE
 
-# Launch all configured apps
-LAUNCH_COUNT=0
-for i in "${!APPS_TO_LAUNCH[@]}"; do
-    launch_app "${APP_NAMES[$i]}" "${APPS_TO_LAUNCH[$i]}"
-    if [ $? -eq 0 ]; then
-        LAUNCH_COUNT=$((LAUNCH_COUNT + 1))
-    fi
-    sleep 3  # Delay between launches
-done
+case $CHOICE in
+    1)
+        echo -e "${GREEN}[*] Single launch mode${NC}"
+        check_root
+        launch_all_clones
+        echo -e "\n${YELLOW}[*] Waiting 40s for initialization...${NC}"
+        sleep 40
+        monitor_processes
+        ;;
+    2)
+        echo -e "${GREEN}[*] Auto-restart loop mode${NC}"
+        echo "Each cycle: Stop → Launch → Monitor → Wait 2 hours"
+        check_root
+        restart_loop
+        ;;
+    3)
+        echo -e "${GREEN}[*] Monitor-only mode${NC}"
+        monitor_processes
+        ;;
+    *)
+        echo -e "${RED}Invalid choice${NC}"
+        exit 1
+        ;;
+esac
 
-echo -e "\n${GREEN}[✓] Launched $LAUNCH_COUNT out of ${#APPS_TO_LAUNCH[@]} apps${NC}"
-
-# Wait for initialization
-echo -e "\n${YELLOW}[*] Waiting 40 seconds for initialization...${NC}"
-for i in {40..1}; do
-    echo -ne "\rWaiting: $i seconds... "
-    sleep 1
-done
-echo -e "\n"
-
-# Run detections
-echo -e "${GREEN}[+] PHASE 2: Basic Detection${NC}"
-basic_detection
-
-echo -e "\n${GREEN}[+] PHASE 3: Enhanced Detection${NC}"
-enhanced_detection
-
-# Optional monitoring
-echo -e "\n${PURPLE}[*] Additional Options${NC}"
-read -p "Enable continuous monitoring (10 cycles)? (y/n): " choice
-if [[ $choice == "y" || $choice == "Y" ]]; then
-    echo -e "\n${CYAN}[*] Continuous Monitoring (Ctrl+C to stop)${NC}"
-    for ((i=1; i<=10; i++)); do
-        echo -e "\n--- Cycle $i ---"
-        echo "Current time: $(date)"
-        echo "Roblox PIDs: $(pidof com.roblox.clienb com.roblox.clienc 2>/dev/null)"
-        sleep 5
-    done
-fi
-
-# Final summary
-echo -e "\n${GREEN}[✓] ULTIMATE SCAN COMPLETE!${NC}"
-echo "========================================"
-echo "SUMMARY:"
-echo "- Attempted to launch ${#APPS_TO_LAUNCH[@]} apps"
-echo "- Successfully launched: $LAUNCH_COUNT apps"
-echo "- Deep link used: $DEEP_LINK"
-echo "- Detection methods: Basic + Enhanced"
-echo "========================================"
-echo "ANALYSIS TIPS:"
-echo "1. If 1 PID for 2+ apps → Shared runtime/container"
-echo "2. Check /proc/[PID]/ for detailed info"
-echo "3. Different UIDs indicate separate instances"
-echo "4. Parent PID shows if apps are related"
-echo "========================================"
-
-# Quick status check
-echo -e "\n${BLUE}[*] Quick Status Check:${NC}"
-for app in "${APPS_TO_LAUNCH[@]}"; do
-    if pidof $app &>/dev/null; then
-        echo -e "${GREEN}✓ $app is running${NC}"
-    else
-        echo -e "${RED}✗ $app not detected${NC}"
-    fi
-done
+echo -e "\n${GREEN}[✓] Script completed${NC}"
