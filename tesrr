@@ -1,0 +1,27 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# Simple Roblox Clone Launcher and Detector
+
+echo "Launching Roblox Clone..."
+am start -n com.roblox.clienb/.MainActivity
+
+echo "Waiting 40 seconds..."
+sleep 40
+
+echo "Checking for running application..."
+echo "Method 1 - Direct process check:"
+ps aux | grep -E "(roblox|clienb|client)"
+
+echo -e "\nMethod 2 - Package check:"
+pm list packages | grep roblox
+
+echo -e "\nMethod 3 - Top processes:"
+top -n 1 | grep -i roblox
+
+echo -e "\nMethod 4 - Check all processes:"
+ps -ef | grep -v grep | grep -i roblox
+
+echo -e "\nDone! If nothing shows, the app might be:"
+echo "1. Running in a different user/container"
+echo "2. Using a different process name"
+echo "3. Not actually running"
