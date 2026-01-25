@@ -5,7 +5,7 @@
 # Make executable: chmod +x run_roblox.sh
 
 echo "========================================"
-echo "Roblox Client Clone Runner"
+echo "Roblox Client Clone Runner - Multiple Apps"
 echo "========================================"
 
 # Colors for output
@@ -22,6 +22,9 @@ if ! command -v am &> /dev/null; then
     exit 1
 fi
 
+# Deep link configuration
+DEEP_LINK="roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388"
+
 # Function to find and display running processes
 detect_running_app() {
     echo -e "\n${BLUE}[*] Searching for running processes...${NC}"
@@ -30,12 +33,12 @@ detect_running_app() {
     am stack list 2>/dev/null | grep -i "roblox\|client" || echo "No Roblox found in activity stack"
     
     echo -e "\n${YELLOW}[2] Checking via termux-ps:${NC}"
-    # Try multiple process listing methods
     ps -A 2>/dev/null | grep -i "roblox\|client\|com.roblox" || echo "No Roblox processes found in ps"
     
     echo -e "\n${YELLOW}[3] Checking via pidof:${NC}"
     pidof com.roblox.client 2>/dev/null && echo "Found PID for com.roblox.client"
     pidof com.roblox.clienb 2>/dev/null && echo "Found PID for com.roblox.clienb"
+    pidof com.roblox.clienc 2>/dev/null && echo "Found PID for com.roblox.clienc"
     
     echo -e "\n${YELLOW}[4] Checking all packages with 'roblox' in name:${NC}"
     pm list packages | grep -i roblox
@@ -44,22 +47,44 @@ detect_running_app() {
     am service list 2>/dev/null | grep -i roblox || echo "No Roblox services found"
 }
 
+# Function to launch a specific app
+launch_app() {
+    local app_name=$1
+    local app_package=$2
+    
+    echo -e "\n${GREEN}[+] Launching $app_name...${NC}"
+    echo "Attempting to launch: $app_package with deep link"
+    
+    # Try first method
+    am start -n $app_package/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "$DEEP_LINK" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[✓] $app_name launched successfully${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}[!] First method failed for $app_name, trying alternate...${NC}"
+        # Try alternative launch method
+        am start --user 0 -a android.intent.action.VIEW -d "$DEEP_LINK" -c android.intent.category.LAUNCHER -n $app_package/com.roblox.client.ActivityProtocolLaunch 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}[✓] $app_name launched with alternate method${NC}"
+            return 0
+        else
+            echo -e "${RED}[✗] Failed to launch $app_name${NC}"
+            return 1
+        fi
+    fi
+}
+
 # Main execution
-echo -e "${GREEN}[+] Starting Roblox Client Clone...${NC}"
+echo -e "${GREEN}[+] Starting Roblox Client Clones...${NC}"
 
-# Launch the application with deep link
-echo "Attempting to launch: com.roblox.clienb with deep link"
-am start -n com.roblox.clienb/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d 'roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388' 2>/dev/null
+# Launch both apps
+launch_app "Roblox Clone B" "com.roblox.clienb"
+sleep 2  # Small delay between launches
+launch_app "Roblox Clone C" "com.roblox.clienc"
 
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}[✓] Launch command with deep link sent successfully${NC}"
-else
-    echo -e "${RED}[!] Failed to launch with deep link. Trying alternate method...${NC}"
-    # Try alternative launch method
-    am start --user 0 -a android.intent.action.VIEW -d 'roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388' -c android.intent.category.LAUNCHER -n com.roblox.clienb/com.roblox.client.ActivityProtocolLaunch 2>/dev/null
-fi
-
-echo -e "\n${YELLOW}[*] Waiting 40 seconds for app to initialize...${NC}"
+echo -e "\n${YELLOW}[*] Waiting 40 seconds for apps to initialize...${NC}"
 echo "Countdown:"
 for i in {40..1}
 do
@@ -80,18 +105,21 @@ am stack list tasks 2>/dev/null | grep -i roblox || echo "Not in recent tasks"
 
 # Check for any process with roblox in command line
 echo -e "\n${YELLOW}[7] Checking /proc directory for roblox processes:${NC}"
-find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | head -5
+find /proc -maxdepth 2 -name "cmdline" -exec grep -l "roblox" {} \; 2>/dev/null | head -10
 
-# Try to get detailed package info
+# Try to get detailed package info for both
 echo -e "\n${YELLOW}[8] Package information:${NC}"
-dumpsys package com.roblox.clienb 2>/dev/null | head -20
+echo "--- com.roblox.clienb ---"
+dumpsys package com.roblox.clienb 2>/dev/null | head -10
+echo -e "\n--- com.roblox.clienc ---"
+dumpsys package com.roblox.clienc 2>/dev/null | head -10
 
 echo -e "\n${GREEN}[✓] Detection complete!${NC}"
 echo "========================================"
-echo "Tips:"
-echo "1. The clone might run in a container/sandbox"
-echo "2. Check in your device's Recent Apps"
-echo "3. Some clones use different process names"
+echo "Summary:"
+echo "- Launched both com.roblox.clienb and com.roblox.clienc"
+echo "- Used same deep link for both: $DEEP_LINK"
+echo "- Both apps should open to the same Roblox place"
 echo "========================================"
 
 # Optional: Continuous monitoring
@@ -101,6 +129,7 @@ if [[ $choice == "y" || $choice == "Y" ]]; then
     for ((i=1; i<=10; i++))
     do
         echo -e "\n--- Monitor Cycle $i ---"
+        echo "Processes found:"
         ps -A | grep -i roblox
         sleep 5
     done
