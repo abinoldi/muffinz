@@ -1,222 +1,57 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Extract Roblox User Data from Clone Apps
-echo "========================================"
-echo "Roblox Clone User Data Extractor"
-echo "========================================"
+# Clean Roblox Data Viewer - No Broken Tables
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+echo "════════════════════════════════════════"
+echo "        ROBOX CLONE USER DATA"
+echo "════════════════════════════════════════"
 
-# Check for root
-if ! command -v su &> /dev/null; then
-    echo -e "${RED}Root access required for this script!${NC}"
-    echo "Run: su"
+# Check root
+if ! su -c "id" 2>/dev/null | grep -q "uid=0"; then
+    echo "✗ Need root access!"
     exit 1
 fi
 
-# Extract data from a specific package
-extract_package_data() {
-    local package=$1
-    echo -e "\n${BLUE}=== Extracting from: $package ===${NC}"
-    
-    # Get User ID
-    echo -e "${YELLOW}1. Checking shared preferences...${NC}"
-    
-    # Method 1: Look in shared_prefs
-    SHARED_PREFS="/data/data/$package/shared_prefs"
-    if [ -d "$SHARED_PREFS" ]; then
-        echo "Found shared_prefs directory"
-        
-        # Search for XML files with user data
-        find "$SHARED_PREFS" -name "*.xml" -exec grep -l -i "user\|id\|name\|account\|profile\|token\|auth\|login" {} \; 2>/dev/null | while read xml_file; do
-            echo "File: $(basename $xml_file)"
-            # Extract key data from XML
-            grep -E "<(string|int|long) name=\"(user|id|name|account|username|userId|displayName)\"" "$xml_file" 2>/dev/null | head -5
-        done
-    fi
-    
-    # Method 2: Check databases
-    echo -e "\n${YELLOW}2. Checking databases...${NC}"
-    DATABASES="/data/data/$package/databases"
-    if [ -d "$DATABASES" ]; then
-        for db in "$DATABASES"/*.db "$DATABASES"/*.sqlite; do
-            if [ -f "$db" ]; then
-                echo "Database: $(basename $db)"
-                # Try to query common table names
-                tables=$(su -c "sqlite3 \"$db\" '.tables'" 2>/dev/null)
-                if echo "$tables" | grep -q -i "user\|account\|profile\|auth"; then
-                    echo "Relevant tables: $(echo "$tables" | grep -i "user\|account\|profile\|auth")"
-                    
-                    # Try to get user data
-                    for table in $(echo "$tables" | grep -i "user\|account\|profile"); do
-                        echo "  Table: $table"
-                        su -c "sqlite3 \"$db\" 'SELECT * FROM $table LIMIT 2;'" 2>/dev/null | head -5
-                    done
-                fi
-            fi
-        done
-    fi
-    
-    # Method 3: Check cache and files
-    echo -e "\n${YELLOW}3. Checking cache files...${NC}"
-    CACHE_DIR="/data/data/$package/cache"
-    if [ -d "$CACHE_DIR" ]; then
-        # Look for JSON files (common for user data)
-        find "$CACHE_DIR" -name "*.json" -type f 2>/dev/null | head -3 | while read json_file; do
-            echo "JSON file: $(basename $json_file)"
-            grep -i "username\|userid\|displayname\|user_id" "$json_file" 2>/dev/null | head -3
-        done
-    fi
-    
-    # Method 4: Check lib directory (Unity games store data here)
-    echo -e "\n${YELLOW}4. Checking Unity persistent data...${NC}"
-    PERSISTENT_PATH="/data/data/$package/files"
-    if [ -d "$PERSISTENT_PATH" ]; then
-        find "$PERSISTENT_PATH" -type f -name "*user*" -o -name "*account*" -o -name "*profile*" 2>/dev/null | head -3 | while read user_file; do
-            echo "User file: $(basename $user_file)"
-            # Try to read as text
-            head -c 200 "$user_file" 2>/dev/null | strings | grep -i "user\|id\|name" | head -2
-        done
-    fi
-}
+# Get packages
+PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2")
+COUNT=$(echo "$PACKAGES" | wc -l)
 
-# Main extraction function
-extract_all_users() {
-    echo -e "${GREEN}[*] Searching for Roblox clones...${NC}"
-    
-    # Get all roblox packages
-    PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2")
-    
-    if [ -z "$PACKAGES" ]; then
-        echo -e "${RED}No Roblox packages found!${NC}"
-        return
-    fi
-    
-    echo -e "${GREEN}Found $(echo "$PACKAGES" | wc -l) package(s)${NC}"
-    
-    # Table header
-    echo ""
-    echo "┌──────────────────────────────┬────────────────────┬────────────────────┬────────┐"
-    echo "│ Package                      │ UserId             │ Username           │ State  │"
-    echo "├──────────────────────────────┼────────────────────┼────────────────────┼────────┤"
-    
-    # Process each package
-    for package in $PACKAGES; do
-        # Get package info
-        USER_ID=$(su -c "dumpsys package $package | grep userId | head -1 | awk '{print \$1}' | cut -d= -f2" 2>/dev/null)
-        
-        if [ -z "$USER_ID" ]; then
-            USER_ID="N/A"
-        fi
-        
-        # Try to extract username from shared_prefs
-        USERNAME="Unknown"
-        PREFS_DIR="/data/data/$package/shared_prefs"
-        
-        if [ -d "$PREFS_DIR" ]; then
-            # Look in common Roblox preference files
-            for pref_file in "$PREFS_DIR"/*.xml; do
-                if [ -f "$pref_file" ]; then
-                    # Check for username patterns
-                    NAME=$(grep -oP '(?<=<string name="[^"]*(username|user_name|displayname|display_name)[^"]*">)[^<]+' "$pref_file" 2>/dev/null | head -1)
-                    if [ ! -z "$NAME" ]; then
-                        USERNAME="$NAME"
-                        break
-                    fi
-                fi
-            done
-        fi
-        
-        # Check if app is running
-        if su -c "pidof $package" &>/dev/null; then
-            STATE="running"
-        else
-            STATE="closed"
-        fi
-        
-        # Format output in table
-        printf "│ %-28s │ %-18s │ %-18s │ %-6s │\n" \
-            "$package" \
-            "$USER_ID" \
-            "$USERNAME" \
-            "$STATE"
-    done
-    
-    echo "└──────────────────────────────┴────────────────────┴────────────────────┴────────┘"
-}
-
-# Quick extraction from specific known locations
-quick_extract() {
-    echo -e "\n${GREEN}[*] Quick Data Extraction${NC}"
-    echo "This searches known Roblox data locations..."
-    
-    PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2")
-    
-    for package in $PACKAGES; do
-        echo -e "\n${BLUE}--- $package ---${NC}"
-        
-        # Known Roblox preference files
-        ROBLOX_PREFS=(
-            "RobloxAccountSettings.xml"
-            "com.roblox.client.preferences.xml"
-            "ROBLOX_account.xml"
-            "*.account.*.xml"
-            "user*.xml"
-        )
-        
-        for pref_pattern in "${ROBLOX_PREFS[@]}"; do
-            for pref_file in /data/data/$package/shared_prefs/$pref_pattern; do
-                if [ -f "$pref_file" ]; then
-                    echo "Found: $(basename $pref_file)"
-                    
-                    # Extract common fields
-                    USERNAME=$(grep -oP '(?<=<string name="[^"]*(username|UserName|DisplayName)[^"]*">)[^<]+' "$pref_file" 2>/dev/null)
-                    USER_ID=$(grep -oP '(?<=<string name="[^"]*(userId|UserID|user_id)[^"]*">)[^<]+' "$pref_file" 2>/dev/null)
-                    TOKEN=$(grep -oP '(?<=<string name="[^"]*(token|Token|access_token)[^"]*">)[^<]+' "$pref_file" 2>/dev/null | head -c 20)
-                    
-                    [ ! -z "$USERNAME" ] && echo "  Username: $USERNAME"
-                    [ ! -z "$USER_ID" ] && echo "  User ID: $USER_ID"
-                    [ ! -z "$TOKEN" ] && echo "  Token (partial): ${TOKEN}..."
-                    
-                    # Show all string values
-                    echo "  All stored strings:"
-                    grep '<string name="' "$pref_file" 2>/dev/null | sed 's/.*name="//;s/">/: /;s/<\/string>//' | head -10
-                fi
-            done
-        done
-    done
-}
-
-# Main menu
 echo ""
-echo "1. Extract user data table (like image)"
-echo "2. Quick extraction from known locations"
-echo "3. Deep scan all data locations"
-echo -n "Choose option (1-3): "
-read OPTION
+echo "📦 Found $COUNT Roblox clone(s):"
+echo ""
 
-case $OPTION in
-    1)
-        echo -e "${GREEN}[*] Extracting user table...${NC}"
-        extract_all_users
-        ;;
-    2)
-        quick_extract
-        ;;
-    3)
-        PACKAGES=$(su -c "pm list packages | grep -i roblox | cut -d: -f2")
-        for pkg in $PACKAGES; do
-            extract_package_data "$pkg"
-        done
-        ;;
-    *)
-        echo -e "${RED}Invalid option${NC}"
-        ;;
-esac
-
-echo -e "\n${GREEN}[✓] Extraction complete${NC}"
+# Process each package
+INDEX=0
+for pkg in $PACKAGES; do
+    INDEX=$((INDEX + 1))
+    echo "┌─────────────────────────────────────"
+    echo "│ [$INDEX] $pkg"
+    echo "├─────────────────────────────────────"
+    
+    # User ID
+    USER_ID=$(su -c "dumpsys package $pkg 2>/dev/null | grep 'userId=' | head -1 | awk -F'=' '{print \$2}' | awk '{print \$1}'")
+    echo "│ User ID:    ${USER_ID:-Not found}"
+    
+    # Username
+    USERNAME="Not found"
+    for xml in /data/data/$pkg/shared_prefs/*.xml 2>/dev/null; do
+        if [ -f "$xml" ]; then
+            NAME=$(su -c "grep -o '>[^<>][^<>]*</string>' \"$xml\" 2>/dev/null | sed 's/>//;s/<\/string>//' | grep -v -E '^(true|false|[0-9.]+)$' | head -1")
+            if [ ! -z "$NAME" ]; then
+                USERNAME="$NAME"
+                break
+            fi
+        fi
+    done
+    echo "│ Username:   $USERNAME"
+    
+    # State
+    if su -c "pidof $pkg" 2>/dev/null; then
+        echo "│ State:      ✅ RUNNING"
+    else
+        echo "│ State:      ❌ CLOSED"
+    fi
+    
+    echo "└─────────────────────────────────────"
+    echo ""
+done
