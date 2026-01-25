@@ -24,9 +24,10 @@ if ! command -v am &> /dev/null; then
 fi
 
 # Configuration
+# Configuration
 DEEP_LINK="roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388"
-APPS_TO_LAUNCH=("com.roblox.clienb" "com.roblox.clienc", "com.roblox.cliend", "com.roblox.cliene")
-APP_NAMES=("Roblox Clone B" "Roblox Clone C")
+APPS_TO_LAUNCH=("com.roblox.clienb" "com.roblox.clienc" "com.roblox.cliend" "com.roblox.cliene")
+APP_NAMES=("Roblox Clone B" "Roblox Clone C" "Roblox Clone D" "Roblox Clone E")
 
 # ========== LAUNCH FUNCTIONS ==========
 launch_app() {
