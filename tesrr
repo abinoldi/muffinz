@@ -56,7 +56,7 @@ if [ $? -eq 0 ]; then
 else
     echo -e "${RED}[!] Failed to launch. Trying alternate method...${NC}"
     # Try alternative launch method
-    am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.roblox.clienb/.MainActivity 2>/dev/null
+    am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n com.roblox.clienb/com.roblox.client.ActivityProtocolLaunch 2>/dev/null
 fi
 
 echo -e "\n${YELLOW}[*] Waiting 40 seconds for app to initialize...${NC}"
