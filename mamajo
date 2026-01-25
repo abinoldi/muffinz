@@ -1,0 +1,262 @@
+#!/usr/bin/env node
+const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const readline = require("readline");
+
+// --- CONFIGURATION ---
+const LAUNCH_URL = "roblox://placeID=121864768012064&linkCode=15722060451108192164607998273789";
+const LAUNCH_DELAY_MS = 8000; // 8 seconds delay between opening apps initially
+// ---------------------
+
+// 1. Auto-install dependencies
+function ensurePackage(pkg) {
+  try {
+    require.resolve(pkg);
+  } catch {
+    console.log(`📦 Installing ${pkg}...`);
+    try {
+      execSync(`npm install ${pkg}`, { stdio: "inherit" });
+    } catch (e) {
+      process.exit(1);
+    }
+  }
+}
+
+["axios", "cli-table3"].forEach(ensurePackage);
+
+const axios = require("axios");
+const Table = require("cli-table3");
+
+// Termux Paths
+const TERMUX_PREFIX = "/data/data/com.termux/files/usr/bin";
+const NODE_PATH = `${TERMUX_PREFIX}/node`;
+const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
+
+// 2. Root Check
+function ensureRoot() {
+  try {
+    const uid = execSync("id -u").toString().trim();
+    if (uid !== "0") {
+      console.log("⚠️  Root permission required.");
+      const nodeExecutable = fs.existsSync(NODE_PATH) ? NODE_PATH : "node";
+      execSync(`su -c "${nodeExecutable} ${__filename}"`, { stdio: "inherit" });
+      process.exit(0);
+    }
+  } catch (e) {
+    process.exit(1);
+  }
+}
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const ask = (q) => new Promise(r => {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question(q, (ans) => { rl.close(); r(ans); });
+});
+
+// 3. Helpers
+function getPackages() {
+  try {
+    const raw = execSync("pm list packages | grep roblox", { encoding: "utf8" });
+    return raw.split("\n")
+      .filter(l => l.trim() !== "")
+      .map(l => l.replace("package:", "").trim());
+  } catch { return []; }
+}
+
+function getRobloxCookie(packageName) {
+  try {
+    const cookiesPath = `/data/data/${packageName}/app_webview/Default/Cookies`;
+    const tempPath = `/sdcard/temp_cookie_${packageName}_${Date.now()}.db`;
+    execSync(`cp "${cookiesPath}" "${tempPath}"`);
+    
+    const sqliteCmd = fs.existsSync(SQLITE_PATH) ? SQLITE_PATH : "sqlite3";
+    const query = `${sqliteCmd} "${tempPath}" "SELECT value FROM cookies WHERE name = '.ROBLOSECURITY' LIMIT 1"`;
+    let cookie = execSync(query).toString().trim();
+    
+    execSync(`rm "${tempPath}"`);
+    if (cookie && !cookie.startsWith("_")) cookie = "_" + cookie;
+    return cookie ? `.ROBLOSECURITY=${cookie}` : null;
+  } catch { return null; }
+}
+
+async function getUserInfo(cookie) {
+  if (!cookie) return { id: null, name: "No Cookie" };
+  try {
+    const res = await axios.get("https://users.roblox.com/v1/users/authenticated", {
+      headers: { Cookie: cookie, "User-Agent": "Mozilla/5.0 (Android 10; Mobile)" }
+    });
+    return { id: res.data.id, name: res.data.name };
+  } catch { return { id: null, name: "Expired" }; }
+}
+
+function isProcessRunning(packageName) {
+  try {
+    execSync(`pidof ${packageName}`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getPresence(userId, cookie) {
+  if (!userId || !cookie) return "Unknown ❓";
+  try {
+    const res = await axios.post("https://presence.roblox.com/v1/presence/users", 
+      { userIds: [userId] },
+      { headers: { Cookie: cookie, "Content-Type": "application/json" } }
+    );
+    const p = res.data.userPresences[0];
+    if (!p) return "Unknown ❓";
+    if (p.userPresenceType === 2) return `In Game 🎮`;
+    if (p.userPresenceType === 1) return "Online 🟡";
+    if (p.userPresenceType === 0) return "Offline ⚫";
+    return `Type ${p.userPresenceType}`;
+  } catch { return "API Error ⚠️"; }
+}
+
+function stopPackage(pkg) {
+  try { execSync(`am force-stop ${pkg}`); } catch {}
+}
+
+function launchPackage(pkg, url) {
+  try {
+    const activity = `${pkg}/com.roblox.client.ActivityProtocolLaunch`;
+    const cmd = `am start -n ${activity} -a android.intent.action.VIEW -d "${url}"`;
+    execSync(cmd, { stdio: 'ignore' });
+  } catch (e) {
+    console.log(`Failed to launch ${pkg}`);
+  }
+}
+
+// 4. Initial Setup (Used by both modes)
+async function setupAccounts() {
+  console.log("🔍 Scanning packages...");
+  const packages = getPackages();
+  if (packages.length === 0) { console.log("❌ No Roblox packages found."); process.exit(0); }
+
+  let accounts = [];
+  for (const pkg of packages) {
+    process.stdout.write(`Reading ${pkg}... \r`);
+    const cookie = getRobloxCookie(pkg);
+    const userInfo = await getUserInfo(cookie);
+    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
+  }
+  console.log(`\n✅ Loaded ${accounts.length} accounts.\n`);
+  return accounts;
+}
+
+// 5. Shared Launch Sequence
+async function runLaunchSequence(accounts) {
+  console.log("🛑 Stopping all instances...");
+  for (const acc of accounts) stopPackage(acc.pkg);
+  await sleep(2000);
+
+  console.log("🚀 Launching instances...");
+  for (const acc of accounts) {
+    console.log(`   Launching ${acc.pkg}...`);
+    launchPackage(acc.pkg, LAUNCH_URL);
+    await sleep(LAUNCH_DELAY_MS); 
+  }
+}
+
+// === MODE 1: CONTINUOUS MONITOR & REOPEN ===
+async function runContinuousMode(accounts) {
+  const delayInput = await ask("⏱️  Set monitor delay (seconds) [Default: 30]: ");
+  const delayMs = (parseInt(delayInput) || 30) * 1000;
+
+  await runLaunchSequence(accounts);
+
+  console.log(`\n👀 Monitoring started. Checking every ${delayMs/1000}s...`);
+  console.log("💡 If an app crashes (FC), it will be auto-reopened.");
+
+  while (true) {
+    console.log(`\n⏳ Waiting ${delayMs/1000}s...`);
+    await sleep(delayMs);
+
+    console.clear();
+    console.log(`📊 Live Status (${new Date().toLocaleTimeString()})`);
+    
+    const table = new Table({
+      head: ['User', 'App PID', 'Server Presence', 'Action'],
+      style: { head: ['cyan'] },
+      colWidths: [15, 15, 20, 20]
+    });
+
+    for (const acc of accounts) {
+      let isRunning = isProcessRunning(acc.pkg);
+      let action = "-";
+
+      // AUTO-REOPEN LOGIC
+      if (!isRunning) {
+        action = "♻️ REOPENING...";
+        launchPackage(acc.pkg, LAUNCH_URL);
+        // Small wait to let it start before next check (optional, affects loop speed)
+      }
+
+      const serverState = await getPresence(acc.userId, acc.cookie);
+      
+      table.push([
+        acc.username.substring(0, 12),
+        isRunning ? "Running 🟢" : "Closed 🔴",
+        serverState,
+        action
+      ]);
+    }
+    console.log(table.toString());
+  }
+}
+
+// === MODE 2: RUN ONCE ===
+async function runOnceMode(accounts) {
+  await runLaunchSequence(accounts);
+
+  console.log(`⏳ Waiting 45s for games to load...`);
+  await sleep(45000);
+
+  console.log("\n📊 Final Status Report:");
+  const table = new Table({
+    head: ['User', 'App PID', 'Server Presence'],
+    style: { head: ['cyan'] },
+    colWidths: [15, 20, 25]
+  });
+
+  for (const acc of accounts) {
+    const isRunning = isProcessRunning(acc.pkg);
+    const serverState = await getPresence(acc.userId, acc.cookie);
+    
+    table.push([
+      acc.username.substring(0, 12),
+      isRunning ? "Running 🟢" : "Closed 🔴",
+      serverState
+    ]);
+  }
+  console.log(table.toString());
+  console.log("\n✅ Done. Exiting.");
+  process.exit(0);
+}
+
+// === MAIN MENU ===
+async function main() {
+  ensureRoot();
+  console.clear();
+  
+  const accounts = await setupAccounts();
+
+  console.log("🔰 Select Mode:");
+  console.log("1. Run All + Continuous Monitoring (Auto-Reopen if FC)");
+  console.log("2. Run All + Check Once (Exit after 45s)");
+  
+  const choice = await ask("\n👉 Enter choice (1 or 2): ");
+
+  if (choice.trim() === "1") {
+    await runContinuousMode(accounts);
+  } else if (choice.trim() === "2") {
+    await runOnceMode(accounts);
+  } else {
+    console.log("❌ Invalid choice.");
+    process.exit(1);
+  }
+}
+
+main();
