@@ -3,29 +3,29 @@
 -- ======================================================
 local MasterConfig = {
     -- [FISHING SETTINGS]
-    FishingEnabled = true,           -- Langsung mulai memancing saat script di-load
-    AutoEquip = true,                -- Otomatis spam equip alat pancing
-    [cite_start]CatchDelay = 1.5,                -- STRICT 1.5s delay [cite: 2]
-    AutoSell = true,                 -- Otomatis jual ikan
-    SellDelay = 65,                  -- [BARU] Jeda waktu (detik) antar auto-sell
-    AutoFavorite = true,             -- Otomatis kunci Ruby, Leviathan, & Rage
+    FishingEnabled = true,      -- Langsung mulai memancing saat script di-load
+    AutoEquip = true,           -- Otomatis spam equip alat pancing
+    CatchDelay = 1.5,           -- STRICT 1.5s delay
+    AutoSell = true,            -- Otomatis jual ikan
+    SellDelay = 65,             -- Jeda waktu (detik) antar auto-sell
+    AutoFavorite = true,        -- Otomatis kunci Ruby, Leviathan, & Rage
 
     -- [TELEPORT SETTINGS]
-    [cite_start]AutoTeleport = true,             -- Teleport otomatis saat script mulai [cite: 3]
-    SelectedLocation = "Crater Island", -- Ganti nama lokasi di sini
+    AutoTeleport = true,        -- Teleport otomatis saat script mulai
+    SelectedLocation = "Crater Island",
 
     -- [UTILITIES]
-    AutoTotem = true,                -- Pasang Mutation Totem otomatis tiap 63 menit
-    PotatoMode = true,               -- Mode Invisible/Low Graphic Extreme
+    AutoTotem = true,           -- Pasang Mutation Totem otomatis tiap 63 menit
+    PotatoMode = true,          -- Mode Invisible / Low Graphic Extreme
     
     -- [TRADING]
-    [cite_start]AutoTrade = false,               -- Fitur kirim ikan otomatis ke akun lain [cite: 4]
-    TargetUsername = "mm3kenak",     -- Nama target untuk trade
-    TradeMode = "SECRETS_FIRST",     -- Mode: SECRETS_FIRST, RUBY_GEMSTONE, ALL
-    TradeDelay = 6.5,                -- Jeda antar trade
+    AutoTrade = false,          -- Kirim ikan otomatis ke akun lain
+    TargetUsername = "mm3kenak",
+    TradeMode = "SECRETS_FIRST", -- SECRETS_FIRST | RUBY_GEMSTONE | ALL
+    TradeDelay = 6.5,           -- Jeda antar trade
 
     -- [WEBHOOK]
-    [cite_start]WebhookEnabled = true,           -- Mengirim data inventory ke server [cite: 5]
+    WebhookEnabled = true,      
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
