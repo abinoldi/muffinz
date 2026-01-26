@@ -188,10 +188,18 @@ async function runContinuousMode(accounts) {
       let action = "-";
 
       // AUTO-REOPEN LOGIC
-      if (!isRunning) {
-        action = "♻️ REOPENING...";
+      // STRICT AUTO-REOPEN LOGIC
+      // Restart if Closed OR if Running but NOT In-Game (Stuck in Menu)
+      // Make sure your loop delay is > 45 seconds!
+      if (!isRunning || (serverState.includes("Online") && !serverState.includes("In Game"))) {
+        if (isRunning) {
+             stopPackage(acc.pkg); // Force kill first if it's stuck open
+             action = "💀 STUCK -> RESTARTING...";
+        } else {
+             action = "♻️ CRASHED -> REOPENING...";
+        }
+        
         launchPackage(acc.pkg, LAUNCH_URL);
-        // Small wait to let it start before next check (optional, affects loop speed)
       }
 
       const serverState = await getPresence(acc.userId, acc.cookie);
