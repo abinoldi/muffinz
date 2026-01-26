@@ -1,11 +1,11 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: WEB CONFIG AUTO-UPDATE
+-- # ULTIMATE HUB: FINAL FIXED (INVENTORY SYNC)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
-local OnlineConfigUrl = "http://165.232.148.115:5000/config.json" -- < GANTI DENGAN LINK WEB KAMU
+local OnlineConfigUrl = "https://example.com/config.json" -- < GANTI DENGAN LINK WEB KAMU
 
 local Services = {
     Players = game:GetService("Players"),
@@ -40,7 +40,7 @@ local MasterConfig = {
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
--- STATE TRACKING (Untuk mendeteksi perubahan on/off)
+-- STATE TRACKING
 local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
 local TradingState = { IsTrading = false, Thread = nil }
 local FishingThreads = {}
@@ -54,43 +54,36 @@ local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
 
     local success, response = pcall(function()
-        return game:HttpGet(OnlineConfigUrl, true) -- true = CacheBuster (No Cache)
+        return game:HttpGet(OnlineConfigUrl, true) -- true = CacheBuster
     end)
 
     if success then
         local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
         if decodeSuccess then
-            -- print("[Config] Web config synced!")
             local settingsChanged = false
-            
             for key, value in pairs(decodedData) do
                 if MasterConfig[key] ~= value then
                     MasterConfig[key] = value
                     settingsChanged = true
-                    -- print("   > Updated:", key, value)
                 end
             end
 
-            -- LOGIKA DYNAMIC SWITCHING (Jika setting berubah saat script jalan)
+            -- DYNAMIC SWITCHING
             if settingsChanged then
-                -- 1. Handle Fishing Toggle
                 if MasterConfig.FishingEnabled and not FishingState.IsFishing then
                     task.spawn(StartFishingV1)
                 elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then
                     StopFishingV1()
                 end
 
-                -- 2. Handle AutoTrade Toggle
                 if MasterConfig.AutoTrade and not TradingState.IsTrading then
                     task.spawn(RunAutoTrade)
                 elseif not MasterConfig.AutoTrade and TradingState.IsTrading then
-                    TradingState.IsTrading = false -- Loop trade akan berhenti sendiri karena cek MasterConfig
+                    TradingState.IsTrading = false
                     if TradingState.Thread then task.cancel(TradingState.Thread) end
                 end
             end
         end
-    else
-        warn("[Config] Connection failed, retrying in 60s...")
     end
 end
 
@@ -128,14 +121,12 @@ local FishingLocations = {
 -- ===============================
 -- GLOBAL SERVICES & BYPASSES
 -- ===============================
--- ANTI-AFK
 pcall(function()
     for i, v in pairs(getconnections(lp.Idled)) do
         if v.Disable then v:Disable() end
     end
 end)
 
--- CLIENT BYPASSES (REQUIRED FOR V1 FISHING)
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(Services.ReplicatedStorage.Controllers.FishingController) end)
     if S1 and FishingController then
@@ -212,9 +203,9 @@ local function GetMutation(item)
 end
 
 -- ===============================
--- DISCORD WEBHOOK LOGIC
+-- DISCORD WEBHOOK LOGIC (NO PRICE CALC)
 -- ===============================
-local function SendDiscordSecretNotification(fishName, rarity, mutation, weight, sellPrice)
+local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
     if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end
     if not req then return end
     
@@ -234,8 +225,7 @@ local function SendDiscordSecretNotification(fishName, rarity, mutation, weight,
                     { name = "Ikan", value = "**" .. fishName .. "**", inline = true },
                     { name = "Rarity", value = "`" .. rarity .. "`", inline = true },
                     { name = "Mutasi", value = "`" .. mutationText .. "`", inline = true },
-                    { name = "Berat", value = "`" .. string.format("%.2fkg", weight or 0) .. "`", inline = true },
-                    { name = "Estimasi Harga", value = "`$" .. math.floor(sellPrice or 0) .. "`", inline = true }
+                    { name = "Berat", value = "`" .. string.format("%.2fkg", weight or 0) .. "`", inline = true }
                 },
                 footer = { text = "Ultimate Hub - Webhak Enok" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -328,7 +318,7 @@ local function RunInstantFish()
     local s1 = pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
     if not s1 then return end
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
-    task.wait(MasterConfig.CatchDelay) -- Uses LIVE MasterConfig value
+    task.wait(MasterConfig.CatchDelay) -- LIVE Config
     pcall(function() RE_FishingCompleted:FireServer() end)
     task.wait(0.3)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
@@ -360,7 +350,7 @@ function StartFishingV1()
                 local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
             end
-            task.wait(MasterConfig.SellDelay) -- Uses LIVE MasterConfig value
+            task.wait(MasterConfig.SellDelay) -- LIVE Config
         end
     end))
     
@@ -396,7 +386,6 @@ function StopFishingV1()
     FishingState.IsFishing = false
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-    -- Threads will die naturally because 'while FishingState.IsFishing' becomes false
     FishingThreads = {}
 end
 
@@ -512,9 +501,7 @@ function RunAutoTrade()
     TradingState.Thread = task.spawn(function()
         while MasterConfig.AutoTrade and TradingState.IsTrading do
             local secrets, specialMutations = ScanInventoryForTrade()
-            if #secrets == 0 and #specialMutations == 0 then
-                 -- Don't break loop, just wait for fish
-            else
+            if #secrets > 0 or #specialMutations > 0 then
                 local tradeUUID = nil
                 if MasterConfig.TradeMode == "SECRETS_FIRST" then
                     if #secrets > 0 then tradeUUID = secrets[1].uuid
@@ -619,6 +606,25 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
+-- FUNCTION TO INITIALIZE TOTAL SECRETS
+local function UpdateTotalSecretsFromInventory()
+    local count = 0
+    local inv = PlayerData:Get("Inventory")
+    if inv then
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                 local _, r = GetFishNameAndRarity(item)
+                 if tostring(r):upper() == "SECRET" then
+                     count = count + 1
+                 end
+            end
+        end
+    end
+    TotalSecretsFound = count
+    secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
+    print("[Inventory] Found " .. count .. " existing secrets.")
+end
+
 -- TRADE MONITOR LOOP
 task.spawn(function()
     while gui.Parent do
@@ -648,17 +654,19 @@ task.spawn(function()
     end
 end)
 
--- REMOTE LISTENER & COUNTER LOGIC
+-- REMOTE LISTENER & COUNTER LOGIC (SAFE MODE: NO PRICE CALC)
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
+        -- Update Counter
         TotalFishCaught = TotalFishCaught + 1
         local elapsed = os.time() - SessionStartTime
         if elapsed < 60 then elapsed = 60 end
         local fpm = TotalFishCaught / (elapsed / 60)
         fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
 
+        -- Safe Logic (Protected)
         task.spawn(function()
             if not item then return end
             
@@ -672,6 +680,7 @@ if RE_ObtainedNewFishNotification then
                 isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
             end)
             
+            -- Update Grid
             if not FishSessionMap[displayName] then
                 FishSessionMap[displayName] = 1
                 local itemFrame = Instance.new("Frame", scrollFrame)
@@ -694,17 +703,14 @@ if RE_ObtainedNewFishNotification then
                 end
             end
 
+            -- Webhook logic (Safe, No price)
             if isSecret then
                 TotalSecretsFound = TotalSecretsFound + 1
                 secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
                 
                 if MasterConfig.DiscordWebhookEnabled then
-                    local weight = item.Metadata and item.Metadata.Weight or 0
-                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
-                    local itemData = ItemUtility:GetItemData(numericID)
-                    local basePrice = itemData and itemData.SellPrice or 0
-                    local sellPrice = basePrice * (item.Metadata.SellMultiplier or 1)
-                    SendDiscordSecretNotification(name, rarity, mutation, weight, sellPrice)
+                    local weight = (item.Metadata and item.Metadata.Weight) or 0
+                    SendDiscordSecretNotification(name, rarity, mutation, weight)
                 end
             end
         end)
@@ -785,10 +791,14 @@ end
 -- AUTO-START EXECUTION
 -- ===============================
 task.delay(2, function()
-    print("[AutoStart] Black Edition Loaded with Dynamic Config...")
+    print("[AutoStart] Black Edition Loaded with Dynamic Config (Safe Mode)...")
+    
+    -- [BARU] Hitung Ikan Secret di Awal
+    pcall(UpdateTotalSecretsFromInventory)
+
     if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
-          req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Black Monitor Online (Dynamic)**" }) })
+          req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Safe Monitor Online (No Price)**" }) })
        end)
     end
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
