@@ -2,17 +2,17 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const readline = require("readline");
+const os = require("os"); // Import OS module for system stats
 
 // --- CONFIGURATION ---
 const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
-const PLACE_ID = "121864768012064"; // Fixed Place ID for the game
-const MIN_DELAY_SECONDS = 60; // Anti-lag delay
+const PLACE_ID = "121864768012064"; 
+const CHECK_INTERVAL = 60; // Check every 60 seconds
+const RESTART_COOLDOWN = 300; // Wait 300s (5 mins) before restarting the SAME app again
 // ---------------------
 
-// Auto-install dependencies
 function ensurePackage(pkg) {
   try { require.resolve(pkg); } catch {
-    console.log(`📦 Installing ${pkg}...`);
     try { execSync(`npm install ${pkg}`, { stdio: "inherit" }); } catch (e) { process.exit(1); }
   }
 }
@@ -21,17 +21,17 @@ function ensurePackage(pkg) {
 const axios = require("axios");
 const Table = require("cli-table3");
 
-// Termux Paths
 const TERMUX_PREFIX = "/data/data/com.termux/files/usr/bin";
 const NODE_PATH = `${TERMUX_PREFIX}/node`;
 const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 
-// Root & Wake Lock
+// Track restart times to prevent loops
+let lastRestartMap = {}; 
+
 function initSystem() {
   try {
     const uid = execSync("id -u").toString().trim();
     if (uid !== "0") {
-      console.log("⚠️  Root required. Switching...");
       const node = fs.existsSync(NODE_PATH) ? NODE_PATH : "node";
       execSync(`su -c "${node} ${__filename}"`, { stdio: "inherit" });
       process.exit(0);
@@ -46,7 +46,6 @@ const ask = (q) => new Promise(r => {
   rl.question(q, (ans) => { rl.close(); r(ans); });
 });
 
-// Helpers
 function getPackages() {
   try {
     return execSync("pm list packages | grep roblox", { encoding: "utf8" })
@@ -78,8 +77,20 @@ async function getUserInfo(cookie) {
   } catch { return { id: null, name: "Expired" }; }
 }
 
-function isProcessRunning(packageName) {
-  try { execSync(`pidof ${packageName}`, { stdio: 'ignore' }); return true; } catch { return false; }
+function getRunningPackagesSnapshot(packages) {
+  let runningStatus = {};
+  packages.forEach(p => runningStatus[p] = false);
+  try {
+    const raw = execSync("ps -A -o NAME", { encoding: "utf8" });
+    packages.forEach(pkg => {
+      if (raw.includes(pkg)) runningStatus[pkg] = true;
+    });
+  } catch (e) {
+    packages.forEach(pkg => {
+      try { execSync(`pidof ${pkg}`, { stdio: 'ignore' }); runningStatus[pkg] = true; } catch { runningStatus[pkg] = false; }
+    });
+  }
+  return runningStatus;
 }
 
 function stopPackage(pkg) { try { execSync(`am force-stop ${pkg}`); } catch {} }
@@ -112,26 +123,46 @@ async function getBatchPresence(accounts) {
   } catch { return {}; }
 }
 
-// === NEW: Fetch Link Codes ===
 async function fetchLinkCodes() {
-  console.log("🌐 Fetching Private Server codes...");
+  console.log("🌐 Fetching codes...");
   try {
     const res = await axios.get(MSRV_URL);
-    // Split by newline and filter empty lines
     return res.data.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  } catch (e) {
-    console.log("❌ Failed to fetch codes. Check internet connection.");
-    return [];
-  }
+  } catch (e) { return []; }
+}
+
+// === SYSTEM STATS HELPER ===
+function getSystemStats() {
+  const cpus = os.cpus();
+  const idle = cpus.reduce((acc, cpu) => acc + cpu.times.idle, 0);
+  const total = cpus.reduce((acc, cpu) => {
+    return acc + cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.idle;
+  }, 0);
+  const cpuUsage = (100 - (idle / total) * 100).toFixed(1);
+
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+
+  const totalGB = (totalMem / (1024 ** 3)).toFixed(2);
+  const usedGB = (usedMem / (1024 ** 3)).toFixed(2);
+  
+  const uptimeHrs = Math.floor(os.uptime() / 3600);
+  const uptimeMins = Math.floor((os.uptime() % 3600) / 60);
+
+  return {
+    cpu: `${cpuUsage}%`,
+    ram: `${usedGB} GB / ${totalGB} GB`,
+    uptime: `${uptimeHrs}h ${uptimeMins}m`
+  };
 }
 
 // === MAIN LOGIC ===
 async function main() {
   initSystem();
   console.clear();
-  console.log("🚀 Initializing Roblox Manager...");
+  console.log("🚀 Initializing Ultra-Lite Manager...");
 
-  // 1. Fetch Packages
   const packages = getPackages();
   if (!packages.length) { console.log("❌ No Roblox packages found."); process.exit(0); }
 
@@ -141,77 +172,77 @@ async function main() {
     const cookie = getRobloxCookie(pkg);
     const userInfo = await getUserInfo(cookie);
     accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
+    lastRestartMap[pkg] = 0;
   }
   console.log(`\n✅ Loaded ${accounts.length} accounts.`);
 
-  // 2. Fetch & Choose Link Code
   const codes = await fetchLinkCodes();
-  if (codes.length === 0) {
-    console.log("⚠️ No codes found in the file. Exiting.");
-    process.exit(1);
-  }
+  if (codes.length === 0) { console.log("⚠️ No codes found."); process.exit(1); }
 
-  console.log("\n📜 Available Link Codes:");
-  codes.forEach((code, index) => {
-    console.log(`[${index + 1}] ${code}`);
-  });
-
-  const selection = await ask("\n👉 Choose Server (Number): ");
+  console.log("\n📜 Available Codes:");
+  codes.forEach((code, index) => console.log(`[${index + 1}] ${code}`));
+  const selection = await ask("\n👉 Choose: ");
   const index = parseInt(selection) - 1;
-  
-  if (isNaN(index) || index < 0 || index >= codes.length) {
-    console.log("❌ Invalid selection. Exiting.");
-    process.exit(1);
-  }
+  if (isNaN(index) || index < 0 || index >= codes.length) process.exit(1);
 
-  const selectedCode = codes[index];
-  // Construct the full URL using the fixed Place ID and selected Code
-  // Assumes the file contains just the code (e.g., 157220...) OR full link.
-  // We extract just the code if it's a full link to be safe, or just use it if it's raw.
-  let cleanCode = selectedCode;
-  if(selectedCode.includes("linkCode=")) {
-     cleanCode = selectedCode.split("linkCode=")[1].split("&")[0];
-  }
-  
+  let cleanCode = codes[index];
+  if(cleanCode.includes("linkCode=")) cleanCode = cleanCode.split("linkCode=")[1].split("&")[0];
   const finalLaunchUrl = `roblox://placeID=${PLACE_ID}&linkCode=${cleanCode}`;
-  console.log(`\n✅ Selected Code: ${cleanCode}`);
 
-  // 3. Initial Launch
   console.log("\n🚀 Launching all instances...");
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     launchPackage(acc.pkg, finalLaunchUrl);
+    lastRestartMap[acc.pkg] = Date.now();
     await sleep(8000);
   }
 
-  // 4. Continuous Mode (Default)
-  console.log(`\n💤 Monitoring started (Checking every ${MIN_DELAY_SECONDS}s)...`);
+  console.log(`\n💤 Monitor active (Check every ${CHECK_INTERVAL}s)...`);
   
   while (true) {
-    await sleep(MIN_DELAY_SECONDS * 1000);
+    await sleep(CHECK_INTERVAL * 1000);
 
+    const runningStatus = getRunningPackagesSnapshot(packages);
     const presenceMap = await getBatchPresence(accounts);
+    
     console.clear(); 
-    console.log(`📊 Status (${new Date().toLocaleTimeString()}) - Active Monitor`);
-    console.log(`🔗 Server: ...${cleanCode.slice(-6)}`);
+    
+    // --- DISPLAY SYSTEM STATS ---
+    const stats = getSystemStats();
+    console.log(`📱 SYSTEM HEALTH`);
+    const sysTable = new Table({ head: ['CPU Usage', 'RAM Usage', 'Uptime'], colWidths: [15, 25, 15] });
+    sysTable.push([stats.cpu, stats.ram, stats.uptime]);
+    console.log(sysTable.toString());
+    console.log(""); // Empty line
+    // ----------------------------
+
+    console.log(`📊 ACCOUNT STATUS (${new Date().toLocaleTimeString()}) - Code: ...${cleanCode.slice(-4)}`);
 
     const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
+    const now = Date.now();
 
     for (const acc of accounts) {
-      const isRunning = isProcessRunning(acc.pkg);
+      const isRunning = runningStatus[acc.pkg];
       const serverStatus = presenceMap[acc.userId] || "Unknown";
       let action = "-";
 
-      const isStuck = serverStatus.includes("Online"); // Stuck in menu
-      
+      const isStuck = serverStatus.includes("Online");
+      const timeSinceRestart = (now - lastRestartMap[acc.pkg]) / 1000;
+      const onCooldown = timeSinceRestart < RESTART_COOLDOWN;
+
       if (!isRunning || isStuck) {
-        if (isRunning && isStuck) {
-          stopPackage(acc.pkg);
-          action = "♻️ RESTART (Stuck)";
+        if (onCooldown) {
+          action = `⏳ Loading (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
         } else {
-          action = "♻️ REOPEN (Closed)";
+          if (isRunning && isStuck) {
+            stopPackage(acc.pkg);
+            action = "♻️ RESTART (Stuck)";
+          } else {
+            action = "♻️ REOPEN (Closed)";
+          }
+          launchPackage(acc.pkg, finalLaunchUrl);
+          lastRestartMap[acc.pkg] = now;
         }
-        launchPackage(acc.pkg, finalLaunchUrl);
       }
 
       table.push([acc.username.substring(0, 10), isRunning ? "Run 🟢" : "Dead 🔴", serverStatus, action]);
