@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: CONFIGURATION (FINAL BLACK EDITION)
+-- # ULTIMATE HUB: BLACK EDITION (FIXED COUNTER)
 -- ======================================================
 local MasterConfig = {
     -- [FISHING SETTINGS]
@@ -567,68 +567,76 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
-local function UpdateUI(name, rarity, isSecret)
-    -- Global Stats
-    TotalFishCaught = TotalFishCaught + 1
-    local elapsedMin = (os.time() - SessionStartTime) / 60
-    if elapsedMin == 0 then elapsedMin = 1 end
-    local fpm = TotalFishCaught / elapsedMin
-    
-    fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
-    
-    -- Grid Update
-    if not FishSessionMap[name] then
-        FishSessionMap[name] = 1
-        local itemFrame = Instance.new("Frame", scrollFrame)
-        itemFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        itemFrame.BorderSizePixel = 0
-        
-        local txt = Instance.new("TextLabel", itemFrame)
-        txt.Size = UDim2.new(1,0,1,0)
-        txt.BackgroundTransparency = 1
-        txt.TextColor3 = isSecret and Color3.new(1,0,0) or Color3.new(0.7,0.7,0.7)
-        txt.TextScaled = true
-        txt.Text = name .. " x1"
-        txt.Name = "Lbl"
-        itemFrame.Name = name
-    else
-        FishSessionMap[name] = FishSessionMap[name] + 1
-        local f = scrollFrame:FindFirstChild(name)
-        if f and f:FindFirstChild("Lbl") then
-            f.Lbl.Text = name .. " x" .. FishSessionMap[name]
-        end
-    end
-
-    if isSecret then
-        TotalSecretsFound = TotalSecretsFound + 1
-        secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
-    end
-end
-
--- REMOTE LISTENER
+-- REMOTE LISTENER & COUNTER LOGIC (FIXED)
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
-        local name, rarity = GetFishNameAndRarity(item)
-        local mutation = GetMutation(item)
-        local displayName = name
-        if mutation and mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
-        local isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
+        -- [FIX] Counter naik DULUAN sebelum proses data lain
+        TotalFishCaught = TotalFishCaught + 1
         
-        UpdateUI(displayName, rarity, isSecret)
+        -- Update Label Ikan Segera
+        local elapsed = os.time() - SessionStartTime
+        if elapsed < 60 then elapsed = 60 end -- Avoid div by zero visual
+        local fpm = TotalFishCaught / (elapsed / 60)
+        fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
 
-        -- Discord Webhook Hook
-        if MasterConfig.DiscordWebhookEnabled and isSecret then
-            task.spawn(function()
-                local weight = item.Metadata and item.Metadata.Weight or 0
-                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
-                local itemData = ItemUtility:GetItemData(numericID)
-                local basePrice = itemData and itemData.SellPrice or 0
-                local sellPrice = basePrice * (item.Metadata.SellMultiplier or 1)
-                SendDiscordSecretNotification(name, rarity, mutation, weight, sellPrice)
+        -- Proses Data Ikan (Dibungkus pcall agar error tidak mematikan script)
+        task.spawn(function()
+            if not item then return end
+            
+            local name, rarity, mutation, displayName, isSecret = "Unknown", "Common", "None", "Unknown", false
+            
+            pcall(function()
+                name, rarity = GetFishNameAndRarity(item)
+                mutation = GetMutation(item)
+                displayName = name
+                if mutation and mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
+                isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
             end)
-        end
+            
+            -- Update Grid UI
+            if not FishSessionMap[displayName] then
+                FishSessionMap[displayName] = 1
+                local itemFrame = Instance.new("Frame", scrollFrame)
+                itemFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+                itemFrame.BorderSizePixel = 0
+                itemFrame.Name = displayName -- Key
+                
+                local txt = Instance.new("TextLabel", itemFrame)
+                txt.Size = UDim2.new(1,0,1,0)
+                txt.BackgroundTransparency = 1
+                txt.TextColor3 = isSecret and Color3.new(1,0,0) or Color3.new(0.7,0.7,0.7)
+                txt.TextScaled = true
+                txt.Text = displayName .. " x1"
+                txt.Name = "Lbl"
+            else
+                FishSessionMap[displayName] = FishSessionMap[displayName] + 1
+                local f = scrollFrame:FindFirstChild(displayName)
+                if f and f:FindFirstChild("Lbl") then
+                    f.Lbl.Text = displayName .. " x" .. FishSessionMap[displayName]
+                end
+            end
+
+            -- Update Secret Label
+            if isSecret then
+                TotalSecretsFound = TotalSecretsFound + 1
+                secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
+                
+                -- Trigger Discord Webhook
+                if MasterConfig.DiscordWebhookEnabled then
+                    local weight = item.Metadata and item.Metadata.Weight or 0
+                    local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                    local itemData = ItemUtility:GetItemData(numericID)
+                    local basePrice = itemData and itemData.SellPrice or 0
+                    local sellPrice = basePrice * (item.Metadata.SellMultiplier or 1)
+                    SendDiscordSecretNotification(name, rarity, mutation, weight, sellPrice)
+                end
+            end
+        end)
     end)
+else
+    warn("Warning: RE/ObtainedNewFishNotification not found. Counter will not work.")
 end
 
 -- TOGGLE LOGIC
@@ -650,6 +658,11 @@ task.spawn(function()
     while gui.Parent do
         local elapsed = os.time() - SessionStartTime
         timerLabel.Text = FormatTime(elapsed)
+        -- Update FPM secara real-time juga di loop ini
+        if elapsed > 0 then
+             local fpm = TotalFishCaught / (elapsed / 60)
+             fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
+        end
         task.wait(1)
     end
 end)
