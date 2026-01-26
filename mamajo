@@ -5,8 +5,8 @@ const path = require("path");
 const readline = require("readline");
 
 // --- CONFIGURATION ---
-const LAUNCH_URL = "roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388";
-const LAUNCH_DELAY_MS = 8000; // 8 seconds delay between opening apps initially
+const LAUNCH_URL = "roblox://placeID=121864768012064&linkCode=15722060451108192164607998273789";
+const LAUNCH_DELAY_MS = 8000; // Delay between opening apps initially
 // ---------------------
 
 // 1. Auto-install dependencies
@@ -160,15 +160,15 @@ async function runLaunchSequence(accounts) {
   }
 }
 
-// === MODE 1: CONTINUOUS MONITOR & REOPEN ===
+// === MODE 1: CONTINUOUS MONITOR & REOPEN (STRICT MODE) ===
 async function runContinuousMode(accounts) {
-  const delayInput = await ask("⏱️  Set monitor delay (seconds) [Default: 30]: ");
-  const delayMs = (parseInt(delayInput) || 30) * 1000;
+  console.log("\n⚠️  STRICT MODE: If you set delay < 60s, you might get restart loops!");
+  const delayInput = await ask("⏱️  Set monitor delay (seconds) [Recommended: 60+]: ");
+  const delayMs = (parseInt(delayInput) || 60) * 1000;
 
   await runLaunchSequence(accounts);
 
   console.log(`\n👀 Monitoring started. Checking every ${delayMs/1000}s...`);
-  console.log("💡 If an app crashes (FC), it will be auto-reopened.");
 
   while (true) {
     console.log(`\n⏳ Waiting ${delayMs/1000}s...`);
@@ -185,24 +185,29 @@ async function runContinuousMode(accounts) {
 
     for (const acc of accounts) {
       let isRunning = isProcessRunning(acc.pkg);
+      
+      // FIX: Fetch Presence BEFORE checking logic
+      const serverState = await getPresence(acc.userId, acc.cookie);
       let action = "-";
 
-      // AUTO-REOPEN LOGIC
-      // STRICT AUTO-REOPEN LOGIC
-      // Restart if Closed OR if Running but NOT In-Game (Stuck in Menu)
-      // Make sure your loop delay is > 45 seconds!
-      if (!isRunning || (serverState.includes("Online") && !serverState.includes("In Game"))) {
-        if (isRunning) {
-             stopPackage(acc.pkg); // Force kill first if it's stuck open
-             action = "💀 STUCK -> RESTARTING...";
+      // --- STRICT RESTART LOGIC ---
+      // 1. App is DEAD (Closed)
+      // 2. OR App is Running BUT User is just "Online" (Stuck in Menu/Disconnected)
+      const isStuckInMenu = serverState.includes("Online");
+      
+      if (!isRunning || isStuckInMenu) {
+        if (isRunning && isStuckInMenu) {
+           // It's running but stuck -> Kill it first
+           stopPackage(acc.pkg);
+           action = "💀 STUCK -> RESTART";
         } else {
-             action = "♻️ CRASHED -> REOPENING...";
+           // It's already closed
+           action = "♻️ CRASH -> REOPEN";
         }
         
         launchPackage(acc.pkg, LAUNCH_URL);
       }
-
-      const serverState = await getPresence(acc.userId, acc.cookie);
+      // -----------------------------
       
       table.push([
         acc.username.substring(0, 12),
@@ -252,7 +257,7 @@ async function main() {
   const accounts = await setupAccounts();
 
   console.log("🔰 Select Mode:");
-  console.log("1. Run All + Continuous Monitoring (Auto-Reopen if FC)");
+  console.log("1. Run All + Continuous Monitor (Auto-Restart if Crash OR Stuck)");
   console.log("2. Run All + Check Once (Exit after 45s)");
   
   const choice = await ask("\n👉 Enter choice (1 or 2): ");
