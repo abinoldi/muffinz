@@ -7,8 +7,8 @@ const os = require("os");
 // --- CONFIGURATION ---
 const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
 const PLACE_ID = "121864768012064"; 
-const LAUNCH_DELAY = 30000; // 30 Seconds delay between launching each app
-const PER_USER_DELAY = 5000; // 5 Seconds delay per user check (monitoring)
+const CHECK_SERVER_PRESENCE = true; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
+const PER_USER_DELAY = 5000; // 5 Seconds delay per user check
 const CHECK_INTERVAL = 60;   // Wait 60s total before starting next cycle
 const RESTART_COOLDOWN = 300; // 5 Minutes cooldown
 // ---------------------
@@ -137,7 +137,7 @@ function renderDashboard(cleanCode, statusMessage) {
   console.clear();
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
-  console.log(`📊 STATUS: ${statusMessage} | Code: ...${cleanCode.slice(-4)}`);
+  console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
   
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
   
@@ -158,7 +158,7 @@ function renderDashboard(cleanCode, statusMessage) {
 async function main() {
   initSystem();
   console.clear();
-  console.log("🚀 Initializing Stable Manager...");
+  console.log("🚀 Initializing Manager...");
 
   const packages = getPackages();
   if (!packages.length) { console.log("❌ No Roblox packages found."); process.exit(0); }
@@ -193,19 +193,17 @@ async function main() {
   if(cleanCode.includes("linkCode=")) cleanCode = cleanCode.split("linkCode=")[1].split("&")[0];
   const finalLaunchUrl = `roblox://placeID=${PLACE_ID}&linkCode=${cleanCode}`;
 
-  console.log(`\n🚀 Launching instances (30s Delay per App)...`);
+  console.log("\n🚀 Launching all instances...");
   for (const acc of accounts) {
-    console.log(`   Launching ${acc.pkg}...`);
     stopPackage(acc.pkg);
     launchPackage(acc.pkg, finalLaunchUrl);
     lastRestartMap[acc.pkg] = Date.now();
-    
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    await sleep(LAUNCH_DELAY); // 30 Seconds Delay
+    await sleep(8000);
   }
 
-  console.log(`\n💤 Stable Monitor active (5s delay/user | 60s Interval)...`);
+  console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
   
   while (true) {
     const cycleStartTime = Date.now();
@@ -214,31 +212,55 @@ async function main() {
       accountStates[acc.pkg].action = "🔎 CHECKING...";
       renderDashboard(cleanCode, `Checking ${acc.username}...`);
 
+      // 1. Check Process (Always)
       const isRunning = isProcessRunning(acc.pkg);
-      const serverStatus = await getSinglePresence(acc.userId, acc.cookie);
       
+      // 2. Check Presence (Optional Config)
+      let serverStatus = "Disabled ⚪";
+      let isStuck = false;
+
+      if (CHECK_SERVER_PRESENCE) {
+          serverStatus = await getSinglePresence(acc.userId, acc.cookie);
+          isStuck = serverStatus.includes("Online");
+      }
+      
+      // 3. Logic
       const now = Date.now();
-      const isStuck = serverStatus.includes("Online");
       const timeSinceRestart = (now - lastRestartMap[acc.pkg]) / 1000;
       const onCooldown = timeSinceRestart < RESTART_COOLDOWN;
       
       let action = "-";
+      let shouldRestart = false;
+      let reason = "";
+
+      // Decide if restart is needed based on Config
+      if (CHECK_SERVER_PRESENCE) {
+          // Full Mode: Restart if Dead OR Stuck
+          if (!isRunning || isStuck) {
+              shouldRestart = true;
+              reason = isRunning ? "RESTART (Stuck)" : "REOPEN (Crash)";
+          }
+      } else {
+          // No-Ping Mode: ONLY Restart if Dead
+          if (!isRunning) {
+              shouldRestart = true;
+              reason = "REOPEN (Crash)";
+          }
+      }
       
-      if (!isRunning || isStuck) {
+      // Execute Restart
+      if (shouldRestart) {
         if (onCooldown) {
           action = `⏳ Wait (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
         } else {
-          if (isRunning && isStuck) {
-            stopPackage(acc.pkg);
-            action = "♻️ RESTART (Stuck)";
-          } else {
-            action = "♻️ REOPEN (Crash)";
-          }
+          if (isRunning) stopPackage(acc.pkg);
+          action = `♻️ ${reason}`;
           launchPackage(acc.pkg, finalLaunchUrl);
           lastRestartMap[acc.pkg] = now;
         }
       }
       
+      // Update State
       accountStates[acc.pkg] = {
         username: acc.username,
         isRunning: isRunning,
