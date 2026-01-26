@@ -1,34 +1,32 @@
 -- ======================================================
--- # ULTIMATE HUB: CONFIGURATION
+-- # ULTIMATE HUB: CONFIGURATION (FULL VERSION)
 -- ======================================================
 local MasterConfig = {
-    -- [GUI SETTINGS]
-    DefaultGuiVisible = false,       -- Set ke false agar GUI tersembunyi saat start (Gunakan tombol HUB)
-
     -- [FISHING SETTINGS]
     FishingEnabled = true,           -- Langsung mulai memancing saat script di-load
     AutoEquip = true,                -- Otomatis spam equip alat pancing
-    CatchDelay = 1.5,                -- STRICT 1.5s delay (Sesuai source file)
-    AutoSell = true,                 -- Otomatis jual ikan setiap ~65 detik
+    [cite_start]CatchDelay = 1.5,                -- STRICT 1.5s delay [cite: 2]
+    AutoSell = true,                 -- Otomatis jual ikan
+    SellDelay = 65,                  -- [BARU] Jeda waktu (detik) antar auto-sell
     AutoFavorite = true,             -- Otomatis kunci Ruby, Leviathan, & Rage
 
     -- [TELEPORT SETTINGS]
-    AutoTeleport = true,             -- Teleport otomatis saat script mulai
-    SelectedLocation = "Crater Island", -- Ganti nama lokasi di sini (Lihat daftar di bawah)
+    [cite_start]AutoTeleport = true,             -- Teleport otomatis saat script mulai [cite: 3]
+    SelectedLocation = "Crater Island", -- Ganti nama lokasi di sini
 
     -- [UTILITIES]
     AutoTotem = true,                -- Pasang Mutation Totem otomatis tiap 63 menit
     PotatoMode = true,               -- Mode Invisible/Low Graphic Extreme
     
     -- [TRADING]
-    AutoTrade = false,               -- Fitur kirim ikan otomatis ke akun lain
+    [cite_start]AutoTrade = false,               -- Fitur kirim ikan otomatis ke akun lain [cite: 4]
     TargetUsername = "mm3kenak",     -- Nama target untuk trade
     TradeMode = "SECRETS_FIRST",     -- Mode: SECRETS_FIRST, RUBY_GEMSTONE, ALL
     TradeDelay = 6.5,                -- Jeda antar trade
 
     -- [WEBHOOK]
-    WebhookEnabled = true,           -- Mengirim data inventory ke server
-    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit", -- URL dari file asli
+    [cite_start]WebhookEnabled = true,           -- Mengirim data inventory ke server [cite: 5]
+    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
 -- [DATASET LOKASI FISHING LENGKAP]
@@ -67,6 +65,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 -- ANTI-AFK
@@ -287,7 +286,7 @@ local function StartFishingV1()
                 local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
             end
-            task.wait(65)
+            task.wait(MasterConfig.SellDelay) -- MENGGUNAKAN CONFIG DELAY BARU
         end
     end))
     
@@ -465,50 +464,182 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 7. GUI CONSTRUCTION (Hidden by Default)
+-- 7. GUI CONSTRUCTION (FULL SCREEN GRID & MONITOR)
 -- ===============================
-local gui = Instance.new("ScreenGui", lp.PlayerGui)
+local guiName = "UltimateHubFullScreen"
+
+-- Bersihkan GUI lama jika ada
+if CoreGui:FindFirstChild(guiName) then
+    CoreGui[guiName]:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = guiName
+gui.Parent = CoreGui
 gui.ResetOnSpawn = false
-gui.Name = "UltimateHubSingle"
+gui.IgnoreGuiInset = true -- Agar menutupi sampai ke topbar
 
--- Master HUB Button
-local masterToggleBtn = Instance.new("TextButton", gui)
-masterToggleBtn.Size = UDim2.fromOffset(50, 50)
-masterToggleBtn.Position = UDim2.new(0, 10, 0.5, -25)
-masterToggleBtn.Text = "HUB"
-masterToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-masterToggleBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", masterToggleBtn).CornerRadius = UDim.new(1, 0)
-Instance.new("UIStroke", masterToggleBtn).Color = Color3.fromRGB(0, 255, 150)
+-- [VARS UNTUK TRACKING]
+local SessionStartTime = os.time()
+local TotalSecretsFound = 0
+local FishSessionMap = {} -- Format: { ["FishName"] = count }
 
--- Main Frame
+-- [MAIN FRAME - FLEXIBLE FULLSCREEN]
 local mainFrame = Instance.new("Frame", gui)
-mainFrame.Size = UDim2.fromOffset(350, 430)
-mainFrame.Position = UDim2.new(0.5, -175, 0.5, -215)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-mainFrame.Visible = MasterConfig.DefaultGuiVisible -- HIDDEN BY DEFAULT
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+mainFrame.Size = UDim2.new(1, 0, 1, 0) -- Full Width & Height (Flexible)
+mainFrame.Position = UDim2.new(0, 0, 0, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+mainFrame.BackgroundTransparency = 0.1
+mainFrame.BorderSizePixel = 0
 
--- GUI Logic
-masterToggleBtn.MouseButton1Click:Connect(function() mainFrame.Visible = not mainFrame.Visible end)
+-- [TOP BAR: STATUS & TIMER]
+local topBar = Instance.new("Frame", mainFrame)
+topBar.Size = UDim2.new(1, 0, 0, 80)
+topBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+topBar.BorderSizePixel = 0
 
--- UI Components (Simplified from source file for layout)
-local container = Instance.new("Frame", mainFrame)
-container.Size = UDim2.new(1, -20, 1, -20); container.Position = UDim2.new(0, 10, 0, 10); container.BackgroundTransparency = 1
-local layout = Instance.new("UIListLayout", container); layout.Padding = UDim.new(0, 5)
+local titleLabel = Instance.new("TextLabel", topBar)
+titleLabel.Size = UDim2.new(1, -20, 0, 30)
+titleLabel.Position = UDim2.new(0, 10, 0, 5)
+titleLabel.Text = "ULTIMATE FISHING HUB - MONITOR"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 24
+titleLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+titleLabel.BackgroundTransparency = 1
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- Status Labels
-local statusLabel = Instance.new("TextLabel", container); statusLabel.Size = UDim2.new(1,0,0,20); statusLabel.Text = "Status: Idle"; statusLabel.TextColor3 = Color3.new(0,1,0); statusLabel.BackgroundTransparency=1
-local invStats = Instance.new("TextLabel", container); invStats.Size = UDim2.new(1,0,0,20); invStats.Text = "Inv: 0"; invStats.TextColor3 = Color3.new(1,1,1); invStats.BackgroundTransparency=1
-local coinLabel = Instance.new("TextLabel", container); coinLabel.Size = UDim2.new(1,0,0,20); coinLabel.Text = "Coins: 0"; coinLabel.TextColor3 = Color3.fromRGB(255,215,0); coinLabel.BackgroundTransparency=1
+local locationLabel = Instance.new("TextLabel", topBar)
+locationLabel.Size = UDim2.new(0.5, 0, 0, 25)
+locationLabel.Position = UDim2.new(0, 10, 0, 40)
+locationLabel.Text = "📍 Location: " .. MasterConfig.SelectedLocation
+locationLabel.Font = Enum.Font.GothamMedium
+locationLabel.TextSize = 16
+locationLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+locationLabel.BackgroundTransparency = 1
+locationLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- GUI Loop Update
+local timerLabel = Instance.new("TextLabel", topBar)
+timerLabel.Size = UDim2.new(0.5, -20, 0, 25)
+timerLabel.Position = UDim2.new(0.5, 10, 0, 40)
+timerLabel.Text = "⏱ Time: 00:00:00"
+timerLabel.Font = Enum.Font.GothamMedium
+timerLabel.TextSize = 16
+timerLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+timerLabel.BackgroundTransparency = 1
+timerLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+-- [GRID CONTAINER (SCROLLING)]
+local scrollFrame = Instance.new("ScrollingFrame", mainFrame)
+scrollFrame.Size = UDim2.new(1, -20, 1, -140) -- Mengisi tengah layar
+scrollFrame.Position = UDim2.new(0, 10, 0, 90)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.ScrollBarThickness = 6
+
+local gridLayout = Instance.new("UIGridLayout", scrollFrame)
+gridLayout.CellSize = UDim2.new(0, 120, 0, 80) -- Ukuran kotak per ikan
+gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
+gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- [BOTTOM BAR: STATS]
+local bottomBar = Instance.new("Frame", mainFrame)
+bottomBar.Size = UDim2.new(1, 0, 0, 40)
+bottomBar.Position = UDim2.new(0, 0, 1, -40)
+bottomBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+bottomBar.BorderSizePixel = 0
+
+local secretLabel = Instance.new("TextLabel", bottomBar)
+secretLabel.Size = UDim2.new(1, 0, 1, 0)
+secretLabel.Text = "TOTAL SECRETS: 0"
+secretLabel.Font = Enum.Font.GothamBlack
+secretLabel.TextSize = 18
+secretLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+secretLabel.BackgroundTransparency = 1
+
+-- ===============================
+-- LOGIC: TIME & UPDATE
+-- ===============================
+local function FormatTime(seconds)
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = seconds % 60
+    return string.format("%02d:%02d:%02d", h, m, s)
+end
+
+local function UpdateFishGrid(name, rarity, isSecret)
+    if not FishSessionMap[name] then
+        FishSessionMap[name] = 1
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Name = name
+        itemFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        itemFrame.Parent = scrollFrame
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 6)
+        
+        local stroke = Instance.new("UIStroke", itemFrame)
+        stroke.Thickness = 1.5
+        if isSecret then stroke.Color = Color3.fromRGB(255, 0, 0)
+        else stroke.Color = Color3.fromRGB(60, 60, 60) end
+
+        local nameLbl = Instance.new("TextLabel", itemFrame)
+        nameLbl.Size = UDim2.new(1, 0, 0.6, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = name
+        nameLbl.TextColor3 = Color3.new(1,1,1)
+        nameLbl.TextScaled = true
+        nameLbl.Font = Enum.Font.GothamBold
+        
+        local countLbl = Instance.new("TextLabel", itemFrame)
+        countLbl.Name = "Count"
+        countLbl.Size = UDim2.new(1, 0, 0.4, 0)
+        countLbl.Position = UDim2.new(0,0,0.6,0)
+        countLbl.BackgroundTransparency = 1
+        countLbl.Text = "x1"
+        countLbl.TextColor3 = Color3.fromRGB(0, 255, 150)
+        countLbl.Font = Enum.Font.Gotham
+        countLbl.TextSize = 14
+    else
+        FishSessionMap[name] = FishSessionMap[name] + 1
+        local existingFrame = scrollFrame:FindFirstChild(name)
+        if existingFrame and existingFrame:FindFirstChild("Count") then
+            existingFrame.Count.Text = "x" .. tostring(FishSessionMap[name])
+        end
+    end
+    
+    if isSecret then
+        TotalSecretsFound = TotalSecretsFound + 1
+        secretLabel.Text = "TOTAL SECRETS: " .. tostring(TotalSecretsFound)
+        secretLabel.TextSize = 24
+        task.delay(0.2, function() secretLabel.TextSize = 18 end)
+    end
+end
+
+-- REMOTE LISTENER
+local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+
+if RE_ObtainedNewFishNotification then
+    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
+        local name, rarity = GetFishNameAndRarity(item)
+        local mutation = GetMutation(item)
+        
+        local displayName = name
+        if mutation and mutation ~= "None" then
+            displayName = "[" .. mutation .. "] " .. name
+        end
+        
+        local isSecret = false
+        if rarity and string.upper(tostring(rarity)) == "SECRET" then
+            isSecret = true
+        end
+        
+        UpdateFishGrid(displayName, rarity, isSecret)
+    end)
+end
+
+-- Loop Update Timer
 task.spawn(function()
     while gui.Parent do
-        local s, special = ScanInventoryForTrade()
-        invStats.Text = string.format("Inventory: %d Secrets | %d Special", #s, #special)
-        coinLabel.Text = "Coins: " .. FormatNumber(GetCoins()) .. " | Earned: " .. FormatNumber(FishingState.SessionEarnings)
-        statusLabel.Text = "Loc: " .. MasterConfig.SelectedLocation
+        local elapsed = os.time() - SessionStartTime
+        timerLabel.Text = "⏱ Time: " .. FormatTime(elapsed)
+        locationLabel.Text = "📍 Location: " .. MasterConfig.SelectedLocation
         task.wait(1)
     end
 end)
@@ -564,5 +695,5 @@ task.delay(2, function()
             RunAutoTrade()
         end
     end
-    statusLabel.Text = "System Status: Running..."
+    -- Status visual sudah ditangani oleh GUI monitor
 end)
