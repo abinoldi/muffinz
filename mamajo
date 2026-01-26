@@ -6,7 +6,7 @@ const readline = require("readline");
 
 // --- CONFIGURATION ---
 const LAUNCH_URL = "roblox://placeID=121864768012064&linkCode=15722060451108192164607998273789";
-const LAUNCH_DELAY_MS = 8000; // Delay between opening apps initially
+const LAUNCH_DELAY_MS = 15000; // Delay between opening apps initially
 // ---------------------
 
 // 1. Auto-install dependencies
