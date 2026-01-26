@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL FIXED (INVENTORY SYNC)
+-- # ULTIMATE HUB: FINAL V2 (WEIGHT INFO ADDED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -606,7 +606,7 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
--- FUNCTION TO INITIALIZE TOTAL SECRETS
+-- FUNCTION TO INITIALIZE TOTAL SECRETS (INVENTORY SYNC)
 local function UpdateTotalSecretsFromInventory()
     local count = 0
     local inv = PlayerData:Get("Inventory")
@@ -622,7 +622,6 @@ local function UpdateTotalSecretsFromInventory()
     end
     TotalSecretsFound = count
     secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
-    print("[Inventory] Found " .. count .. " existing secrets.")
 end
 
 -- TRADE MONITOR LOOP
@@ -654,7 +653,7 @@ task.spawn(function()
     end
 end)
 
--- REMOTE LISTENER & COUNTER LOGIC (SAFE MODE: NO PRICE CALC)
+-- REMOTE LISTENER & COUNTER LOGIC (SAFE MODE)
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 if RE_ObtainedNewFishNotification then
@@ -755,7 +754,7 @@ task.spawn(function()
 end)
 
 -- ===============================
--- WEBHOOK LOGIC (LEGACY)
+-- 8. LEGACY WEBHOOK (WEIGHT ADDED)
 -- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
@@ -767,21 +766,41 @@ if MasterConfig.WebhookEnabled then
         local dataR = Replion:WaitReplion("Data")
         while true do
             local inv = dataR:GetExpect("Inventory")
-            local summary = {}
+            
+            -- STRUKTUR BARU
+            local exportData = {
+                Summary = {}, -- Hitungan total (seperti sebelumnya)
+                Details = {}  -- Detail per ikan (Berat, ID, dll)
+            }
+
             if inv then
                 for _, items in pairs(inv) do
                     for _, item in ipairs(items) do
                         local n, r = GetFishNameAndRarity(item)
                         local mut = GetMutation(item)
+                        
+                        -- Filter logic
                         if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
                             local dName = n
                             if mut ~= "None" then dName = "["..mut.."] "..n end
-                            summary[dName] = (summary[dName] or 0) + 1
+                            
+                            -- 1. Masukkan ke Summary (Hitungan lama)
+                            exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                            
+                            -- 2. Masukkan ke Details (Info Berat Baru)
+                            table.insert(exportData.Details, {
+                                Name = dName,
+                                Rarity = r,
+                                Weight = item.Metadata and item.Metadata.Weight or 0,
+                                Mutation = mut,
+                                UniqueId = item.UUID or item.Id
+                            })
                         end
                     end
                 end
             end
-            SendHook(lp.Name, summary)
+            
+            SendHook(lp.Name, exportData)
             task.wait(15)
         end
     end)
