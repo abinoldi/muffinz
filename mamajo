@@ -7,7 +7,7 @@ const os = require("os");
 // --- CONFIGURATION ---
 const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
 const PLACE_ID = "121864768012064"; 
-const CHECK_SERVER_PRESENCE = false; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
+const CHECK_SERVER_PRESENCE = true; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
 const PER_USER_DELAY = 5000; // 5 Seconds delay per user check
 const CHECK_INTERVAL = 60;   // Wait 60s total before starting next cycle
 const RESTART_COOLDOWN = 300; // 5 Minutes cooldown
@@ -200,7 +200,7 @@ async function main() {
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    await sleep(8000);
+    await sleep(30000);
   }
 
   console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
