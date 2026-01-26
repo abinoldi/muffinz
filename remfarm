@@ -61,7 +61,7 @@ local FishingLocations = {
 }
 
 -- ===============================
-[cite_start]-- 1. GLOBAL SERVICES & BYPASSES [cite: 1]
+-- 1. GLOBAL SERVICES & BYPASSES
 -- ===============================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -80,7 +80,7 @@ end)
 task.spawn(function()
     local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
     if S1 and FishingController then
-        [cite_start]FishingController.RequestChargeFishingRod = function(...) return nil end [cite: 2]
+        FishingController.RequestChargeFishingRod = function(...) return nil end
         FishingController.SendFishingRequestToServer = function(...) return false, "Blocked by V1" end
     end
 end)
@@ -99,7 +99,7 @@ mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
     if not checkcaller() then
         if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then return task.wait(9e9) end
-        [cite_start]if method == "FireServer" and self.Name == "FishingCompleted" then return nil end [cite: 3]
+        if method == "FireServer" and self.Name == "FishingCompleted" then return nil end
     end
     return old_namecall(self, ...)
 end)
@@ -120,7 +120,7 @@ local function GetRemote(name)
         current = current:WaitForChild(child, 2)
         if not current then return nil end
     end
-    [cite_start]return current:FindFirstChild(name) [cite: 4]
+    return current:FindFirstChild(name)
 end
 
 local function GetFishNameAndRarity(item)
@@ -132,7 +132,7 @@ local function GetFishNameAndRarity(item)
         pcall(function()
             itemData = ItemUtility:GetItemData(itemID)
             if not itemData then
-                [cite_start]local numericID = tonumber(item.Id) or tonumber(item.Identifier) [cite: 5]
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
                 if numericID then itemData = ItemUtility:GetItemData(numericID) end
             end
         end)
@@ -141,7 +141,7 @@ local function GetFishNameAndRarity(item)
     if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity 
     elseif itemData and itemData.Probability and TierUtility then 
         pcall(function() rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name end) 
-    [cite_start]end [cite: 6]
+    end
     return name, rarity
 end
 
@@ -165,7 +165,7 @@ local originalCutscenePlay = nil
 pcall(function()
     local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
     if CutsceneController and CutsceneController.Play then
-        [cite_start]originalCutscenePlay = CutsceneController.Play [cite: 7]
+        originalCutscenePlay = CutsceneController.Play
     end
 end)
 
@@ -182,14 +182,14 @@ end
 
 local function ApplyExtremePotato()
     if VFXControllerModule then
-        [cite_start]VFXControllerModule.Handle = function(...) return nil end [cite: 8]
+        VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
     end
     pcall(function()
         local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
-        [cite_start]if CutsceneController and CutsceneController.Play then CutsceneController.Play = function() return end end [cite: 9]
+        if CutsceneController and CutsceneController.Play then CutsceneController.Play = function() return end end
     end)
     DisableAnimations()
     pcall(function()
@@ -199,19 +199,19 @@ local function ApplyExtremePotato()
         Lighting.Brightness = 0
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
-            [cite_start]workspace.Terrain.WaterTransparency = 1 [cite: 10]
+            workspace.Terrain.WaterTransparency = 1
             workspace.Terrain.WaterReflectance = 0
         end
     end)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
-        [cite_start]elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v:Destroy() [cite: 11]
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v:Destroy()
         end
     end
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
             if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0
-            [cite_start]elseif v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end [cite: 12]
+            elseif v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
             if v:IsA("MeshPart") then v.Transparency = 1 end
         end
     end
@@ -247,7 +247,7 @@ end
 local function FormatNumber(num)
     if num >= 1000000 then return string.format("%.1fM", num/1000000)
     elseif num >= 1000 then return string.format("%.1fK", num/1000)
-    [cite_start]else return tostring(num) end [cite: 18]
+    else return tostring(num) end
 end
 
 local function RunInstantFish()
@@ -255,7 +255,7 @@ local function RunInstantFish()
     local s1 = pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
     if not s1 then return end
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
-    [cite_start]task.wait(MasterConfig.CatchDelay) -- 1.5s [cite: 17]
+    task.wait(MasterConfig.CatchDelay) -- 1.5s
     pcall(function() RE_FishingCompleted:FireServer() end)
     task.wait(0.3)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
@@ -264,7 +264,7 @@ end
 local function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
-    [cite_start]if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end [cite: 19]
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
     
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do RunInstantFish(); task.wait(0.1) end
@@ -273,7 +273,7 @@ local function StartFishingV1()
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
-            [cite_start]task.wait(0.5) [cite: 20]
+            task.wait(0.5)
         end
     end))
 
@@ -284,7 +284,7 @@ local function StartFishingV1()
                 task.wait(2) 
                 pcall(function() if RF_SellAllItems then RF_SellAllItems:InvokeServer() end end)
                 task.wait(1)
-                [cite_start]local after = GetCoins() [cite: 22]
+                local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
             end
             task.wait(65)
@@ -294,19 +294,19 @@ local function StartFishingV1()
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
-                [cite_start]local inv = PlayerData:GetExpect("Inventory") [cite: 23]
+                local inv = PlayerData:GetExpect("Inventory")
                 if inv then
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
                             if item.UUID then
                                 local itemName, rarity = GetFishNameAndRarity(item)
-                                [cite_start]local mutation = GetMutation(item) [cite: 24]
-                                [cite_start]local isLocked = (item.IsFavorite or item.Favorited or item.Locked) [cite: 25]
-                                [cite_start]local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby") [cite: 26]
+                                local mutation = GetMutation(item)
+                                local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
+                                local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby")
                                 local isRare = string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage")
-                                [cite_start]if (isRuby or isRare) and not isLocked then [cite: 27]
+                                if (isRuby or isRare) and not isLocked then
                                     task.spawn(function()
-                                        [cite_start]for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID); task.wait(0.05) end [cite: 28]
+                                        for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID); task.wait(0.05) end
                                     end)
                                 end
                             end
@@ -321,7 +321,7 @@ end
 
 local function StopFishingV1()
     FishingState.IsFishing = false
-    [cite_start]for _, t in ipairs(FishingThreads) do task.cancel(t) end [cite: 31]
+    for _, t in ipairs(FishingThreads) do task.cancel(t) end
     FishingThreads = {}
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
@@ -337,7 +337,7 @@ local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 local function TeleportToFishingLocation()
-    [cite_start]if FishingState.Teleporting then return end [cite: 32]
+    if FishingState.Teleporting then return end
     local loc = FishingLocations[MasterConfig.SelectedLocation]
     if not loc then warn("Lokasi tidak ditemukan!") return end
     
@@ -357,7 +357,7 @@ local function GetTotemUUID(targetId)
     local success, inventoryData = pcall(function() return PlayerData:GetExpect("Inventory").Totems end)
     if success and inventoryData then 
         for _, item in ipairs(inventoryData) do 
-            [cite_start]if tonumber(item.Id) == targetId and (item.Count or 1) >= 1 then return item.UUID end [cite: 34]
+            if tonumber(item.Id) == targetId and (item.Count or 1) >= 1 then return item.UUID end
         end 
     end
     return nil
@@ -366,34 +366,34 @@ end
 local function SpawnMutationTotem()
     local char = lp.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    [cite_start]if not hrp then return false end [cite: 35]
+    if not hrp then return false end
     local uuid = GetTotemUUID(TOTEM_ID)
     if not uuid then return false end
 
-    [cite_start]if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end [cite: 36]
+    if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
     local success = false
     if uuid then
-        [cite_start]pcall(function() RE_SpawnTotem:FireServer(uuid); success = true end) [cite: 37]
+        pcall(function() RE_SpawnTotem:FireServer(uuid); success = true end)
         if success then
             local originalCF = hrp.CFrame
             hrp.CFrame = originalCF + Vector3.new(0, 5, 0)
             task.wait(0.2)
-            [cite_start]hrp.CFrame = originalCF [cite: 38]
+            hrp.CFrame = originalCF
         end
     end
     task.wait(0.5)
-    [cite_start]if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end [cite: 39]
+    if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
     return success
 end
 
 local function StartAutoTotemLoop()
     task.spawn(function()
         task.wait(3)
-        [cite_start]SpawnMutationTotem() [cite: 40]
+        SpawnMutationTotem()
         while true do
-            [cite_start]local waitTime = 3780 [cite: 42]
+            local waitTime = 3780
             for i = waitTime, 1, -1 do task.wait(1) end
-            [cite_start]SpawnMutationTotem() [cite: 43]
+            SpawnMutationTotem()
         end
     end)
 end
@@ -412,17 +412,17 @@ local function ScanInventoryForTrade()
         for _, item in ipairs(items) do
             local name, rarity = GetFishNameAndRarity(item)
             local mutation = GetMutation(item)
-            [cite_start]if string.upper(tostring(rarity)) == "SECRET" then [cite: 46]
+            if string.upper(tostring(rarity)) == "SECRET" then
                 table.insert(secrets, {uuid = item.UUID, name = name})
             end
             if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
-                [cite_start]table.insert(specialMutations, {uuid = item.UUID, name = name, mutation = mutation}) [cite: 47]
+                table.insert(specialMutations, {uuid = item.UUID, name = name, mutation = mutation})
             elseif name == "Ruby" and mutation == "Gemstone" then
-                [cite_start]table.insert(specialMutations, {uuid = item.UUID, name = name, mutation = mutation}) [cite: 49]
+                table.insert(specialMutations, {uuid = item.UUID, name = name, mutation = mutation})
             end
         end
     end
-    [cite_start]return secrets, specialMutations [cite: 50]
+    return secrets, specialMutations
 end
 
 local function IsItemStillInInventory(uuid)
@@ -437,19 +437,19 @@ end
 local function RunAutoTrade()
     if TradingThread then task.cancel(TradingThread) end
     TradingThread = task.spawn(function()
-        [cite_start]while MasterConfig.AutoTrade do [cite: 51]
+        while MasterConfig.AutoTrade do
             local secrets, specialMutations = ScanInventoryForTrade()
-            [cite_start]if #secrets == 0 and #specialMutations == 0 then MasterConfig.AutoTrade = false; break end [cite: 52]
+            if #secrets == 0 and #specialMutations == 0 then MasterConfig.AutoTrade = false; break end
             
             local tradeUUID = nil
-            [cite_start]if MasterConfig.TradeMode == "SECRETS_FIRST" then [cite: 53]
+            if MasterConfig.TradeMode == "SECRETS_FIRST" then
                 if #secrets > 0 then tradeUUID = secrets[1].uuid
                 elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
             elseif MasterConfig.TradeMode == "RUBY_GEMSTONE" then
                 for _, item in ipairs(specialMutations) do
-                    [cite_start]if item.name == "Ruby" and item.mutation == "Gemstone" then tradeUUID = item.uuid; break end [cite: 56]
+                    if item.name == "Ruby" and item.mutation == "Gemstone" then tradeUUID = item.uuid; break end
                 end
-            [cite_start]elseif MasterConfig.TradeMode == "ALL" then [cite: 58]
+            elseif MasterConfig.TradeMode == "ALL" then
                 if #secrets > 0 then tradeUUID = secrets[1].uuid
                 elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
             end
@@ -457,7 +457,7 @@ local function RunAutoTrade()
             if tradeUUID then
                 pcall(function() RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, tradeUUID) end)
                 local start = os.clock()
-                [cite_start]repeat task.wait(0.5) until not IsItemStillInInventory(tradeUUID) or (os.clock() - start) > 10 [cite: 62]
+                repeat task.wait(0.5) until not IsItemStillInInventory(tradeUUID) or (os.clock() - start) > 10
             end
             task.wait(MasterConfig.TradeDelay)
         end
@@ -483,7 +483,7 @@ Instance.new("UIStroke", masterToggleBtn).Color = Color3.fromRGB(0, 255, 150)
 
 -- Main Frame
 local mainFrame = Instance.new("Frame", gui)
-[cite_start]mainFrame.Size = UDim2.fromOffset(350, 430) [cite: 64]
+mainFrame.Size = UDim2.fromOffset(350, 430)
 mainFrame.Position = UDim2.new(0.5, -175, 0.5, -215)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 mainFrame.Visible = MasterConfig.DefaultGuiVisible -- HIDDEN BY DEFAULT
@@ -499,14 +499,14 @@ local layout = Instance.new("UIListLayout", container); layout.Padding = UDim.ne
 
 -- Status Labels
 local statusLabel = Instance.new("TextLabel", container); statusLabel.Size = UDim2.new(1,0,0,20); statusLabel.Text = "Status: Idle"; statusLabel.TextColor3 = Color3.new(0,1,0); statusLabel.BackgroundTransparency=1
-[cite_start]local invStats = Instance.new("TextLabel", container); invStats.Size = UDim2.new(1,0,0,20); invStats.Text = "Inv: 0"; invStats.TextColor3 = Color3.new(1,1,1); invStats.BackgroundTransparency=1 [cite: 68]
-[cite_start]local coinLabel = Instance.new("TextLabel", container); coinLabel.Size = UDim2.new(1,0,0,20); coinLabel.Text = "Coins: 0"; coinLabel.TextColor3 = Color3.fromRGB(255,215,0); coinLabel.BackgroundTransparency=1 [cite: 69]
+local invStats = Instance.new("TextLabel", container); invStats.Size = UDim2.new(1,0,0,20); invStats.Text = "Inv: 0"; invStats.TextColor3 = Color3.new(1,1,1); invStats.BackgroundTransparency=1
+local coinLabel = Instance.new("TextLabel", container); coinLabel.Size = UDim2.new(1,0,0,20); coinLabel.Text = "Coins: 0"; coinLabel.TextColor3 = Color3.fromRGB(255,215,0); coinLabel.BackgroundTransparency=1
 
 -- GUI Loop Update
 task.spawn(function()
     while gui.Parent do
         local s, special = ScanInventoryForTrade()
-        [cite_start]invStats.Text = string.format("Inventory: %d Secrets | %d Special", #s, #special) [cite: 77]
+        invStats.Text = string.format("Inventory: %d Secrets | %d Special", #s, #special)
         coinLabel.Text = "Coins: " .. FormatNumber(GetCoins()) .. " | Earned: " .. FormatNumber(FishingState.SessionEarnings)
         statusLabel.Text = "Loc: " .. MasterConfig.SelectedLocation
         task.wait(1)
@@ -514,7 +514,7 @@ task.spawn(function()
 end)
 
 -- ===============================
-[cite_start]-- 8. WEBHOOK LOGIC [cite: 82]
+-- 8. WEBHOOK LOGIC
 -- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
@@ -532,7 +532,7 @@ if MasterConfig.WebhookEnabled then
                     for _, item in ipairs(items) do
                         local n, r = GetFishNameAndRarity(item)
                         local mut = GetMutation(item)
-                        [cite_start]if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then [cite: 84]
+                        if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
                             local dName = n
                             if mut ~= "None" then dName = "["..mut.."] "..n end
                             summary[dName] = (summary[dName] or 0) + 1
@@ -541,13 +541,13 @@ if MasterConfig.WebhookEnabled then
                 end
             end
             SendHook(lp.Name, summary)
-            [cite_start]task.wait(15) [cite: 86]
+            task.wait(15)
         end
     end)
 end
 
 -- ===============================
-[cite_start]-- 9. AUTO-START EXECUTION [cite: 86]
+-- 9. AUTO-START EXECUTION
 -- ===============================
 task.delay(2, function()
     print("[AutoStart] Initiating System...")
