@@ -302,7 +302,7 @@ local function StartFishingV1()
             task.wait(1)
             local after = GetCoins()
             if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
-            task.wait(297) -- Total loop around 5 minutes
+            task.wait(65) -- Total loop around 5 minutes
         end
     end)
     table.insert(FishingThreads, sellThread)
