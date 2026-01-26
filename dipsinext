@@ -480,20 +480,39 @@ local function AutoBuy()
 end
 
 -- ===============================
--- MAIN LOOP
+-- MAIN LOOP (CORRECTED)
 -- ===============================
 local AutoActive = true
 local clickThread = nil
+
 local function ClickLoop()
-    while AutoActive and STATE.Status == "Reeling" do
+    -- ADDED CHECK: and STATE.Mode ~= "Element"
+    -- This ensures the clicker NEVER runs while doing Instant Element Fishing
+    while AutoActive and STATE.Status == "Reeling" and STATE.Mode ~= "Element" do
         FishingController:RequestFishingMinigameClick()
         task.wait(0.1)
     end
 end
+
 local oldStart = FishingController.FishingRodStarted
-FishingController.FishingRodStarted = function(self,...) oldStart(self,...) if AutoActive then STATE.Status="Reeling"; if clickThread then task.cancel(clickThread) end clickThread=task.spawn(ClickLoop) end end
+FishingController.FishingRodStarted = function(self,...) 
+    oldStart(self,...) 
+    if AutoActive then 
+        STATE.Status="Reeling"; 
+        if clickThread then task.cancel(clickThread) end 
+        
+        -- Only start the normal clicker if NOT in Element mode
+        if STATE.Mode ~= "Element" then
+            clickThread=task.spawn(ClickLoop) 
+        end
+    end 
+end
+
 local oldStop = FishingController.FishingStopped
-FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
+FishingController.FishingStopped = function(self,...) 
+    oldStop(self,...) 
+    if AutoActive then STATE.Status="Casting" end 
+end
 
 task.spawn(function()
     while task.wait(0.5) do
