@@ -2,7 +2,6 @@
 
 echo "🔄 Updating system and installing dependencies..."
 # Update packages and install Node.js, SQLite, and Curl
-pkg update -y && pkg upgrade -y
 pkg install nodejs sqlite curl -y
 
 echo "📦 Installing npm packages..."
