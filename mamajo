@@ -5,7 +5,7 @@ const path = require("path");
 const readline = require("readline");
 
 // --- CONFIGURATION ---
-const LAUNCH_URL = "roblox://placeID=121864768012064&linkCode=15722060451108192164607998273789";
+const LAUNCH_URL = "roblox://placeID=121864768012064&linkCode=61390766545454275477485425258388";
 const LAUNCH_DELAY_MS = 8000; // 8 seconds delay between opening apps initially
 // ---------------------
 
