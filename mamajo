@@ -194,7 +194,7 @@ async function main() {
     stopPackage(acc.pkg);
     launchPackage(acc.pkg, finalLaunchUrl);
     lastRestartMap[acc.pkg] = Date.now();
-    await sleep(8000);
+    await sleep(30000);
   }
 
   console.log(`\n💤 Monitor active (Check every ${CHECK_INTERVAL}s)...`);
