@@ -7,7 +7,8 @@ const os = require("os");
 // --- CONFIGURATION ---
 const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
 const PLACE_ID = "121864768012064"; 
-const PER_USER_DELAY = 5000; // 5 Seconds delay per user check
+const LAUNCH_DELAY = 30000; // 30 Seconds delay between launching each app
+const PER_USER_DELAY = 5000; // 5 Seconds delay per user check (monitoring)
 const CHECK_INTERVAL = 60;   // Wait 60s total before starting next cycle
 const RESTART_COOLDOWN = 300; // 5 Minutes cooldown
 // ---------------------
@@ -192,14 +193,16 @@ async function main() {
   if(cleanCode.includes("linkCode=")) cleanCode = cleanCode.split("linkCode=")[1].split("&")[0];
   const finalLaunchUrl = `roblox://placeID=${PLACE_ID}&linkCode=${cleanCode}`;
 
-  console.log("\n🚀 Launching all instances...");
+  console.log(`\n🚀 Launching instances (30s Delay per App)...`);
   for (const acc of accounts) {
+    console.log(`   Launching ${acc.pkg}...`);
     stopPackage(acc.pkg);
     launchPackage(acc.pkg, finalLaunchUrl);
     lastRestartMap[acc.pkg] = Date.now();
+    
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    await sleep(8000);
+    await sleep(LAUNCH_DELAY); // 30 Seconds Delay
   }
 
   console.log(`\n💤 Stable Monitor active (5s delay/user | 60s Interval)...`);
@@ -208,15 +211,12 @@ async function main() {
     const cycleStartTime = Date.now();
 
     for (const acc of accounts) {
-      // Show we are checking this user
       accountStates[acc.pkg].action = "🔎 CHECKING...";
       renderDashboard(cleanCode, `Checking ${acc.username}...`);
 
-      // Checks
       const isRunning = isProcessRunning(acc.pkg);
       const serverStatus = await getSinglePresence(acc.userId, acc.cookie);
       
-      // Logic
       const now = Date.now();
       const isStuck = serverStatus.includes("Online");
       const timeSinceRestart = (now - lastRestartMap[acc.pkg]) / 1000;
@@ -239,7 +239,6 @@ async function main() {
         }
       }
       
-      // Update State
       accountStates[acc.pkg] = {
         username: acc.username,
         isRunning: isRunning,
@@ -247,17 +246,14 @@ async function main() {
         action: action
       };
       
-      // Sleep between users to prevent ping spikes
       await sleep(PER_USER_DELAY);
     }
 
-    // Interval Calculation
     const cycleEndTime = Date.now();
     const elapsedTimeSeconds = (cycleEndTime - cycleStartTime) / 1000;
     const remainingTime = CHECK_INTERVAL - elapsedTimeSeconds;
 
     if (remainingTime > 0) {
-      // Clear checking status for clean display
       Object.keys(accountStates).forEach(pkg => {
           if(accountStates[pkg].action === "🔎 CHECKING...") accountStates[pkg].action = "-";
       });
