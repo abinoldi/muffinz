@@ -83,10 +83,10 @@ local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
--- INSTANT FISHING LOGIC (WITH EQUIP SPAM)
+-- INSTANT FISHING LOGIC
 -- ===============================
 local function RunInstantFish()
-    -- 0. Force Stop Auto Fishing State first
+    -- 0. Force Stop Auto Fishing State before instant sequence
     pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
     
     local timestamp = os.time() + os.clock()
@@ -97,18 +97,12 @@ local function RunInstantFish()
     -- 2. Start Minigame
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
     
-    -- 3. Wait 1.5s + SPAM EQUIP (Ensures the tool is active for the catch)
-    local endTime = tick() + 1.5
-    while tick() < endTime do
-        pcall(function() 
-            RE_EquipToolFromHotbar:FireServer(1) 
-        end)
-        task.wait(0.1) -- Fast spam every 0.1s
-    end
+    -- 3. Wait 1.5s
+    task.wait(1.5)
     
     -- 4. Complete & Cleanup
     pcall(function() RE_FishingCompleted:FireServer() end)
-    task.wait(0.2)
+    task.wait(0.3)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
@@ -399,9 +393,9 @@ local oldStop = FishingController.FishingStopped
 FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
 -- ===============================
--- UPDATED MAIN LOOP (WITH 1M SELL TIMER)
+-- MAIN LOOP (REVISED WITH 1-MINUTE SELL TIMER)
 -- ===============================
-local sellTimer = 0
+local sellTimer = 0 -- Add this variable outside the loop to track time
 
 task.spawn(function()
     while task.wait(0.5) do
@@ -413,34 +407,37 @@ task.spawn(function()
                     RF_SellAllItems:InvokeServer()
                     sellTimer = 0
                 end
+                -- [[ END SELL LOGIC ]] --
 
-                UpdateGameMode()
-                AutoBuyBestBait()
-                EquipBestBait()
-                AutoBuy()
-
-                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
-                    RF_UpdateAutoFishingState:InvokeServer(true)
+                UpdateGameMode()      -- 🧠 QUEST BRAIN
+                AutoBuyBestBait()     -- ✅ GLOBAL
+                EquipBestBait()        -- ✅ GLOBAL
+                
+                -- The rest of your logic remains the same...
+                if STATE.Mode == "FarmNextRod" then
                     EquipRod("Best")
-                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
-
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    end
+                elseif STATE.Mode == "DeepSea" then
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    end
                 elseif STATE.Mode == "Lever" then
-                    RF_UpdateAutoFishingState:InvokeServer(true)
                     ExecuteLeverLogic()
-
                 elseif STATE.Mode == "Element" then
-                    if STATE.CurrentArea ~= STATE.NextLocation then 
-                        Teleport(STATE.NextLocation) 
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
                     else
-                        -- Instant path automatically handles stopping normal auto
                         EquipRod(169)
                         STATE.Status = "Instant Fishing..."
-                        RunInstantFish() 
+                        RunInstantFish()
                     end
-
                 elseif STATE.Mode == "Finished" then
-                    RF_UpdateAutoFishingState:InvokeServer(true)
-                    if STATE.CurrentArea ~= "Esoteric Island" then Teleport("Esoteric Island") end
+                    if STATE.CurrentArea ~= "Esoteric Island" then
+                        Teleport("Esoteric Island")
+                    end
                 end
             end)
         end
