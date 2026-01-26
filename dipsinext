@@ -392,38 +392,51 @@ FishingController.FishingRodStarted = function(self,...) oldStart(self,...) if A
 local oldStop = FishingController.FishingStopped
 FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
+-- ===============================
+-- MAIN LOOP (REVISED WITH 1-MINUTE SELL TIMER)
+-- ===============================
+local sellTimer = 0 -- Add this variable outside the loop to track time
+
 task.spawn(function()
     while task.wait(0.5) do
         if AutoActive then
             pcall(function()
-                RF_SellAllItems:InvokeServer()
-                UpdateGameMode()
+                -- [[ SELL LOGIC: Runs every 60 seconds ]] --
+                sellTimer = sellTimer + 0.5
+                if sellTimer >= 60 then
+                    RF_SellAllItems:InvokeServer()
+                    sellTimer = 0
+                end
+                -- [[ END SELL LOGIC ]] --
 
-                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
-                    -- Normal Auto Fishing Path
-                    RF_UpdateAutoFishingState:InvokeServer(true) -- Ensure Normal Auto is ON
+                UpdateGameMode()      -- 🧠 QUEST BRAIN
+                AutoBuyBestBait()     -- ✅ GLOBAL
+                EquipBestBait()        -- ✅ GLOBAL
+                
+                -- The rest of your logic remains the same...
+                if STATE.Mode == "FarmNextRod" then
                     EquipRod("Best")
-                    EquipBestBait()
-                    AutoBuyBestBait()
-                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
-
-                elseif STATE.Mode == "Lever" then
-                    RF_UpdateAutoFishingState:InvokeServer(true)
-                    ExecuteLeverLogic()
-
-                elseif STATE.Mode == "Element" then
-                    -- [[ TRANSITION TO INSTANT ]] --
-                    if STATE.CurrentArea ~= STATE.NextLocation then 
-                        Teleport(STATE.NextLocation) 
-                    else
-                        EquipRod(169)
-                        STATE.Status = "Instant Fishing..."
-                        RunInstantFish() -- This now stops normal auto before running
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
                     end
-
+                elseif STATE.Mode == "DeepSea" then
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    end
+                elseif STATE.Mode == "Lever" then
+                    ExecuteLeverLogic()
+                elseif STATE.Mode == "Element" then
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    else
+                        STATE.Status = "Instant Fishing..."
+                        RunInstantFish()
+                    end
                 elseif STATE.Mode == "Finished" then
-                    RF_UpdateAutoFishingState:InvokeServer(true)
-                    if STATE.CurrentArea ~= "Esoteric Island" then Teleport("Esoteric Island") end
+                    if STATE.CurrentArea ~= "Esoteric Island" then
+                        Teleport("Esoteric Island")
+                    end
                 end
             end)
         end
