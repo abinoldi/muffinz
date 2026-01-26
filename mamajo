@@ -2,13 +2,14 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const readline = require("readline");
-const os = require("os"); // Import OS module for system stats
+const os = require("os");
 
 // --- CONFIGURATION ---
 const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
 const PLACE_ID = "121864768012064"; 
-const CHECK_INTERVAL = 60; // Check every 60 seconds
-const RESTART_COOLDOWN = 300; // Wait 300s (5 mins) before restarting the SAME app again
+const PER_USER_DELAY = 5000; // 5 Seconds delay per user check
+const CHECK_INTERVAL = 60;   // Wait 60s total before starting next cycle
+const RESTART_COOLDOWN = 300; // 5 Minutes cooldown
 // ---------------------
 
 function ensurePackage(pkg) {
@@ -25,8 +26,9 @@ const TERMUX_PREFIX = "/data/data/com.termux/files/usr/bin";
 const NODE_PATH = `${TERMUX_PREFIX}/node`;
 const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 
-// Track restart times to prevent loops
+// State Tracking
 let lastRestartMap = {}; 
+let accountStates = {}; 
 
 function initSystem() {
   try {
@@ -77,22 +79,6 @@ async function getUserInfo(cookie) {
   } catch { return { id: null, name: "Expired" }; }
 }
 
-function getRunningPackagesSnapshot(packages) {
-  let runningStatus = {};
-  packages.forEach(p => runningStatus[p] = false);
-  try {
-    const raw = execSync("ps -A -o NAME", { encoding: "utf8" });
-    packages.forEach(pkg => {
-      if (raw.includes(pkg)) runningStatus[pkg] = true;
-    });
-  } catch (e) {
-    packages.forEach(pkg => {
-      try { execSync(`pidof ${pkg}`, { stdio: 'ignore' }); runningStatus[pkg] = true; } catch { runningStatus[pkg] = false; }
-    });
-  }
-  return runningStatus;
-}
-
 function stopPackage(pkg) { try { execSync(`am force-stop ${pkg}`); } catch {} }
 
 function launchPackage(pkg, url) {
@@ -102,25 +88,24 @@ function launchPackage(pkg, url) {
   } catch {}
 }
 
-async function getBatchPresence(accounts) {
-  const validAccounts = accounts.filter(a => a.userId && a.cookie);
-  if (validAccounts.length === 0) return {};
-  const userIds = validAccounts.map(a => a.userId);
+function isProcessRunning(pkg) {
+  try { execSync(`pidof ${pkg}`, { stdio: 'ignore' }); return true; } catch { return false; }
+}
+
+async function getSinglePresence(userId, cookie) {
+  if (!userId || !cookie) return "Unknown ❓";
   try {
     const res = await axios.post("https://presence.roblox.com/v1/presence/users", 
-      { userIds: userIds },
-      { headers: { Cookie: validAccounts[0].cookie, "Content-Type": "application/json" } }
+      { userIds: [userId] },
+      { headers: { Cookie: cookie, "Content-Type": "application/json" } }
     );
-    const presenceMap = {};
-    res.data.userPresences.forEach(p => {
-      let status = "Unknown";
-      if (p.userPresenceType === 2) status = "In Game 🎮";
-      else if (p.userPresenceType === 1) status = "Online 🟡";
-      else if (p.userPresenceType === 0) status = "Offline ⚫";
-      presenceMap[p.userId] = status;
-    });
-    return presenceMap;
-  } catch { return {}; }
+    const p = res.data.userPresences[0];
+    if (!p) return "Unknown ❓";
+    if (p.userPresenceType === 2) return "In Game 🎮";
+    if (p.userPresenceType === 1) return "Online 🟡";
+    if (p.userPresenceType === 0) return "Offline ⚫";
+    return `Type ${p.userPresenceType}`;
+  } catch { return "API Error ⚠️"; }
 }
 
 async function fetchLinkCodes() {
@@ -131,7 +116,6 @@ async function fetchLinkCodes() {
   } catch (e) { return []; }
 }
 
-// === SYSTEM STATS HELPER ===
 function getSystemStats() {
   const cpus = os.cpus();
   const idle = cpus.reduce((acc, cpu) => acc + cpu.times.idle, 0);
@@ -141,27 +125,39 @@ function getSystemStats() {
   const cpuUsage = (100 - (idle / total) * 100).toFixed(1);
 
   const totalMem = os.totalmem();
-  const freeMem = os.freemem();
-  const usedMem = totalMem - freeMem;
-
   const totalGB = (totalMem / (1024 ** 3)).toFixed(2);
-  const usedGB = (usedMem / (1024 ** 3)).toFixed(2);
-  
+  const usedGB = ((totalMem - os.freemem()) / (1024 ** 3)).toFixed(2);
   const uptimeHrs = Math.floor(os.uptime() / 3600);
-  const uptimeMins = Math.floor((os.uptime() % 3600) / 60);
 
-  return {
-    cpu: `${cpuUsage}%`,
-    ram: `${usedGB} GB / ${totalGB} GB`,
-    uptime: `${uptimeHrs}h ${uptimeMins}m`
-  };
+  return { cpu: `${cpuUsage}%`, ram: `${usedGB}/${totalGB} GB`, uptime: `${uptimeHrs}h` };
+}
+
+function renderDashboard(cleanCode, statusMessage) {
+  console.clear();
+  const stats = getSystemStats();
+  console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
+  console.log(`📊 STATUS: ${statusMessage} | Code: ...${cleanCode.slice(-4)}`);
+  
+  const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
+  
+  Object.keys(accountStates).sort().forEach(pkg => {
+    const s = accountStates[pkg];
+    table.push([
+      s.username.substring(0, 10),
+      s.isRunning ? "Run 🟢" : "Dead 🔴",
+      s.serverStatus,
+      s.action
+    ]);
+  });
+  
+  console.log(table.toString());
 }
 
 // === MAIN LOGIC ===
 async function main() {
   initSystem();
   console.clear();
-  console.log("🚀 Initializing Ultra-Lite Manager...");
+  console.log("🚀 Initializing Stable Manager...");
 
   const packages = getPackages();
   if (!packages.length) { console.log("❌ No Roblox packages found."); process.exit(0); }
@@ -173,6 +169,13 @@ async function main() {
     const userInfo = await getUserInfo(cookie);
     accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
     lastRestartMap[pkg] = 0;
+    
+    accountStates[pkg] = {
+      username: userInfo.name || "Unknown",
+      isRunning: false,
+      serverStatus: "Waiting...",
+      action: "-"
+    };
   }
   console.log(`\n✅ Loaded ${accounts.length} accounts.`);
 
@@ -181,7 +184,7 @@ async function main() {
 
   console.log("\n📜 Available Codes:");
   codes.forEach((code, index) => console.log(`[${index + 1}] ${code}`));
-  const selection = await ask("\n👉 Choose: ");
+  const selection = await ask("\n👉 Choose Server: ");
   const index = parseInt(selection) - 1;
   if (isNaN(index) || index < 0 || index >= codes.length) process.exit(1);
 
@@ -194,60 +197,74 @@ async function main() {
     stopPackage(acc.pkg);
     launchPackage(acc.pkg, finalLaunchUrl);
     lastRestartMap[acc.pkg] = Date.now();
-    await sleep(30000);
+    accountStates[acc.pkg].isRunning = true;
+    accountStates[acc.pkg].serverStatus = "Launching...";
+    await sleep(8000);
   }
 
-  console.log(`\n💤 Monitor active (Check every ${CHECK_INTERVAL}s)...`);
+  console.log(`\n💤 Stable Monitor active (5s delay/user | 60s Interval)...`);
   
   while (true) {
-    await sleep(CHECK_INTERVAL * 1000);
-
-    const runningStatus = getRunningPackagesSnapshot(packages);
-    const presenceMap = await getBatchPresence(accounts);
-    
-    console.clear(); 
-    
-    // --- DISPLAY SYSTEM STATS ---
-    const stats = getSystemStats();
-    console.log(`📱 SYSTEM HEALTH`);
-    const sysTable = new Table({ head: ['CPU Usage', 'RAM Usage', 'Uptime'], colWidths: [15, 25, 15] });
-    sysTable.push([stats.cpu, stats.ram, stats.uptime]);
-    console.log(sysTable.toString());
-    console.log(""); // Empty line
-    // ----------------------------
-
-    console.log(`📊 ACCOUNT STATUS (${new Date().toLocaleTimeString()}) - Code: ...${cleanCode.slice(-4)}`);
-
-    const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
-    const now = Date.now();
+    const cycleStartTime = Date.now();
 
     for (const acc of accounts) {
-      const isRunning = runningStatus[acc.pkg];
-      const serverStatus = presenceMap[acc.userId] || "Unknown";
-      let action = "-";
+      // Show we are checking this user
+      accountStates[acc.pkg].action = "🔎 CHECKING...";
+      renderDashboard(cleanCode, `Checking ${acc.username}...`);
 
+      // Checks
+      const isRunning = isProcessRunning(acc.pkg);
+      const serverStatus = await getSinglePresence(acc.userId, acc.cookie);
+      
+      // Logic
+      const now = Date.now();
       const isStuck = serverStatus.includes("Online");
       const timeSinceRestart = (now - lastRestartMap[acc.pkg]) / 1000;
       const onCooldown = timeSinceRestart < RESTART_COOLDOWN;
-
+      
+      let action = "-";
+      
       if (!isRunning || isStuck) {
         if (onCooldown) {
-          action = `⏳ Loading (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
+          action = `⏳ Wait (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
         } else {
           if (isRunning && isStuck) {
             stopPackage(acc.pkg);
             action = "♻️ RESTART (Stuck)";
           } else {
-            action = "♻️ REOPEN (Closed)";
+            action = "♻️ REOPEN (Crash)";
           }
           launchPackage(acc.pkg, finalLaunchUrl);
           lastRestartMap[acc.pkg] = now;
         }
       }
-
-      table.push([acc.username.substring(0, 10), isRunning ? "Run 🟢" : "Dead 🔴", serverStatus, action]);
+      
+      // Update State
+      accountStates[acc.pkg] = {
+        username: acc.username,
+        isRunning: isRunning,
+        serverStatus: serverStatus,
+        action: action
+      };
+      
+      // Sleep between users to prevent ping spikes
+      await sleep(PER_USER_DELAY);
     }
-    console.log(table.toString());
+
+    // Interval Calculation
+    const cycleEndTime = Date.now();
+    const elapsedTimeSeconds = (cycleEndTime - cycleStartTime) / 1000;
+    const remainingTime = CHECK_INTERVAL - elapsedTimeSeconds;
+
+    if (remainingTime > 0) {
+      // Clear checking status for clean display
+      Object.keys(accountStates).forEach(pkg => {
+          if(accountStates[pkg].action === "🔎 CHECKING...") accountStates[pkg].action = "-";
+      });
+      
+      renderDashboard(cleanCode, `Sleeping (${Math.floor(remainingTime)}s)`);
+      await sleep(remainingTime * 1000);
+    }
   }
 }
 
