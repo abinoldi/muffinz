@@ -150,7 +150,7 @@ async function setupAccounts() {
 async function runLaunchSequence(accounts) {
   console.log("🛑 Stopping all instances...");
   for (const acc of accounts) stopPackage(acc.pkg);
-  await sleep(2000);
+  await sleep(8000);
 
   console.log("🚀 Launching instances...");
   for (const acc of accounts) {
