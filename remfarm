@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: BLACK EDITION (FIXED COUNTER)
+-- # ULTIMATE HUB: BLACK EDITION (TRADE MONITOR)
 -- ======================================================
 local MasterConfig = {
     -- [FISHING SETTINGS]
@@ -25,8 +25,8 @@ local MasterConfig = {
     PotatoMode = true,
     
     -- [TRADING]
-    AutoTrade = false,
-    TargetUsername = "mm3kenak",
+    AutoTrade = true,               -- Set TRUE untuk melihat fitur monitor trade
+    TargetUsername = "mm3kenak",    -- Username Target
     TradeMode = "SECRETS_FIRST",
     TradeDelay = 6.5,
 
@@ -532,10 +532,11 @@ local function CreateLabel(order, color, size, text)
     return lbl
 end
 
-local locLabel = CreateLabel(0, Color3.fromRGB(160, 32, 240), 40, "LOC: " .. MasterConfig.SelectedLocation) -- Purple like 'Element'
+local locLabel = CreateLabel(0, Color3.fromRGB(160, 32, 240), 40, "LOC: " .. MasterConfig.SelectedLocation)
 local fishCountLabel = CreateLabel(1, Color3.fromRGB(255, 255, 255), 30, "0 Fish | 0.0 F/M")
 local timerLabel = CreateLabel(2, Color3.fromRGB(200, 200, 200), 25, "00h 00m 00s")
 local secretLabel = CreateLabel(3, Color3.fromRGB(0, 255, 100), 25, "Secrets: 0")
+local tradeLabel = CreateLabel(4, Color3.fromRGB(255, 165, 0), 22, "Trade: Disabled") -- NEW LABEL
 
 -- GRID CONTAINER (Moved to bottom half, slightly smaller)
 local scrollFrame = Instance.new("ScrollingFrame", contentContainer)
@@ -567,21 +568,50 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
+-- TRADE MONITOR LOOP (OPTIMIZED 15s)
+task.spawn(function()
+    while gui.Parent do
+        if MasterConfig.AutoTrade then
+            tradeLabel.Visible = true
+            local targetName = MasterConfig.TargetUsername
+            local target = Players:FindFirstChild(targetName)
+            
+            if target then
+                -- Check Physical Character & Distance
+                if target.Character and target.Character:FindFirstChild("HumanoidRootPart") and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    local mag = (lp.Character.HumanoidRootPart.Position - target.Character.HumanoidRootPart.Position).Magnitude
+                    local distMeters = mag / 3.5 -- Konversi ke Meter
+                    tradeLabel.Text = string.format("📍 %s: Online | %.1f m", targetName, distMeters)
+                    tradeLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Green
+                else
+                    -- Target ada di server tapi karakter belum load (atau jauh di void)
+                    tradeLabel.Text = "📍 " .. targetName .. ": Online (No Character)"
+                    tradeLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow
+                end
+            else
+                -- Target tidak ada di server
+                tradeLabel.Text = "📍 " .. targetName .. ": OFFLINE"
+                tradeLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red
+            end
+        else
+            tradeLabel.Visible = false
+        end
+        task.wait(15) -- Refresh setiap 15 detik (sesuai request)
+    end
+end)
+
 -- REMOTE LISTENER & COUNTER LOGIC (FIXED)
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
-        -- [FIX] Counter naik DULUAN sebelum proses data lain
         TotalFishCaught = TotalFishCaught + 1
         
-        -- Update Label Ikan Segera
         local elapsed = os.time() - SessionStartTime
-        if elapsed < 60 then elapsed = 60 end -- Avoid div by zero visual
+        if elapsed < 60 then elapsed = 60 end
         local fpm = TotalFishCaught / (elapsed / 60)
         fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
 
-        -- Proses Data Ikan (Dibungkus pcall agar error tidak mematikan script)
         task.spawn(function()
             if not item then return end
             
@@ -658,7 +688,6 @@ task.spawn(function()
     while gui.Parent do
         local elapsed = os.time() - SessionStartTime
         timerLabel.Text = FormatTime(elapsed)
-        -- Update FPM secara real-time juga di loop ini
         if elapsed > 0 then
              local fpm = TotalFishCaught / (elapsed / 60)
              fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
