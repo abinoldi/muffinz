@@ -1,31 +1,37 @@
+repeat task.wait() until game:IsLoaded()
+
 -- ======================================================
--- # ULTIMATE HUB: CONFIGURATION (FULL VERSION)
+-- # ULTIMATE HUB: CONFIGURATION (FINAL BLACK EDITION)
 -- ======================================================
 local MasterConfig = {
     -- [FISHING SETTINGS]
-    FishingEnabled = true,      -- Langsung mulai memancing saat script di-load
-    AutoEquip = true,           -- Otomatis spam equip alat pancing
-    CatchDelay = 1.5,           -- STRICT 1.5s delay
-    AutoSell = true,            -- Otomatis jual ikan
-    SellDelay = 65,             -- Jeda waktu (detik) antar auto-sell
-    AutoFavorite = true,        -- Otomatis kunci Ruby, Leviathan, & Rage
+    FishingEnabled = true,
+    AutoEquip = true,
+    CatchDelay = 1.5,
+    AutoSell = true,
+    SellDelay = 65,
+    AutoFavorite = true,
+
+    -- [DISCORD WEBHOOK SETTINGS]
+    DiscordWebhookEnabled = true,
+    DiscordWebhookUrl = "https://discord.com/api/webhooks/1465420956427092103/wGjQ6XUp3AxUVtTdG85OADDL4eMFWiT9tWOptrrGLY0v8OV7y0y5LX6D_Sjkge6L-Ole",
 
     -- [TELEPORT SETTINGS]
-    AutoTeleport = true,        -- Teleport otomatis saat script mulai
+    AutoTeleport = true,
     SelectedLocation = "Crater Island",
 
     -- [UTILITIES]
-    AutoTotem = true,           -- Pasang Mutation Totem otomatis tiap 63 menit
-    PotatoMode = true,          -- Mode Invisible / Low Graphic Extreme
+    AutoTotem = true,
+    PotatoMode = true,
     
     -- [TRADING]
-    AutoTrade = false,          -- Kirim ikan otomatis ke akun lain
+    AutoTrade = false,
     TargetUsername = "mm3kenak",
-    TradeMode = "SECRETS_FIRST", -- SECRETS_FIRST | RUBY_GEMSTONE | ALL
-    TradeDelay = 6.5,           -- Jeda antar trade
+    TradeMode = "SECRETS_FIRST",
+    TradeDelay = 6.5,
 
-    -- [WEBHOOK]
-    WebhookEnabled = true,      
+    -- [IN-GAME WEBHOOK]
+    WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
@@ -67,6 +73,8 @@ local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
+
+local req = request or http_request or syn.request
 
 -- ANTI-AFK
 pcall(function()
@@ -152,6 +160,39 @@ local function GetMutation(item)
 end
 
 -- ===============================
+-- 2.5 DISCORD WEBHOOK LOGIC
+-- ===============================
+local function SendDiscordSecretNotification(fishName, rarity, mutation, weight, sellPrice)
+    if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl then return end
+    if not req then return end
+    
+    local mutationText = (mutation ~= "" and mutation ~= "None" and mutation or "None")
+    
+    req({
+        Url = MasterConfig.DiscordWebhookUrl,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode({
+            username = "Webhak Enok",
+            embeds = {{
+                title = "🚨 " .. tostring(rarity) .. " FISH CAUGHT! 🚨",
+                color = 16711680,
+                fields = {
+                    { name = "Pemain", value = "`" .. lp.Name .. "`", inline = true },
+                    { name = "Ikan", value = "**" .. fishName .. "**", inline = true },
+                    { name = "Rarity", value = "`" .. rarity .. "`", inline = true },
+                    { name = "Mutasi", value = "`" .. mutationText .. "`", inline = true },
+                    { name = "Berat", value = "`" .. string.format("%.2fkg", weight or 0) .. "`", inline = true },
+                    { name = "Estimasi Harga", value = "`$" .. math.floor(sellPrice or 0) .. "`", inline = true }
+                },
+                footer = { text = "Ultimate Hub - Webhak Enok" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }}
+        })
+    })
+end
+
+-- ===============================
 -- 3. EXTREME INVISIBLE POTATO MODE
 -- ===============================
 local VFXControllerModule, originalVFXHandle, originalPlayVFX
@@ -225,7 +266,7 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- 4. FISHER V1 LOGIC (STRICT INSTANT)
+-- 4. FISHER V1 LOGIC
 -- ===============================
 local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
 local FishingThreads = {}
@@ -241,12 +282,6 @@ local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
 local function GetCoins()
     return PlayerData and (PlayerData:Get("Coins") or 0) or 0
-end
-
-local function FormatNumber(num)
-    if num >= 1000000 then return string.format("%.1fM", num/1000000)
-    elseif num >= 1000 then return string.format("%.1fK", num/1000)
-    else return tostring(num) end
 end
 
 local function RunInstantFish()
@@ -286,7 +321,7 @@ local function StartFishingV1()
                 local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
             end
-            task.wait(MasterConfig.SellDelay) -- MENGGUNAKAN CONFIG DELAY BARU
+            task.wait(MasterConfig.SellDelay)
         end
     end))
     
@@ -316,15 +351,6 @@ local function StartFishingV1()
             task.wait(0.5)
         end
     end))
-end
-
-local function StopFishingV1()
-    FishingState.IsFishing = false
-    for _, t in ipairs(FishingThreads) do task.cancel(t) end
-    FishingThreads = {}
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
-    pcall(function() RE_EquipToolFromHotbar:FireServer(0) end)
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
 -- ===============================
@@ -464,188 +490,172 @@ local function RunAutoTrade()
 end
 
 -- ===============================
--- 7. GUI CONSTRUCTION (FULL SCREEN GRID & MONITOR)
+-- 7. GUI CONSTRUCTION (BLACK MINIMALIST)
 -- ===============================
-local guiName = "UltimateHubFullScreen"
-
--- Bersihkan GUI lama jika ada
-if CoreGui:FindFirstChild(guiName) then
-    CoreGui[guiName]:Destroy()
-end
+local guiName = "UltimateHubBlack"
+if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = guiName
 gui.Parent = CoreGui
 gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true -- Agar menutupi sampai ke topbar
+gui.IgnoreGuiInset = true
 
--- [VARS UNTUK TRACKING]
+-- VARIABLES
 local SessionStartTime = os.time()
 local TotalSecretsFound = 0
-local FishSessionMap = {} -- Format: { ["FishName"] = count }
+local TotalFishCaught = 0
+local FishSessionMap = {}
 
--- [MAIN FRAME - FLEXIBLE FULLSCREEN]
+-- MAIN FRAME (PITCH BLACK)
 local mainFrame = Instance.new("Frame", gui)
-mainFrame.Size = UDim2.new(1, 0, 1, 0) -- Full Width & Height (Flexible)
-mainFrame.Position = UDim2.new(0, 0, 0, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-mainFrame.BackgroundTransparency = 0.1
+mainFrame.Size = UDim2.new(1, 0, 1, 0)
+mainFrame.BackgroundColor3 = Color3.new(0, 0, 0) -- FULL BLACK
+mainFrame.BackgroundTransparency = 0 -- NOT TRANSPARENT
 mainFrame.BorderSizePixel = 0
 
--- [TOP BAR: STATUS & TIMER]
-local topBar = Instance.new("Frame", mainFrame)
-topBar.Size = UDim2.new(1, 0, 0, 80)
-topBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-topBar.BorderSizePixel = 0
+-- CONTAINER FOR CONTENT (To hide when toggled)
+local contentContainer = Instance.new("Frame", mainFrame)
+contentContainer.Size = UDim2.new(1, 0, 1, 0)
+contentContainer.BackgroundTransparency = 1
 
-local titleLabel = Instance.new("TextLabel", topBar)
-titleLabel.Size = UDim2.new(1, -20, 0, 30)
-titleLabel.Position = UDim2.new(0, 10, 0, 5)
-titleLabel.Text = "ULTIMATE FISHING HUB - MONITOR"
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.TextSize = 24
-titleLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
-titleLabel.BackgroundTransparency = 1
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- INFO LABELS (CENTERED)
+local function CreateLabel(order, color, size, text)
+    local lbl = Instance.new("TextLabel", contentContainer)
+    lbl.Size = UDim2.new(1, 0, 0, size)
+    lbl.Position = UDim2.new(0, 0, 0.3 + (order * 0.08), 0) -- Stacking vertically
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = size
+    lbl.TextColor3 = color
+    lbl.Text = text
+    return lbl
+end
 
-local locationLabel = Instance.new("TextLabel", topBar)
-locationLabel.Size = UDim2.new(0.5, 0, 0, 25)
-locationLabel.Position = UDim2.new(0, 10, 0, 40)
-locationLabel.Text = "📍 Location: " .. MasterConfig.SelectedLocation
-locationLabel.Font = Enum.Font.GothamMedium
-locationLabel.TextSize = 16
-locationLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-locationLabel.BackgroundTransparency = 1
-locationLabel.TextXAlignment = Enum.TextXAlignment.Left
+local locLabel = CreateLabel(0, Color3.fromRGB(160, 32, 240), 40, "LOC: " .. MasterConfig.SelectedLocation) -- Purple like 'Element'
+local fishCountLabel = CreateLabel(1, Color3.fromRGB(255, 255, 255), 30, "0 Fish | 0.0 F/M")
+local timerLabel = CreateLabel(2, Color3.fromRGB(200, 200, 200), 25, "00h 00m 00s")
+local secretLabel = CreateLabel(3, Color3.fromRGB(0, 255, 100), 25, "Secrets: 0")
 
-local timerLabel = Instance.new("TextLabel", topBar)
-timerLabel.Size = UDim2.new(0.5, -20, 0, 25)
-timerLabel.Position = UDim2.new(0.5, 10, 0, 40)
-timerLabel.Text = "⏱ Time: 00:00:00"
-timerLabel.Font = Enum.Font.GothamMedium
-timerLabel.TextSize = 16
-timerLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-timerLabel.BackgroundTransparency = 1
-timerLabel.TextXAlignment = Enum.TextXAlignment.Right
-
--- [GRID CONTAINER (SCROLLING)]
-local scrollFrame = Instance.new("ScrollingFrame", mainFrame)
-scrollFrame.Size = UDim2.new(1, -20, 1, -140) -- Mengisi tengah layar
-scrollFrame.Position = UDim2.new(0, 10, 0, 90)
+-- GRID CONTAINER (Moved to bottom half, slightly smaller)
+local scrollFrame = Instance.new("ScrollingFrame", contentContainer)
+scrollFrame.Size = UDim2.new(0.6, 0, 0.3, 0)
+scrollFrame.Position = UDim2.new(0.2, 0, 0.65, 0)
 scrollFrame.BackgroundTransparency = 1
-scrollFrame.ScrollBarThickness = 6
+scrollFrame.ScrollBarThickness = 2
 
 local gridLayout = Instance.new("UIGridLayout", scrollFrame)
-gridLayout.CellSize = UDim2.new(0, 120, 0, 80) -- Ukuran kotak per ikan
-gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
+gridLayout.CellSize = UDim2.new(0, 100, 0, 40)
+gridLayout.CellPadding = UDim2.new(0, 5, 0, 5)
 gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- [BOTTOM BAR: STATS]
-local bottomBar = Instance.new("Frame", mainFrame)
-bottomBar.Size = UDim2.new(1, 0, 0, 40)
-bottomBar.Position = UDim2.new(0, 0, 1, -40)
-bottomBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-bottomBar.BorderSizePixel = 0
+-- TOGGLE BUTTON (At Bottom Center)
+local toggleBtn = Instance.new("TextButton", gui) -- Parented to GUI, not Container
+toggleBtn.Size = UDim2.new(0, 150, 0, 40)
+toggleBtn.Position = UDim2.new(0.5, -75, 1, -60)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+toggleBtn.Text = "HIDE GUI"
+toggleBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
 
-local secretLabel = Instance.new("TextLabel", bottomBar)
-secretLabel.Size = UDim2.new(1, 0, 1, 0)
-secretLabel.Text = "TOTAL SECRETS: 0"
-secretLabel.Font = Enum.Font.GothamBlack
-secretLabel.TextSize = 18
-secretLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-secretLabel.BackgroundTransparency = 1
-
--- ===============================
 -- LOGIC: TIME & UPDATE
--- ===============================
 local function FormatTime(seconds)
     local h = math.floor(seconds / 3600)
     local m = math.floor((seconds % 3600) / 60)
     local s = seconds % 60
-    return string.format("%02d:%02d:%02d", h, m, s)
+    return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
-local function UpdateFishGrid(name, rarity, isSecret)
+local function UpdateUI(name, rarity, isSecret)
+    -- Global Stats
+    TotalFishCaught = TotalFishCaught + 1
+    local elapsedMin = (os.time() - SessionStartTime) / 60
+    if elapsedMin == 0 then elapsedMin = 1 end
+    local fpm = TotalFishCaught / elapsedMin
+    
+    fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
+    
+    -- Grid Update
     if not FishSessionMap[name] then
         FishSessionMap[name] = 1
-        local itemFrame = Instance.new("Frame")
+        local itemFrame = Instance.new("Frame", scrollFrame)
+        itemFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        itemFrame.BorderSizePixel = 0
+        
+        local txt = Instance.new("TextLabel", itemFrame)
+        txt.Size = UDim2.new(1,0,1,0)
+        txt.BackgroundTransparency = 1
+        txt.TextColor3 = isSecret and Color3.new(1,0,0) or Color3.new(0.7,0.7,0.7)
+        txt.TextScaled = true
+        txt.Text = name .. " x1"
+        txt.Name = "Lbl"
         itemFrame.Name = name
-        itemFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-        itemFrame.Parent = scrollFrame
-        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 6)
-        
-        local stroke = Instance.new("UIStroke", itemFrame)
-        stroke.Thickness = 1.5
-        if isSecret then stroke.Color = Color3.fromRGB(255, 0, 0)
-        else stroke.Color = Color3.fromRGB(60, 60, 60) end
-
-        local nameLbl = Instance.new("TextLabel", itemFrame)
-        nameLbl.Size = UDim2.new(1, 0, 0.6, 0)
-        nameLbl.BackgroundTransparency = 1
-        nameLbl.Text = name
-        nameLbl.TextColor3 = Color3.new(1,1,1)
-        nameLbl.TextScaled = true
-        nameLbl.Font = Enum.Font.GothamBold
-        
-        local countLbl = Instance.new("TextLabel", itemFrame)
-        countLbl.Name = "Count"
-        countLbl.Size = UDim2.new(1, 0, 0.4, 0)
-        countLbl.Position = UDim2.new(0,0,0.6,0)
-        countLbl.BackgroundTransparency = 1
-        countLbl.Text = "x1"
-        countLbl.TextColor3 = Color3.fromRGB(0, 255, 150)
-        countLbl.Font = Enum.Font.Gotham
-        countLbl.TextSize = 14
     else
         FishSessionMap[name] = FishSessionMap[name] + 1
-        local existingFrame = scrollFrame:FindFirstChild(name)
-        if existingFrame and existingFrame:FindFirstChild("Count") then
-            existingFrame.Count.Text = "x" .. tostring(FishSessionMap[name])
+        local f = scrollFrame:FindFirstChild(name)
+        if f and f:FindFirstChild("Lbl") then
+            f.Lbl.Text = name .. " x" .. FishSessionMap[name]
         end
     end
-    
+
     if isSecret then
         TotalSecretsFound = TotalSecretsFound + 1
-        secretLabel.Text = "TOTAL SECRETS: " .. tostring(TotalSecretsFound)
-        secretLabel.TextSize = 24
-        task.delay(0.2, function() secretLabel.TextSize = 18 end)
+        secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
     end
 end
 
 -- REMOTE LISTENER
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
-
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         local name, rarity = GetFishNameAndRarity(item)
         local mutation = GetMutation(item)
-        
         local displayName = name
-        if mutation and mutation ~= "None" then
-            displayName = "[" .. mutation .. "] " .. name
-        end
+        if mutation and mutation ~= "None" then displayName = "[" .. mutation .. "] " .. name end
+        local isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
         
-        local isSecret = false
-        if rarity and string.upper(tostring(rarity)) == "SECRET" then
-            isSecret = true
+        UpdateUI(displayName, rarity, isSecret)
+
+        -- Discord Webhook Hook
+        if MasterConfig.DiscordWebhookEnabled and isSecret then
+            task.spawn(function()
+                local weight = item.Metadata and item.Metadata.Weight or 0
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                local itemData = ItemUtility:GetItemData(numericID)
+                local basePrice = itemData and itemData.SellPrice or 0
+                local sellPrice = basePrice * (item.Metadata.SellMultiplier or 1)
+                SendDiscordSecretNotification(name, rarity, mutation, weight, sellPrice)
+            end)
         end
-        
-        UpdateFishGrid(displayName, rarity, isSecret)
     end)
 end
 
--- Loop Update Timer
+-- TOGGLE LOGIC
+local guiVisible = true
+toggleBtn.MouseButton1Click:Connect(function()
+    guiVisible = not guiVisible
+    contentContainer.Visible = guiVisible
+    if guiVisible then
+        mainFrame.BackgroundTransparency = 0 -- Hitam Pekat
+        toggleBtn.Text = "HIDE GUI"
+    else
+        mainFrame.BackgroundTransparency = 1 -- Bening
+        toggleBtn.Text = "SHOW GUI"
+    end
+end)
+
+-- TIMER LOOP
 task.spawn(function()
     while gui.Parent do
         local elapsed = os.time() - SessionStartTime
-        timerLabel.Text = "⏱ Time: " .. FormatTime(elapsed)
-        locationLabel.Text = "📍 Location: " .. MasterConfig.SelectedLocation
+        timerLabel.Text = FormatTime(elapsed)
         task.wait(1)
     end
 end)
 
 -- ===============================
--- 8. WEBHOOK LOGIC
+-- 8. WEBHOOK LOGIC (LEGACY)
 -- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
@@ -681,19 +691,18 @@ end
 -- 9. AUTO-START EXECUTION
 -- ===============================
 task.delay(2, function()
-    print("[AutoStart] Initiating System...")
-    
+    print("[AutoStart] Black Edition Loaded...")
+    if req and MasterConfig.DiscordWebhookEnabled then
+       pcall(function() 
+          req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Black Monitor Online**" }) })
+       end)
+    end
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
     if MasterConfig.AutoTotem then StartAutoTotemLoop() end
     if MasterConfig.PotatoMode then StartPotatoLoop() end
     if MasterConfig.FishingEnabled then StartFishingV1() end
-    
     if MasterConfig.AutoTrade then
         local s, id = pcall(function() return Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername) end)
-        if s and id then
-            MasterConfig.TargetId = id
-            RunAutoTrade()
-        end
+        if s and id then MasterConfig.TargetId = id; RunAutoTrade() end
     end
-    -- Status visual sudah ditangani oleh GUI monitor
 end)
