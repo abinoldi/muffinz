@@ -1,106 +1,102 @@
 repeat task.wait() until game:IsLoaded()
 
-local REMOTE_CONFIG_URL = "http://165.232.148.115:5000/config.json"
-
-local function LoadRemoteConfig()
-    if not HttpService or not game.HttpGet then
-        warn("HttpService tidak tersedia")
-        return
-    end
-
-    local success, response = pcall(function()
-        return game:HttpGet(REMOTE_CONFIG_URL)
-    end)
-
-    if not success then
-        warn("Gagal fetch remote config")
-        return
-    end
-
-    local decoded
-    local ok, err = pcall(function()
-        decoded = HttpService:JSONDecode(response)
-    end)
-
-    if not ok or type(decoded) ~= "table" then
-        warn("Config JSON invalid")
-        return
-    end
-
-    -- 🔁 MERGE KE MASTERCONFIG
-    for key, value in pairs(decoded) do
-        if MasterConfig[key] ~= nil then
-            MasterConfig[key] = value
-        else
-            warn("Unknown config key ignored:", key)
-        end
-    end
-
-    print("[CONFIG] Remote config loaded & applied")
-end
-
-
 -- ======================================================
--- # ULTIMATE HUB: BLACK EDITION (TRADE MONITOR)
+-- # ULTIMATE HUB: WEB CONFIG AUTO-UPDATE
 -- ======================================================
+
+-- [1] SETUP URL CONFIG KAMU DISINI
+local OnlineConfigUrl = "http://165.232.148.115:5000/config.json" -- < GANTI DENGAN LINK WEB KAMU
+
+local Services = {
+    Players = game:GetService("Players"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage"),
+    RunService = game:GetService("RunService"),
+    HttpService = game:GetService("HttpService"),
+    CoreGui = game:GetService("CoreGui")
+}
+
+local lp = Services.Players.LocalPlayer
+local req = request or http_request or syn.request
+
+-- [2] DEFAULT CONFIG
 local MasterConfig = {
-    -- [FISHING SETTINGS]
     FishingEnabled = true,
     AutoEquip = true,
     CatchDelay = 1.5,
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
-
-    -- [DISCORD WEBHOOK SETTINGS]
     DiscordWebhookEnabled = true,
-    DiscordWebhookUrl = "https://discord.com/api/webhooks/1465420956427092103/wGjQ6XUp3AxUVtTdG85OADDL4eMFWiT9tWOptrrGLY0v8OV7y0y5LX6D_Sjkge6L-Ole",
-
-    -- [TELEPORT SETTINGS]
+    DiscordWebhookUrl = "",
     AutoTeleport = true,
     SelectedLocation = "Crater Island",
-
-    -- [UTILITIES]
     AutoTotem = true,
     PotatoMode = true,
-    
-    -- [TRADING]
-    AutoTrade = true,               -- Set TRUE untuk melihat fitur monitor trade
-    TargetUsername = "mm3kenak",    -- Username Target
+    AutoTrade = true,
+    TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST",
     TradeDelay = 6.5,
-
-    -- [IN-GAME WEBHOOK]
     WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
--- LOAD REMOTE CONFIG FIRST
-task.spawn(function()
-    while true do
-        task.wait(60) -- tiap 60 detik
-        pcall(function()
-            LoadRemoteConfig()
-        end)
-    end
-end)
+-- STATE TRACKING (Untuk mendeteksi perubahan on/off)
+local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
+local TradingState = { IsTrading = false, Thread = nil }
+local FishingThreads = {}
+local PotatoLoopThread = nil
 
-local function LoadRemoteConfig()
+-- FORWARD DECLARATION
+local StartFishingV1, StopFishingV1, RunAutoTrade
+
+-- [3] WEB CONFIG LOADER (AUTO UPDATE)
+local function LoadWebConfig()
+    if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
+
     local success, response = pcall(function()
-        return game:HttpGet(REMOTE_CONFIG_URL)
+        return game:HttpGet(OnlineConfigUrl, true) -- true = CacheBuster (No Cache)
     end)
-    if not success then return end
 
-    local decoded = HttpService:JSONDecode(response)
-    for k, v in pairs(decoded) do
-        if MasterConfig[k] ~= nil then
-            MasterConfig[k] = v
+    if success then
+        local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
+        if decodeSuccess then
+            -- print("[Config] Web config synced!")
+            local settingsChanged = false
+            
+            for key, value in pairs(decodedData) do
+                if MasterConfig[key] ~= value then
+                    MasterConfig[key] = value
+                    settingsChanged = true
+                    -- print("   > Updated:", key, value)
+                end
+            end
+
+            -- LOGIKA DYNAMIC SWITCHING (Jika setting berubah saat script jalan)
+            if settingsChanged then
+                -- 1. Handle Fishing Toggle
+                if MasterConfig.FishingEnabled and not FishingState.IsFishing then
+                    task.spawn(StartFishingV1)
+                elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then
+                    StopFishingV1()
+                end
+
+                -- 2. Handle AutoTrade Toggle
+                if MasterConfig.AutoTrade and not TradingState.IsTrading then
+                    task.spawn(RunAutoTrade)
+                elseif not MasterConfig.AutoTrade and TradingState.IsTrading then
+                    TradingState.IsTrading = false -- Loop trade akan berhenti sendiri karena cek MasterConfig
+                    if TradingState.Thread then task.cancel(TradingState.Thread) end
+                end
+            end
         end
+    else
+        warn("[Config] Connection failed, retrying in 60s...")
     end
 end
 
-
+-- ======================================================
 -- [DATASET LOKASI FISHING LENGKAP]
+-- ======================================================
 local FishingLocations = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
     ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
@@ -130,17 +126,8 @@ local FishingLocations = {
 }
 
 -- ===============================
--- 1. GLOBAL SERVICES & BYPASSES
+-- GLOBAL SERVICES & BYPASSES
 -- ===============================
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
-local lp = Players.LocalPlayer
-
-local req = request or http_request or syn.request
-
 -- ANTI-AFK
 pcall(function()
     for i, v in pairs(getconnections(lp.Idled)) do
@@ -150,7 +137,7 @@ end)
 
 -- CLIENT BYPASSES (REQUIRED FOR V1 FISHING)
 task.spawn(function()
-    local S1, FishingController = pcall(function() return require(ReplicatedStorage.Controllers.FishingController) end)
+    local S1, FishingController = pcall(function() return require(Services.ReplicatedStorage.Controllers.FishingController) end)
     if S1 and FishingController then
         FishingController.RequestChargeFishingRod = function(...) return nil end
         FishingController.SendFishingRequestToServer = function(...) return false, "Blocked by V1" end
@@ -178,16 +165,16 @@ end)
 setreadonly(mt, true)
 
 -- ===============================
--- 2. SHARED MODULES & HELPERS
+-- SHARED MODULES & HELPERS
 -- ===============================
-local Replion = require(ReplicatedStorage.Packages.Replion).Client
-local ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
-local TierUtility = require(ReplicatedStorage.Shared.TierUtility)
+local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
+local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
+local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
 local PlayerData = Replion:WaitReplion("Data", 10)
 
 local function GetRemote(name)
     local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = ReplicatedStorage
+    local current = Services.ReplicatedStorage
     for _, child in ipairs(path) do
         current = current:WaitForChild(child, 2)
         if not current then return nil end
@@ -225,10 +212,10 @@ local function GetMutation(item)
 end
 
 -- ===============================
--- 2.5 DISCORD WEBHOOK LOGIC
+-- DISCORD WEBHOOK LOGIC
 -- ===============================
 local function SendDiscordSecretNotification(fishName, rarity, mutation, weight, sellPrice)
-    if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl then return end
+    if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end
     if not req then return end
     
     local mutationText = (mutation ~= "" and mutation ~= "None" and mutation or "None")
@@ -237,7 +224,7 @@ local function SendDiscordSecretNotification(fishName, rarity, mutation, weight,
         Url = MasterConfig.DiscordWebhookUrl,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode({
+        Body = Services.HttpService:JSONEncode({
             username = "Webhak Enok",
             embeds = {{
                 title = "🚨 " .. tostring(rarity) .. " FISH CAUGHT! 🚨",
@@ -258,20 +245,11 @@ local function SendDiscordSecretNotification(fishName, rarity, mutation, weight,
 end
 
 -- ===============================
--- 3. EXTREME INVISIBLE POTATO MODE
+-- EXTREME INVISIBLE POTATO MODE
 -- ===============================
-local VFXControllerModule, originalVFXHandle, originalPlayVFX
+local VFXControllerModule
 pcall(function()
-    VFXControllerModule = require(ReplicatedStorage:WaitForChild("Controllers").VFXController)
-    originalVFXHandle = VFXControllerModule.Handle
-    originalPlayVFX = VFXControllerModule.PlayVFX.Fire 
-end)
-local originalCutscenePlay = nil
-pcall(function()
-    local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
-    if CutsceneController and CutsceneController.Play then
-        originalCutscenePlay = CutsceneController.Play
-    end
+    VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController)
 end)
 
 local function DisableAnimations()
@@ -293,7 +271,7 @@ local function ApplyExtremePotato()
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
     end
     pcall(function()
-        local CutsceneController = require(ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+        local CutsceneController = require(Services.ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
         if CutsceneController and CutsceneController.Play then CutsceneController.Play = function() return end end
     end)
     DisableAnimations()
@@ -323,19 +301,15 @@ local function ApplyExtremePotato()
     if setfpscap then pcall(function() setfpscap(30) end) end
 end
 
-local PotatoLoop
 local function StartPotatoLoop()
-    if PotatoLoop then return end
+    if PotatoLoopThread then return end
     ApplyExtremePotato()
-    PotatoLoop = task.spawn(function() while task.wait(3) do ApplyExtremePotato() end end)
+    PotatoLoopThread = task.spawn(function() while task.wait(3) do ApplyExtremePotato() end end)
 end
 
 -- ===============================
--- 4. FISHER V1 LOGIC
+-- FISHER V1 LOGIC
 -- ===============================
-local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
-local FishingThreads = {}
-
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
 local RE_FishingCompleted = GetRemote("RE/FishingCompleted")
@@ -354,13 +328,13 @@ local function RunInstantFish()
     local s1 = pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
     if not s1 then return end
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
-    task.wait(MasterConfig.CatchDelay) -- 1.5s
+    task.wait(MasterConfig.CatchDelay) -- Uses LIVE MasterConfig value
     pcall(function() RE_FishingCompleted:FireServer() end)
     task.wait(0.3)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
-local function StartFishingV1()
+function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
@@ -386,7 +360,7 @@ local function StartFishingV1()
                 local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
             end
-            task.wait(MasterConfig.SellDelay)
+            task.wait(MasterConfig.SellDelay) -- Uses LIVE MasterConfig value
         end
     end))
     
@@ -418,8 +392,16 @@ local function StartFishingV1()
     end))
 end
 
+function StopFishingV1()
+    FishingState.IsFishing = false
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    -- Threads will die naturally because 'while FishingState.IsFishing' becomes false
+    FishingThreads = {}
+end
+
 -- ===============================
--- 5. TELEPORT & TOTEM LOGIC
+-- TELEPORT & TOTEM LOGIC
 -- ===============================
 local TOTEM_ID = 2
 local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
@@ -489,9 +471,8 @@ local function StartAutoTotemLoop()
 end
 
 -- ===============================
--- 6. TRADING LOGIC
+-- TRADING LOGIC
 -- ===============================
-local TradingThread = nil
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 
 local function ScanInventoryForTrade()
@@ -524,45 +505,50 @@ local function IsItemStillInInventory(uuid)
     return false
 end
 
-local function RunAutoTrade()
-    if TradingThread then task.cancel(TradingThread) end
-    TradingThread = task.spawn(function()
-        while MasterConfig.AutoTrade do
+function RunAutoTrade()
+    if TradingState.IsTrading then return end
+    TradingState.IsTrading = true
+    
+    TradingState.Thread = task.spawn(function()
+        while MasterConfig.AutoTrade and TradingState.IsTrading do
             local secrets, specialMutations = ScanInventoryForTrade()
-            if #secrets == 0 and #specialMutations == 0 then MasterConfig.AutoTrade = false; break end
-            
-            local tradeUUID = nil
-            if MasterConfig.TradeMode == "SECRETS_FIRST" then
-                if #secrets > 0 then tradeUUID = secrets[1].uuid
-                elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
-            elseif MasterConfig.TradeMode == "RUBY_GEMSTONE" then
-                for _, item in ipairs(specialMutations) do
-                    if item.name == "Ruby" and item.mutation == "Gemstone" then tradeUUID = item.uuid; break end
+            if #secrets == 0 and #specialMutations == 0 then
+                 -- Don't break loop, just wait for fish
+            else
+                local tradeUUID = nil
+                if MasterConfig.TradeMode == "SECRETS_FIRST" then
+                    if #secrets > 0 then tradeUUID = secrets[1].uuid
+                    elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
+                elseif MasterConfig.TradeMode == "RUBY_GEMSTONE" then
+                    for _, item in ipairs(specialMutations) do
+                        if item.name == "Ruby" and item.mutation == "Gemstone" then tradeUUID = item.uuid; break end
+                    end
+                elseif MasterConfig.TradeMode == "ALL" then
+                    if #secrets > 0 then tradeUUID = secrets[1].uuid
+                    elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
                 end
-            elseif MasterConfig.TradeMode == "ALL" then
-                if #secrets > 0 then tradeUUID = secrets[1].uuid
-                elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
-            end
-            
-            if tradeUUID then
-                pcall(function() RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, tradeUUID) end)
-                local start = os.clock()
-                repeat task.wait(0.5) until not IsItemStillInInventory(tradeUUID) or (os.clock() - start) > 10
+                
+                if tradeUUID then
+                    pcall(function() RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, tradeUUID) end)
+                    local start = os.clock()
+                    repeat task.wait(0.5) until not IsItemStillInInventory(tradeUUID) or (os.clock() - start) > 10
+                end
             end
             task.wait(MasterConfig.TradeDelay)
         end
+        TradingState.IsTrading = false
     end)
 end
 
 -- ===============================
--- 7. GUI CONSTRUCTION (BLACK MINIMALIST)
+-- GUI CONSTRUCTION (BLACK MINIMALIST)
 -- ===============================
 local guiName = "UltimateHubBlack"
-if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
+if Services.CoreGui:FindFirstChild(guiName) then Services.CoreGui[guiName]:Destroy() end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = guiName
-gui.Parent = CoreGui
+gui.Parent = Services.CoreGui
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 
@@ -601,7 +587,7 @@ local locLabel = CreateLabel(0, Color3.fromRGB(160, 32, 240), 40, "LOC: " .. Mas
 local fishCountLabel = CreateLabel(1, Color3.fromRGB(255, 255, 255), 30, "0 Fish | 0.0 F/M")
 local timerLabel = CreateLabel(2, Color3.fromRGB(200, 200, 200), 25, "00h 00m 00s")
 local secretLabel = CreateLabel(3, Color3.fromRGB(0, 255, 100), 25, "Secrets: 0")
-local tradeLabel = CreateLabel(4, Color3.fromRGB(255, 165, 0), 22, "Trade: Disabled") -- NEW LABEL
+local tradeLabel = CreateLabel(4, Color3.fromRGB(255, 165, 0), 22, "Trade: Disabled")
 
 -- GRID CONTAINER (Moved to bottom half, slightly smaller)
 local scrollFrame = Instance.new("ScrollingFrame", contentContainer)
@@ -633,45 +619,41 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
--- TRADE MONITOR LOOP (OPTIMIZED 15s)
+-- TRADE MONITOR LOOP
 task.spawn(function()
     while gui.Parent do
         if MasterConfig.AutoTrade then
             tradeLabel.Visible = true
             local targetName = MasterConfig.TargetUsername
-            local target = Players:FindFirstChild(targetName)
+            local target = Services.Players:FindFirstChild(targetName)
             
             if target then
-                -- Check Physical Character & Distance
                 if target.Character and target.Character:FindFirstChild("HumanoidRootPart") and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                     local mag = (lp.Character.HumanoidRootPart.Position - target.Character.HumanoidRootPart.Position).Magnitude
-                    local distMeters = mag / 3.5 -- Konversi ke Meter
+                    local distMeters = mag / 3.5
                     tradeLabel.Text = string.format("📍 %s: Online | %.1f m", targetName, distMeters)
-                    tradeLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Green
+                    tradeLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
                 else
-                    -- Target ada di server tapi karakter belum load (atau jauh di void)
                     tradeLabel.Text = "📍 " .. targetName .. ": Online (No Character)"
-                    tradeLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow
+                    tradeLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
                 end
             else
-                -- Target tidak ada di server
                 tradeLabel.Text = "📍 " .. targetName .. ": OFFLINE"
-                tradeLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red
+                tradeLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
             end
         else
             tradeLabel.Visible = false
         end
-        task.wait(15) -- Refresh setiap 15 detik (sesuai request)
+        task.wait(15)
     end
 end)
 
--- REMOTE LISTENER & COUNTER LOGIC (FIXED)
+-- REMOTE LISTENER & COUNTER LOGIC
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         TotalFishCaught = TotalFishCaught + 1
-        
         local elapsed = os.time() - SessionStartTime
         if elapsed < 60 then elapsed = 60 end
         local fpm = TotalFishCaught / (elapsed / 60)
@@ -690,13 +672,12 @@ if RE_ObtainedNewFishNotification then
                 isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
             end)
             
-            -- Update Grid UI
             if not FishSessionMap[displayName] then
                 FishSessionMap[displayName] = 1
                 local itemFrame = Instance.new("Frame", scrollFrame)
                 itemFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
                 itemFrame.BorderSizePixel = 0
-                itemFrame.Name = displayName -- Key
+                itemFrame.Name = displayName
                 
                 local txt = Instance.new("TextLabel", itemFrame)
                 txt.Size = UDim2.new(1,0,1,0)
@@ -713,12 +694,10 @@ if RE_ObtainedNewFishNotification then
                 end
             end
 
-            -- Update Secret Label
             if isSecret then
                 TotalSecretsFound = TotalSecretsFound + 1
                 secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
                 
-                -- Trigger Discord Webhook
                 if MasterConfig.DiscordWebhookEnabled then
                     local weight = item.Metadata and item.Metadata.Weight or 0
                     local numericID = tonumber(item.Id) or tonumber(item.Identifier)
@@ -734,16 +713,15 @@ else
     warn("Warning: RE/ObtainedNewFishNotification not found. Counter will not work.")
 end
 
--- TOGGLE LOGIC
-local guiVisible = true
+-- GUI TOGGLE
 toggleBtn.MouseButton1Click:Connect(function()
     guiVisible = not guiVisible
     contentContainer.Visible = guiVisible
     if guiVisible then
-        mainFrame.BackgroundTransparency = 0 -- Hitam Pekat
+        mainFrame.BackgroundTransparency = 0
         toggleBtn.Text = "HIDE GUI"
     else
-        mainFrame.BackgroundTransparency = 1 -- Bening
+        mainFrame.BackgroundTransparency = 1
         toggleBtn.Text = "SHOW GUI"
     end
 end)
@@ -761,14 +739,23 @@ task.spawn(function()
     end
 end)
 
+-- CONFIG AUTO-UPDATE LOOP (Setiap 60 Detik)
+task.spawn(function()
+    LoadWebConfig() -- Load pertama kali
+    while gui.Parent do
+        task.wait(60) -- Tunggu 60 detik
+        LoadWebConfig() -- Update Config dari Web
+    end
+end)
+
 -- ===============================
--- 8. WEBHOOK LOGIC (LEGACY)
+-- WEBHOOK LOGIC (LEGACY)
 -- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
         local function SendHook(pName, data)
-            local json = HttpService:JSONEncode(data)
-            local url = MasterConfig.WebhookUrl .. "?player=" .. HttpService:UrlEncode(pName) .. "&data=" .. HttpService:UrlEncode(json)
+            local json = Services.HttpService:JSONEncode(data)
+            local url = MasterConfig.WebhookUrl .. "?player=" .. Services.HttpService:UrlEncode(pName) .. "&data=" .. Services.HttpService:UrlEncode(json)
             pcall(function() game:HttpGet(url) end)
         end
         local dataR = Replion:WaitReplion("Data")
@@ -795,13 +782,13 @@ if MasterConfig.WebhookEnabled then
 end
 
 -- ===============================
--- 9. AUTO-START EXECUTION
+-- AUTO-START EXECUTION
 -- ===============================
 task.delay(2, function()
-    print("[AutoStart] Black Edition Loaded...")
-    if req and MasterConfig.DiscordWebhookEnabled then
+    print("[AutoStart] Black Edition Loaded with Dynamic Config...")
+    if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
-          req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Black Monitor Online**" }) })
+          req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Black Monitor Online (Dynamic)**" }) })
        end)
     end
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
@@ -809,7 +796,7 @@ task.delay(2, function()
     if MasterConfig.PotatoMode then StartPotatoLoop() end
     if MasterConfig.FishingEnabled then StartFishingV1() end
     if MasterConfig.AutoTrade then
-        local s, id = pcall(function() return Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername) end)
+        local s, id = pcall(function() return Services.Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername) end)
         if s and id then MasterConfig.TargetId = id; RunAutoTrade() end
     end
 end)
