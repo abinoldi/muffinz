@@ -1,6 +1,6 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.1 (Fix Stats Display + INSTANT ELEMENT)
+-- VERSION: v1.3.3 (LOGIC: STOP FIRST -> THEN INSTANT)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -23,14 +23,13 @@ local lp = Players.LocalPlayer
 
 local STATE = {
     HasAstralRod = false, CurrentRod = "Checking...", TotalCoins = 0,
-    -- QUEST MODES
-    Mode = "Starting...", -- "FarmNextRod", "DeepSea", "Lever", "Element", "Finished"
-    -- STATUS
+    Mode = "Starting...", 
     FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
     Status = "Starting...", Teleporting = false,
     CurrentArea = "None", TargetInfo = "None",
-    CurrentBait = "None", -- Added for bait tracking
-    NextRodInfo = nil -- Info rod berikutnya yang akan dibeli
+    CurrentBait = "None", 
+    NextRodInfo = nil,
+    IsInstantFishing = false 
 }
 
 -- ===============================
@@ -71,37 +70,78 @@ local RF_PurchaseFishingRod = GetRemote(RPath, "RF/PurchaseFishingRod")
 local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 local RF_PlaceLeverItem = GetRemote(RPath, "RE/PlaceLeverItem")
 
--- [[ NEW REMOTES FOR INSTANT FISHING ]] --
+-- [[ INSTANT FISHING REMOTES ]] --
 local RF_ChargeFishingRod = GetRemote(RPath, "RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote(RPath, "RF/RequestFishingMinigameStarted")
 local RE_FishingCompleted = GetRemote(RPath, "RE/FishingCompleted")
 local RF_CancelFishingInputs = GetRemote(RPath, "RF/CancelFishingInputs")
--- [[ END NEW REMOTES ]] --
 
 local FishingController = require(ReplicatedStorage.Controllers.FishingController)
 local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
--- INSTANT FISHING LOGIC (FROM RUBFARM)
+-- CLIENT BYPASS (ESSENTIAL)
+-- ===============================
+local BLOCKED_REMOTES = {
+    ["RequestFishingMinigameStarted"] = true,
+    ["ChargeFishingRod"] = true
+}
+
+local mt = getrawmetatable(game)
+local old_namecall = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    -- Hanya blokir jika kita sedang mode Element (Instant)
+    if STATE.Mode == "Element" and not checkcaller() then
+        if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then 
+            return nil 
+        end
+    end
+    return old_namecall(self, ...)
+end)
+setreadonly(mt, true)
+
+-- ===============================
+-- INSTANT FISHING LOGIC (UPDATED: STOP FIRST)
 -- ===============================
 local function RunInstantFish()
-    -- Only run if we are safely loaded
-    local timestamp = os.time() + os.clock()
-    
-    -- 1. Charge Rod
-    pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
-    
-    -- 2. Start Minigame (Coordinates from source script)
-    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
-    
-    -- 3. Wait 1.5s (Strict Delay from rubfarm)
-    task.wait(1.5)
-    
-    -- 4. Complete & Cleanup
-    pcall(function() RE_FishingCompleted:FireServer() end)
-    task.wait(0.3)
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    if STATE.IsInstantFishing then return end
+    STATE.IsInstantFishing = true
+    STATE.Status = "Stopping & Prep..."
+
+    task.spawn(function()
+        -- [[ STEP 1: FORCE STOP / RESET ]] --
+        -- Sesuai permintaan: Hentikan semua aksi dulu
+        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+        
+        -- Beri jeda sedikit agar server mereset status karakter
+        task.wait(0.3) 
+
+        -- [[ STEP 2: MULAI INSTANT FISHING ]] --
+        STATE.Status = "Instant Executing..."
+        
+        local timestamp = os.time() + os.clock()
+        -- Charge
+        pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
+        
+        -- Start Minigame (Coords Rubfarm)
+        pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
+        
+        -- Wait (Strict Delay)
+        task.wait(1.5)
+        
+        -- Complete
+        pcall(function() RE_FishingCompleted:FireServer() end)
+        
+        -- [[ STEP 3: CLEANUP LAGI ]] --
+        task.wait(0.3)
+        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+        
+        STATE.IsInstantFishing = false
+        STATE.Status = "Cycle Done"
+    end)
 end
 
 -- ===============================
@@ -169,18 +209,14 @@ local function Teleport(area)
 end
 
 -- ===============================
--- BAIT FUNCTIONS (ADDED)
+-- BAIT & SHOP LOGIC
 -- ===============================
 local function AutoBuyBestBait()
     if not PlayerDataReplion then return end
     local data = PlayerDataReplion:Get()
     local inv = data.Inventory or {}
     local owned = {}
-
-    for _, b in pairs(inv["Baits"] or {}) do
-        owned[tonumber(b.Id)] = true
-    end
-
+    for _, b in pairs(inv["Baits"] or {}) do owned[tonumber(b.Id)] = true end
     for i = #ShopBaits, 1, -1 do
         local bait = ShopBaits[i]
         if data.Coins >= bait.Price and not owned[bait.ID] then
@@ -193,54 +229,56 @@ end
 
 local function EquipBestBait()
     if not PlayerDataReplion then return end
-    
     local inv = PlayerDataReplion:GetExpect("Inventory")
-    
-    -- Find the best bait in inventory
     local bestBaitUUID, bestBaitPrice = nil, -1
     local baitList = inv["Baits"] or inv["Bait"] or {}
-    
     for _, baitData in pairs(baitList) do
         local baitId = tonumber(baitData.Id)
-        -- Find price in ShopBaits list
         for _, shopBait in ipairs(ShopBaits) do
             if shopBait.ID == baitId and shopBait.Price > bestBaitPrice then
-                bestBaitUUID = baitData.UUID
-                bestBaitPrice = shopBait.Price
-                STATE.CurrentBait = "Bait ID: " .. baitId
+                bestBaitUUID = baitData.UUID; bestBaitPrice = shopBait.Price; STATE.CurrentBait = "Bait ID: " .. baitId
             end
         end
     end
-    
-    -- SPAM EQUIP (just fire and forget)
-    if bestBaitUUID then
-        pcall(function()
-            RE_EquipItem:FireServer(bestBaitUUID, "Baits")
-        end)
-    else
-        STATE.CurrentBait = "No Bait"
+    if bestBaitUUID then pcall(function() RE_EquipItem:FireServer(bestBaitUUID, "Baits") end) else STATE.CurrentBait = "No Bait" end
+end
+
+local function AutoBuy()
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local ownedRods = GetOwnedRods(inv)
+    if STATE.Mode == "FarmNextRod" then
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) then
+                if STATE.TotalCoins >= rod.Price then
+                    RF_PurchaseFishingRod:InvokeServer(rod.ID); task.wait(1); STATE.HasAstralRod = (rod.ID == 5)
+                end
+                break
+            end
+        end
+    elseif STATE.Mode == "DeepSea" then
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) and STATE.TotalCoins >= rod.Price then
+                RF_PurchaseFishingRod:InvokeServer(rod.ID); task.wait(0.5); break
+            end
+        end
     end
 end
 
 -- ===============================
--- CORE LOGIC (DECISION MAKER)
+-- CORE QUEST LOGIC
 -- ===============================
 local function CheckDeepSeaQuest(data)
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
     if not quest then return "Done" end
-    
     local sObj = quest.CurrentObj or 1
     local progMap = {}
     for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
-
-    -- Determine Real Objective
     local actObj = sObj
     if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
     if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
     if actObj==3 and (progMap[3] or 0)>=1 then actObj=4 end
-    if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end -- Quest Finished
-    
-    -- Return Active Step Info
+    if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end 
     if actObj==1 then return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
     elseif actObj==2 then return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
     elseif actObj==3 then return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
@@ -252,13 +290,10 @@ end
 local function CheckElementQuest(data)
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Element Quest"]
     if not quest then return "Check" end 
-    
     local progMap = {}
     for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
-    
     if (progMap[2] or 0) < 1 then return "Element", "Ancient Jungle", "Catch Secret (Jungle)" end
     if (progMap[3] or 0) < 1 then return "Element", "Sacred Temple", "Catch Secret (Temple)" end
-    
     return "Finished"
 end
 
@@ -266,122 +301,64 @@ local function UpdateGameMode()
     if not PlayerDataReplion then return end
     local data = PlayerDataReplion:Get()
     if not data then return end
-    
     STATE.TotalCoins = data.Coins or 0
     local inv = data.Inventory or {}
     local ownedRods = GetOwnedRods(inv)
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     local hasGhostfin = table.find(ownedRods, 169) ~= nil
 
-    -- ========== PRIORITAS 1: FARM UNTUK ROD BERIKUTNYA ==========
     if not STATE.HasAstralRod then
-        -- Cari rod termahal yang bisa dibeli
         local nextRodToBuy = nil
         for _, rod in ipairs(ShopRods) do
-            if not table.find(ownedRods, rod.ID) then
-                nextRodToBuy = rod
-                break  -- Ambil yang termurah yang belum dimiliki
-            end
+            if not table.find(ownedRods, rod.ID) then nextRodToBuy = rod; break end
         end
-        
         if nextRodToBuy then
             STATE.Mode = "FarmNextRod"
+            local percent = math.floor((STATE.TotalCoins / nextRodToBuy.Price) * 100)
+            STATE.TargetInfo = string.format("%s: %d%%", nextRodToBuy.Name, math.min(percent, 100))
             
-            -- Hitung progres menuju rod berikutnya
-            local progressText
-            if STATE.TotalCoins >= nextRodToBuy.Price then
-                progressText = string.format("READY to buy %s", nextRodToBuy.Name)
-            else
-                local percent = math.floor((STATE.TotalCoins / nextRodToBuy.Price) * 100)
-                progressText = string.format("%s: $%s/$%s (%d%%)", 
-                    nextRodToBuy.Name, 
-                    FormatNumber(STATE.TotalCoins), 
-                    FormatNumber(nextRodToBuy.Price), 
-                    math.min(percent, 100))
-            end
-            
-            -- Tentukan area farm berdasarkan rod yang sedang digunakan
-            local bestArea = "Treasure Room"
-            local currentBestRodValue = 0
-            
-            -- Cari rod terbaik yang sudah dimiliki
+            local bestArea, currentBestRodValue = "Treasure Room", 0
             for _, ownedId in ipairs(ownedRods) do
                 for _, shopRod in ipairs(ShopRods) do
                     if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
                         currentBestRodValue = shopRod.Price
-                        -- Update area berdasarkan rod
-                        if shopRod.Price >= 50000 then  -- Midnight Rod ke atas
-                            bestArea = "Sisyphus Statue"
-                        elseif shopRod.Price >= 15000 then  -- Lucky Rod ke atas
-                            bestArea = "Treasure Room"
-                        else
-                            bestArea = "Enchant Room"
-                        end
+                        if shopRod.Price >= 50000 then bestArea = "Sisyphus Statue"
+                        elseif shopRod.Price >= 15000 then bestArea = "Treasure Room"
+                        else bestArea = "Enchant Room" end
                     end
                 end
             end
-            
-            STATE.TargetInfo = progressText
-            STATE.NextLocation = bestArea
-            STATE.NextRodInfo = nextRodToBuy  -- Simpan info rod berikutnya
+            STATE.NextLocation = bestArea; STATE.NextRodInfo = nextRodToBuy
             return
         end
     end
 
-    -- ========== PRIORITAS 2: DEEP SEA QUEST (SETELAH PUNYA ASTRAL ROD) ==========
     local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
     if dsMode == "DeepSea" then
-        STATE.Mode = "DeepSea"
-        STATE.TargetInfo = dsProg
-        STATE.NextLocation = dsLoc
-        return
+        STATE.Mode = "DeepSea"; STATE.TargetInfo = dsProg; STATE.NextLocation = dsLoc; return
     end
 
-    -- ========== PRIORITAS 3: LEVER LOGIC ==========
     if hasGhostfin then
         local allLeversDone = true
-        for _, art in ipairs(ArtifactOrder) do
-            if not IsLeverUnlocked(art) then allLeversDone = false; break end
-        end
-        if not allLeversDone then
-            STATE.Mode = "Lever"
-            STATE.TargetInfo = "Unlocking Levers..."
-            STATE.NextLocation = "Auto"
-            return
-        end
+        for _, art in ipairs(ArtifactOrder) do if not IsLeverUnlocked(art) then allLeversDone = false; break end end
+        if not allLeversDone then STATE.Mode = "Lever"; STATE.TargetInfo = "Unlocking Levers..."; STATE.NextLocation = "Auto"; return end
     else
-        if dsMode == "Done" then
-            STATE.Mode = "Waiting"
-            STATE.TargetInfo = "Need Ghostfin Rod!"
-            STATE.NextLocation = "Esoteric Island"
-            return
-        end
+        if dsMode == "Done" then STATE.Mode = "Waiting"; STATE.TargetInfo = "Need Ghostfin Rod!"; STATE.NextLocation = "Esoteric Island"; return end
     end
 
-    -- ========== PRIORITAS 4: ELEMENT QUEST ==========
     local elMode, elLoc, elProg = CheckElementQuest(data)
     if elMode == "Element" then
-        STATE.Mode = "Element"
-        STATE.TargetInfo = elProg
-        STATE.NextLocation = elLoc
-        return
+        STATE.Mode = "Element"; STATE.TargetInfo = elProg; STATE.NextLocation = elLoc; return
     end
     
-    -- ========== PRIORITAS 5: SELESAI ==========
-    STATE.Mode = "Finished"
-    STATE.TargetInfo = "All Quests Done"
-    STATE.NextLocation = "Esoteric Island"
+    STATE.Mode = "Finished"; STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
 end
 
--- ===============================
--- ACTION FUNCTIONS
--- ===============================
 local function EquipRod(nameID)
     if not PlayerDataReplion then return end
     local inv = PlayerDataReplion:GetExpect("Inventory")
     local rods = inv["Fishing Rods"] or {}
     local targetRod = nil
-    
     for _, r in pairs(rods) do
         if nameID == "Best" then
             local bestPrice = -1
@@ -394,7 +371,6 @@ local function EquipRod(nameID)
             if tonumber(r.Id) == nameID then targetRod = r; break end
         end
     end
-    
     if targetRod then
         pcall(function()
             RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods")
@@ -406,8 +382,7 @@ end
 
 local function ExecuteLeverLogic()
     local inv = PlayerDataReplion:GetExpect("Inventory")
-    EquipRod(169) -- Equip Ghostfin
-    
+    EquipRod(169)
     for _, artName in ipairs(ArtifactOrder) do
         if not IsLeverUnlocked(artName) then
             local d = ArtifactData[artName]
@@ -415,10 +390,8 @@ local function ExecuteLeverLogic()
             local id = ARTIFACT_IDS[artName]
             local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
             if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
-            
             if hasArt then
-                STATE.TargetInfo = "Placing: "..artName
-                if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                if lp.Character then
                     lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
                     task.wait(0.5)
                     lp.Character.HumanoidRootPart.Anchored = true
@@ -429,13 +402,9 @@ local function ExecuteLeverLogic()
                     lp.Character.HumanoidRootPart.Anchored = false
                 end
             else
-                STATE.TargetInfo = "Farming: "..artName
-                Teleport(artName) -- Teleport to fishing spot
-                if lp.Character then
-                    local dist = (lp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
-                    if dist > 5 then
-                        lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look)
-                    end
+                Teleport(artName)
+                if lp.Character and (lp.Character.HumanoidRootPart.Position - d.Pos).Magnitude > 5 then
+                    lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look)
                 end
             end
             break 
@@ -443,51 +412,13 @@ local function ExecuteLeverLogic()
     end
 end
 
-local function AutoBuy()
-    if not PlayerDataReplion then return end
-    
-    local inv = PlayerDataReplion:GetExpect("Inventory")
-    local ownedRods = GetOwnedRods(inv)
-    
-    -- Mode farm untuk rod berikutnya
-    if STATE.Mode == "FarmNextRod" then
-        -- Cari rod termurah yang belum dimiliki
-        for _, rod in ipairs(ShopRods) do
-            if not table.find(ownedRods, rod.ID) then
-                -- Jika koin cukup, beli rod ini
-                if STATE.TotalCoins >= rod.Price then
-                    RF_PurchaseFishingRod:InvokeServer(rod.ID)
-                    task.wait(1)
-                    print("✅ Purchased " .. rod.Name)
-                    
-                    -- Update status langsung
-                    STATE.HasAstralRod = (rod.ID == 5)
-                end
-                break  -- Hanya beli satu per cek
-            end
-        end
-        
-    -- Mode Deep Sea (backup - beli jika ada yang missing)
-    elseif STATE.Mode == "DeepSea" then
-        for _, rod in ipairs(ShopRods) do
-            if not table.find(ownedRods, rod.ID) and STATE.TotalCoins >= rod.Price then
-                RF_PurchaseFishingRod:InvokeServer(rod.ID)
-                task.wait(0.5)
-                break
-            end
-        end
-    end
-end
-
 -- ===============================
--- MAIN LOOP (CORRECTED)
+-- MAIN LOOP (WITH SAFEGUARDS)
 -- ===============================
 local AutoActive = true
 local clickThread = nil
 
 local function ClickLoop()
-    -- ADDED CHECK: and STATE.Mode ~= "Element"
-    -- This ensures the clicker NEVER runs while doing Instant Element Fishing
     while AutoActive and STATE.Status == "Reeling" and STATE.Mode ~= "Element" do
         FishingController:RequestFishingMinigameClick()
         task.wait(0.1)
@@ -498,10 +429,8 @@ local oldStart = FishingController.FishingRodStarted
 FishingController.FishingRodStarted = function(self,...) 
     oldStart(self,...) 
     if AutoActive then 
-        STATE.Status="Reeling"; 
+        STATE.Status="Reeling"
         if clickThread then task.cancel(clickThread) end 
-        
-        -- Only start the normal clicker if NOT in Element mode
         if STATE.Mode ~= "Element" then
             clickThread=task.spawn(ClickLoop) 
         end
@@ -509,53 +438,34 @@ FishingController.FishingRodStarted = function(self,...)
 end
 
 local oldStop = FishingController.FishingStopped
-FishingController.FishingStopped = function(self,...) 
-    oldStop(self,...) 
-    if AutoActive then STATE.Status="Casting" end 
-end
+FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
 task.spawn(function()
     while task.wait(0.5) do
         if AutoActive then
             pcall(function()
                 RF_SellAllItems:InvokeServer()
+                UpdateGameMode()
+                AutoBuyBestBait()
+                EquipBestBait()
+                AutoBuy()
 
-                UpdateGameMode()      -- 🧠 QUEST BRAIN
-                AutoBuyBestBait()     -- ✅ GLOBAL
-                EquipBestBait()       -- ✅ GLOBAL
-                AutoBuy()             -- ✅ BELI ROD JIKA PERLU
-
-                if STATE.Mode == "FarmNextRod" then
-                    -- Farm dengan rod terbaik yang sudah dimiliki
+                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
                     EquipRod("Best")
-                    if STATE.CurrentArea ~= STATE.NextLocation then
-                        Teleport(STATE.NextLocation)
-                    end
-
-                elseif STATE.Mode == "DeepSea" then
-                    EquipRod("Best")
-                    if STATE.CurrentArea ~= STATE.NextLocation then
-                        Teleport(STATE.NextLocation)
-                    end
-
+                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
                 elseif STATE.Mode == "Lever" then
                     ExecuteLeverLogic()
-
                 elseif STATE.Mode == "Element" then
-                    EquipRod(169)
+                    EquipRod(169) -- Ghostfin
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
                     else
-                        -- [[ MODIFICATION: INSTANT FISHING TRIGGER ]] --
-                        -- If we are in the correct spot and rod is equipped, use Instant Fish
-                        STATE.Status = "Instant Fishing..."
+                        -- [[ TRIGGER INSTANT FISHING ]] --
+                        -- Fungsi ini sekarang otomatis STOP dulu sebelum mulai (lihat fungsi di atas)
                         RunInstantFish()
                     end
-
                 elseif STATE.Mode == "Finished" then
-                    if STATE.CurrentArea ~= "Esoteric Island" then
-                        Teleport("Esoteric Island")
-                    end
+                    if STATE.CurrentArea ~= "Esoteric Island" then Teleport("Esoteric Island") end
                 end
             end)
         end
@@ -567,54 +477,44 @@ if RE_ObtainedNewFishNotification then
 end
 
 -- ===============================
--- GUI (FIXED STATS)
+-- GUI
 -- ===============================
 local function CreateDashboard()
     if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
-    
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "W - v1.3.1 (Instant Element)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "W - v1.3.3 (Stop First)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
-    
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
-    
     local function Text(txt, h, col) local l = Instance.new("TextLabel", dashboard); l.Text=txt; l.TextColor3=col; l.Size=UDim2.new(1,0,h,0); l.BackgroundTransparency=1; l.Font=Enum.Font.GothamBold; l.TextScaled=true; return l end
     
     local L_Coins = Text("$0", 0.12, Color3.fromRGB(255, 215, 0))
     local L_Mode = Text("MODE: CHECKING", 0.08, Color3.fromRGB(0, 255, 255))
-    -- [[ FIXED: ADDED STATS & TIME BACK ]] --
     local L_Stats = Text("0 | 0.0 F/M", 0.06, Color3.fromRGB(255, 255, 255))
     local L_Time  = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180))
-    -- [[ END FIX ]] --
     local L_Info = Text("...", 0.05, Color3.fromRGB(200, 200, 200))
     local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100))
     
     local isOpen = true
-    toggleBtn.MouseButton1Click:Connect(function() isOpen=not isOpen; dashboard.Visible=isOpen; toggleBtn.Text=isOpen and "W - v1.3.1 (Instant Element)" or "OPEN" end)
+    toggleBtn.MouseButton1Click:Connect(function() isOpen=not isOpen; dashboard.Visible=isOpen; toggleBtn.Text=isOpen and "W - v1.3.3" or "OPEN" end)
     
     task.spawn(function()
         while task.wait(0.5) do
             if dashboard.Visible then
                 L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
                 L_Mode.Text = "MODE: " .. STATE.Mode
-                
-                -- [[ FIXED LOGIC ]] --
                 CalcStats()
                 L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
                 L_Time.Text = FormatTime(os.time() - STATE.StartTime)
-                -- [[ END FIX ]] --
-                
                 if STATE.Mode == "DeepSea" then L_Mode.TextColor3 = Color3.fromRGB(100, 200, 255)
                 elseif STATE.Mode == "Lever" then L_Mode.TextColor3 = Color3.fromRGB(255, 170, 0)
                 elseif STATE.Mode == "Element" then L_Mode.TextColor3 = Color3.fromRGB(170, 0, 255)
                 else L_Mode.TextColor3 = Color3.fromRGB(0, 255, 0) end
-                
                 L_Info.Text = STATE.TargetInfo
                 L_Status.Text = STATE.Status
-                L_Status.TextColor3 = (STATE.Status=="Reeling") and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
+                L_Status.TextColor3 = (STATE.Status=="Reeling" or STATE.Status=="Cycle Done") and Color3.fromRGB(100,255,100) or Color3.fromRGB(255,100,100)
             end
         end
     end)
@@ -627,18 +527,14 @@ task.spawn(EnablePotatoMode)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub Full Auto (v1.3.1) Started!")
+print("🚀 EnochHub Full Auto (v1.3.3) Started!")
 
--- Load the first script immediately (if you want it always)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
-
--- Check for Astral Rod and load the second script only if player has it
 task.spawn(function()
-    while task.wait(5) do  -- Check every 5 seconds
+    while task.wait(5) do
         if STATE.HasAstralRod then
             loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/aeb"))()
-            print("✓ External script loaded (Astral Rod detected)")
-            break  -- Stop checking once loaded
+            break
         end
     end
 end)
