@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V2 (WEIGHT INFO ADDED)
+-- # ULTIMATE HUB: FINAL V2 (WEIGHT INFO + AUTO UNFAVORITE + FIX TELEPORT)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -26,6 +26,7 @@ local MasterConfig = {
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
+    AutoUnfavoriteRubies = true, -- [BARU] Fitur Unfavorite Ruby Non-Gemstone
     DiscordWebhookEnabled = true,
     DiscordWebhookUrl = "",
     AutoTeleport = true,
@@ -46,10 +47,10 @@ local TradingState = { IsTrading = false, Thread = nil }
 local FishingThreads = {}
 local PotatoLoopThread = nil
 
--- FORWARD DECLARATION
-local StartFishingV1, StopFishingV1, RunAutoTrade
+-- FORWARD DECLARATION (PENTING AGAR TIDAK ERROR SAAT DIPANGGIL DI ATAS)
+local StartFishingV1, StopFishingV1, RunAutoTrade, TeleportToFishingLocation
 
--- [3] WEB CONFIG LOADER (AUTO UPDATE)
+-- [3] WEB CONFIG LOADER (AUTO UPDATE - FIXED TELEPORT)
 local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
 
@@ -62,15 +63,11 @@ local function LoadWebConfig()
     
         if decodeSuccess then
             local settingsChanged = false
-            local locationChanged = false -- 1. Variabel penanda lokasi berubah
+            local locationChanged = false -- [BARU] Deteksi perubahan lokasi
 
             for key, value in pairs(decodedData) do
                 if MasterConfig[key] ~= value then
-                    -- 2. Cek apakah yang berubah adalah SelectedLocation
-                    if key == "SelectedLocation" then
-                        locationChanged = true
-                    end
-                    
+                    if key == "SelectedLocation" then locationChanged = true end -- Cek lokasi
                     MasterConfig[key] = value
                     settingsChanged = true
                 end
@@ -78,10 +75,11 @@ local function LoadWebConfig()
 
             -- DYNAMIC SWITCHING
             if settingsChanged then
-                -- 3. JIKA LOKASI BERUBAH, JALANKAN TELEPORT
+                -- [BARU] Logic Teleport Otomatis
                 if locationChanged and MasterConfig.AutoTeleport then
-                    print("Lokasi berubah ke: " .. MasterConfig.SelectedLocation .. ", Teleporting...")
-                    task.spawn(TeleportToFishingLocation)
+                    if TeleportToFishingLocation then 
+                        task.spawn(TeleportToFishingLocation) 
+                    end
                 end
 
                 if MasterConfig.FishingEnabled and not FishingState.IsFishing then
@@ -100,6 +98,7 @@ local function LoadWebConfig()
         end
     end
 end
+
 -- ======================================================
 -- [DATASET LOKASI FISHING LENGKAP]
 -- ======================================================
@@ -216,7 +215,7 @@ local function GetMutation(item)
 end
 
 -- ===============================
--- DISCORD WEBHOOK LOGIC (NO PRICE CALC)
+-- DISCORD WEBHOOK LOGIC
 -- ===============================
 local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
     if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end
@@ -337,15 +336,44 @@ local function RunInstantFish()
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
+-- [BARU] HELPER UNFAVORITE RUBY (NON-GEMSTONE)
+local function RunAutoUnfavoriteRubies()
+    if not MasterConfig.AutoUnfavoriteRubies then return end
+    local inv = PlayerData:Get("Inventory")
+    if inv then
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if item.IsFavorite or item.Favorited or item.Locked then
+                    local name, _ = GetFishNameAndRarity(item) 
+                    if name == "Ruby" then
+                        local mutation = GetMutation(item)
+                        if mutation ~= "Gemstone" then
+                            pcall(function()
+                                if RE_FavoriteItem then
+                                    RE_FavoriteItem:FireServer(item.UUID)
+                                    -- print("🗑️ Unfavorited: " .. name .. " [" .. mutation .. "]")
+                                end
+                            end)
+                            task.wait(0.2)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
     
+    -- THREAD 1: INSTANT CATCH
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do RunInstantFish(); task.wait(0.1) end
     end))
     
+    -- THREAD 2: AUTO EQUIP
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
@@ -353,6 +381,7 @@ function StartFishingV1()
         end
     end))
 
+    -- THREAD 3: AUTO SELL
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -367,6 +396,7 @@ function StartFishingV1()
         end
     end))
     
+    -- THREAD 4: AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -393,6 +423,16 @@ function StartFishingV1()
             task.wait(0.5)
         end
     end))
+
+    -- THREAD 5: [BARU] AUTO UNFAVORITE RUBY SAMPAH
+    table.insert(FishingThreads, task.spawn(function()
+        while FishingState.IsFishing do
+            if MasterConfig.AutoUnfavoriteRubies then
+                RunAutoUnfavoriteRubies()
+            end
+            task.wait(5) -- Cek setiap 5 detik
+        end
+    end))
 end
 
 function StopFishingV1()
@@ -410,7 +450,7 @@ local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
 local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
 local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
-local function TeleportToFishingLocation()
+function TeleportToFishingLocation()
     if FishingState.Teleporting then return end
     local loc = FishingLocations[MasterConfig.SelectedLocation]
     if not loc then warn("Lokasi tidak ditemukan!") return end
@@ -561,20 +601,20 @@ local FishSessionMap = {}
 -- MAIN FRAME (PITCH BLACK)
 local mainFrame = Instance.new("Frame", gui)
 mainFrame.Size = UDim2.new(1, 0, 1, 0)
-mainFrame.BackgroundColor3 = Color3.new(0, 0, 0) -- FULL BLACK
-mainFrame.BackgroundTransparency = 0 -- NOT TRANSPARENT
+mainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+mainFrame.BackgroundTransparency = 0
 mainFrame.BorderSizePixel = 0
 
--- CONTAINER FOR CONTENT (To hide when toggled)
+-- CONTAINER FOR CONTENT
 local contentContainer = Instance.new("Frame", mainFrame)
 contentContainer.Size = UDim2.new(1, 0, 1, 0)
 contentContainer.BackgroundTransparency = 1
 
--- INFO LABELS (CENTERED)
+-- INFO LABELS
 local function CreateLabel(order, color, size, text)
     local lbl = Instance.new("TextLabel", contentContainer)
     lbl.Size = UDim2.new(1, 0, 0, size)
-    lbl.Position = UDim2.new(0, 0, 0.3 + (order * 0.08), 0) -- Stacking vertically
+    lbl.Position = UDim2.new(0, 0, 0.3 + (order * 0.08), 0)
     lbl.BackgroundTransparency = 1
     lbl.Font = Enum.Font.GothamBold
     lbl.TextSize = size
@@ -589,7 +629,7 @@ local timerLabel = CreateLabel(2, Color3.fromRGB(200, 200, 200), 25, "00h 00m 00
 local secretLabel = CreateLabel(3, Color3.fromRGB(0, 255, 100), 25, "Secrets: 0")
 local tradeLabel = CreateLabel(4, Color3.fromRGB(255, 165, 0), 22, "Trade: Disabled")
 
--- GRID CONTAINER (Moved to bottom half, slightly smaller)
+-- GRID CONTAINER
 local scrollFrame = Instance.new("ScrollingFrame", contentContainer)
 scrollFrame.Size = UDim2.new(0.6, 0, 0.3, 0)
 scrollFrame.Position = UDim2.new(0.2, 0, 0.65, 0)
@@ -601,8 +641,8 @@ gridLayout.CellSize = UDim2.new(0, 100, 0, 40)
 gridLayout.CellPadding = UDim2.new(0, 5, 0, 5)
 gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- TOGGLE BUTTON (At Bottom Center)
-local toggleBtn = Instance.new("TextButton", gui) -- Parented to GUI, not Container
+-- TOGGLE BUTTON
+local toggleBtn = Instance.new("TextButton", gui)
 toggleBtn.Size = UDim2.new(0, 150, 0, 40)
 toggleBtn.Position = UDim2.new(0.5, -75, 1, -60)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -611,7 +651,7 @@ toggleBtn.Text = "HIDE GUI"
 toggleBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
 
--- LOGIC: TIME & UPDATE
+local guiVisible = true
 local function FormatTime(seconds)
     local h = math.floor(seconds / 3600)
     local m = math.floor((seconds % 3600) / 60)
@@ -619,13 +659,12 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
--- FUNCTION TO INITIALIZE TOTAL SECRETS (INVENTORY SYNC)
 local function UpdateTotalSecretsFromInventory()
     local count = 0
     local inv = PlayerData:Get("Inventory")
     if inv then
         for _, items in pairs(inv) do
-            for _, item in ipairs(items) do
+             for _, item in ipairs(items) do
                  local _, r = GetFishNameAndRarity(item)
                  if tostring(r):upper() == "SECRET" then
                      count = count + 1
@@ -666,24 +705,20 @@ task.spawn(function()
     end
 end)
 
--- REMOTE LISTENER & COUNTER LOGIC (SAFE MODE)
+-- REMOTE LISTENER & COUNTER LOGIC
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
-        -- Update Counter
         TotalFishCaught = TotalFishCaught + 1
         local elapsed = os.time() - SessionStartTime
         if elapsed < 60 then elapsed = 60 end
         local fpm = TotalFishCaught / (elapsed / 60)
         fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
 
-        -- Safe Logic (Protected)
         task.spawn(function()
             if not item then return end
-            
             local name, rarity, mutation, displayName, isSecret = "Unknown", "Common", "None", "Unknown", false
-            
             pcall(function()
                 name, rarity = GetFishNameAndRarity(item)
                 mutation = GetMutation(item)
@@ -692,7 +727,6 @@ if RE_ObtainedNewFishNotification then
                 isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
             end)
             
-            -- Update Grid
             if not FishSessionMap[displayName] then
                 FishSessionMap[displayName] = 1
                 local itemFrame = Instance.new("Frame", scrollFrame)
@@ -715,11 +749,9 @@ if RE_ObtainedNewFishNotification then
                 end
             end
 
-            -- Webhook logic (Safe, No price)
             if isSecret then
                 TotalSecretsFound = TotalSecretsFound + 1
                 secretLabel.Text = "Secrets Caught: " .. TotalSecretsFound
-                
                 if MasterConfig.DiscordWebhookEnabled then
                     local weight = (item.Metadata and item.Metadata.Weight) or 0
                     SendDiscordSecretNotification(name, rarity, mutation, weight)
@@ -728,10 +760,9 @@ if RE_ObtainedNewFishNotification then
         end)
     end)
 else
-    warn("Warning: RE/ObtainedNewFishNotification not found. Counter will not work.")
+    warn("Warning: RE/ObtainedNewFishNotification not found.")
 end
 
--- GUI TOGGLE
 toggleBtn.MouseButton1Click:Connect(function()
     guiVisible = not guiVisible
     contentContainer.Visible = guiVisible
@@ -744,7 +775,7 @@ toggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- TIMER LOOP
+-- TIMER LOOP & GUI UPDATER
 task.spawn(function()
     while gui.Parent do
         local elapsed = os.time() - SessionStartTime
@@ -753,11 +784,17 @@ task.spawn(function()
              local fpm = TotalFishCaught / (elapsed / 60)
              fishCountLabel.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
         end
+        
+        -- [FIX] UPDATE TEKS LOKASI REALTIME
+        if locLabel and MasterConfig then
+            locLabel.Text = "LOC: " .. MasterConfig.SelectedLocation
+        end
+        
         task.wait(1)
     end
 end)
 
--- CONFIG AUTO-UPDATE LOOP (Setiap 60 Detik)
+-- CONFIG AUTO-UPDATE LOOP
 task.spawn(function()
     LoadWebConfig() -- Load pertama kali
     while gui.Parent do
@@ -779,28 +816,17 @@ if MasterConfig.WebhookEnabled then
         local dataR = Replion:WaitReplion("Data")
         while true do
             local inv = dataR:GetExpect("Inventory")
-            
-            -- STRUKTUR BARU
-            local exportData = {
-                Summary = {}, -- Hitungan total (seperti sebelumnya)
-                Details = {}  -- Detail per ikan (Berat, ID, dll)
-            }
+            local exportData = { Summary = {}, Details = {} }
 
             if inv then
                 for _, items in pairs(inv) do
                     for _, item in ipairs(items) do
                         local n, r = GetFishNameAndRarity(item)
                         local mut = GetMutation(item)
-                        
-                        -- Filter logic
                         if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
                             local dName = n
                             if mut ~= "None" then dName = "["..mut.."] "..n end
-                            
-                            -- 1. Masukkan ke Summary (Hitungan lama)
                             exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
-                            
-                            -- 2. Masukkan ke Details (Info Berat Baru)
                             table.insert(exportData.Details, {
                                 Name = dName,
                                 Rarity = r,
@@ -823,14 +849,13 @@ end
 -- AUTO-START EXECUTION
 -- ===============================
 task.delay(2, function()
-    print("[AutoStart] Black Edition Loaded with Dynamic Config (Safe Mode)...")
+    print("[AutoStart] Black Edition Loaded with Fix Teleport & Auto Unfavorite...")
     
-    -- [BARU] Hitung Ikan Secret di Awal
     pcall(UpdateTotalSecretsFromInventory)
 
     if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
-          req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Safe Monitor Online (No Price)**" }) })
+           req({ Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({ username = "Webhak Enok", content = "✅ **" .. lp.Name .. " - Safe Monitor Online (Updated)**" }) })
        end)
     end
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
