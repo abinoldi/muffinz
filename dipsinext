@@ -461,39 +461,38 @@ local oldStop = FishingController.FishingStopped
 FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
 -- ===============================
--- MAIN LOOP (REVISED FOR INSTANT)
+-- SEPARATE AUTO SELL THREAD
 -- ===============================
-local sellTimer = 0
+task.spawn(function()
+    while task.wait(60) do -- Berjalan setiap 60 detik secara mandiri
+        if AutoActive then
+            pcall(function()
+                -- Pastikan tidak sedang dalam minigame yang sangat ketat
+                RF_SellAllItems:InvokeServer() 
+                print("💰 Inventory Sold Successfully")
+            end)
+        end
+    end
+end)
 
+-- ===============================
+-- MODIFIED MAIN LOOP
+-- ===============================
 task.spawn(function()
     while task.wait(0.5) do
         if AutoActive then
-            pcall(function()
-                -- SELL LOGIC
-                sellTimer = sellTimer + 0.5
-                if sellTimer >= 60 then
-                    RF_SellAllItems:InvokeServer()
-                    sellTimer = 0
-                end
-
-                UpdateGameMode()      
-                AutoBuyBestBait()     
-                EquipBestBait()        
+            local success, err = pcall(function()
+                UpdateGameMode()      -- Cek Quest & Buy Rod
+                AutoBuyBestBait()     -- Beli Umpan
+                EquipBestBait()        -- Pasang Umpan
             
-                if STATE.Mode == "FarmNextRod" then
+                -- Logika Pergerakan & Pancing Instan
+                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
                     EquipRod("Best")
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
                     else
-                        RunInstantFish() -- Gunakan Instant Fishing
-                    end
-
-                elseif STATE.Mode == "DeepSea" then
-                    EquipRod("Best")
-                    if STATE.CurrentArea ~= STATE.NextLocation then
-                        Teleport(STATE.NextLocation)
-                    else
-                        RunInstantFish() -- Gunakan Instant Fishing
+                        RunInstantFish() -- Sekarang semua mode pakai ini
                     end
 
                 elseif STATE.Mode == "Lever" then
@@ -504,17 +503,11 @@ task.spawn(function()
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
                     else
-                        RunInstantFish() -- Gunakan Instant Fishing
-                    end
-
-                elseif STATE.Mode == "Finished" then
-                    if STATE.CurrentArea ~= "Esoteric Island" then
-                        Teleport("Esoteric Island")
-                    else
                         RunInstantFish()
                     end
                 end
             end)
+            if not success then warn("Loop Error: " .. tostring(err)) end
         end
     end
 end)
