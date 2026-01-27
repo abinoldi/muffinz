@@ -114,7 +114,7 @@ local ROD_DELAYS = {
     [5]   = 2, -- Astral Rod
     [126] = 1.7,  -- Ares Rod
     [168] = 1.6,  -- Angler Rod
-    [169] = 1.5,  -- Ghostfin Rod
+    [169] = 1.23,  -- Ghostfin Rod
     [257] = 1.0,  -- Element Rod
 }
 
@@ -134,7 +134,7 @@ local function RunInstantFish()
     task.wait(currentDelay) -- Delay dinamis aktif
     
     pcall(function() RE_FishingCompleted:FireServer() end)
-    task.wait(0.3)
+    task.wait(0.25)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 -- ===============================
