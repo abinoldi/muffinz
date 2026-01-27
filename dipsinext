@@ -257,8 +257,13 @@ local function UpdateGameMode()
         if nextRodToBuy then
             STATE.Mode = "FarmNextRod"
             local progressText
-            if STATE.TotalCoins >= nextRodToBuy.Price then progressText = "READY to buy " .. nextRodToBuy.Name
-            else progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) end
+            if STATE.TotalCoins >= nextRodToBuy.Price then 
+                progressText = "AUTO BUYING " .. nextRodToBuy.Name -- Ubah status teks
+                RF_PurchaseFishingRod:InvokeServer(nextRodToBuy.ID) -- TAMBAHKAN INI
+                task.wait(1) -- Beri jeda sedikit agar tidak error
+            else 
+                progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
+            end
             local bestArea = "Treasure Room"
             local currentBestRodValue = 0
             for _, ownedId in ipairs(ownedRods) do
