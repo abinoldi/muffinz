@@ -17,7 +17,7 @@ MyLp.CharacterAdded:Wait() -- Menunggu event spawn
 MyLp.Character:WaitForChild("HumanoidRootPart", 10) -- Menunggu fisik karakter dimuat
 
 -- 3. Tunggu 3 Detik
-task.wait(3)
+task.wait(5)
 
 -- ===============================
 -- 1. ANTI-AFK
@@ -122,30 +122,24 @@ local ROD_DELAYS = {
 -- INSTANT FISHING LOGIC (UPDATED)
 -- ===============================
 local function RunInstantFish()
-    -- 1. Deteksi ID Rod dari Tool yang sedang dipegang
+    -- 1. Deteksi ID Rod Berdasarkan Tool yang sedang dipegang
     local currentDelay = 5 -- Default Starter
     local char = lp.Character
     if char then
         local tool = char:FindFirstChildOfClass("Tool")
         if tool then
-            -- Coba ambil ID dari atribut "RodId" atau dari konfigurasi pancingan
-            local rodId = tool:GetAttribute("RodId") 
-            
-            -- Jika tidak ada di atribut, coba cari di folder konfigurasi tool
-            if not rodId and tool:FindFirstChild("FishingRodConfig") then
-                local config = tool:FindFirstChild("FishingRodConfig")
-                -- Asumsi ada Value bernama 'Id' di dalam config
-                rodId = config:FindFirstChild("Id") and config.Id.Value
-            end
-
-            -- Jika ID ditemukan, gunakan delay dari tabel ROD_DELAYS
-            if rodId and ROD_DELAYS[tonumber(rodId)] then
-                currentDelay = ROD_DELAYS[tonumber(rodId)]
+            -- Cari ID di ShopRods berdasarkan Nama Tool (Mencocokkan dengan logika EquipRod)
+            for _, shopRod in ipairs(ShopRods) do
+                if tool.Name == shopRod.Name or tool:GetAttribute("RodId") == shopRod.ID then
+                    -- Jika cocok, ambil delay dari tabel ROD_DELAYS berdasarkan ID tersebut
+                    currentDelay = ROD_DELAYS[shopRod.ID] or currentDelay
+                    break
+                end
             end
         end
     end
 
-    -- 2. Update Status GUI agar sesuai dengan Delay yang aktif
+    -- 2. Update Status GUI (Sekarang akan muncul sesuai delay di tabel, misal 4.35s)
     STATE.Status = "Instant (" .. currentDelay .. "s)"
 
     -- 3. Eksekusi Pancing Instan
@@ -155,13 +149,13 @@ local function RunInstantFish()
     pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630, 0.996) end)
     
-    task.wait(currentDelay) -- Menunggu sesuai delay asli rod (Contoh: 4.35s untuk Carbon)
+    -- Menunggu sesuai delay dari tabel (Contoh: Carbon Rod ID 76 -> 4.35s)
+    task.wait(currentDelay)
     
     pcall(function() RE_FishingCompleted:FireServer() end)
     task.wait(0.2)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
-
 -- ===============================
 -- CONFIGURATION DATA 
 -- ===============================
