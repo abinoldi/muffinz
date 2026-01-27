@@ -616,28 +616,28 @@ function CreateDashboard()
     
     local gui = Instance.new("ScreenGui", Services.CoreGui)
     gui.Name = "EnochDashboard"
-    [cite_start]gui.IgnoreGuiInset = true [cite: 50]
+    gui.IgnoreGuiInset = true
 
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    [cite_start]toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242) [cite: 51]
-    [cite_start]toggleBtn.Text = "W - v1.3.2 (Instant Element)" [cite: 52]
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "W - v1.3.2 (Instant Element)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
-    [cite_start]toggleBtn.TextScaled = true [cite: 52]
-    [cite_start]Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0) [cite: 53]
+    toggleBtn.TextScaled = true
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
 
     local dashboard = Instance.new("Frame", gui)
     dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    [cite_start]dashboard.Visible = true [cite: 54]
+    dashboard.Visible = true
 
     local layout = Instance.new("UIListLayout", dashboard)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    [cite_start]layout.Padding = UDim.new(0.02, 0) [cite: 55]
+    layout.Padding = UDim.new(0.02, 0)
 
     local function Text(txt, h, col) 
         local l = Instance.new("TextLabel", dashboard)
@@ -665,22 +665,22 @@ function CreateDashboard()
         while task.wait(0.5) do
             if dashboard.Visible then
                 -- UPDATE DATA (MAPPED TO REAL VARIABLES)
-                [cite_start]L_Coins.Text = "$" .. FormatNumber(GetCoins()) [cite: 57]
-                [cite_start]L_Mode.Text = "LOC: " .. MasterConfig.SelectedLocation [cite: 57]
+                L_Coins.Text = "$" .. FormatNumber(GetCoins())
+                L_Mode.Text = "LOC: " .. MasterConfig.SelectedLocation
                 
                 -- Calc FPM Inline
                 local elapsed = os.time() - SessionStartTime
                 local fpm = TotalFishCaught / (math.max(elapsed, 1) / 60)
-                [cite_start]L_Stats.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm) [cite: 57]
+                L_Stats.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
                 
-                [cite_start]L_Time.Text = FormatTime(elapsed) [cite: 58]
-                [cite_start]L_Info.Text = "Secrets: " .. TotalSecretsFound [cite: 58]
+                L_Time.Text = FormatTime(elapsed)
+                L_Info.Text = "Secrets: " .. TotalSecretsFound
                 
                 local currentStatus = "Idle"
                 if FishingState.IsFishing then currentStatus = "Fishing" end
                 if TradingState.IsTrading then currentStatus = "Trading" end
                 if FishingState.Teleporting then currentStatus = "Teleporting" end
-                [cite_start]L_Status.Text = "Status: " .. currentStatus [cite: 58]
+                L_Status.Text = "Status: " .. currentStatus
             end
         end
     end)
