@@ -5,7 +5,7 @@ const readline = require("readline");
 const os = require("os");
 
 // --- CONFIGURATION ---
-const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
+const MSRV_URL = "https://ghostbin.axel.org/paste/2oqfg/raw";
 const PLACE_ID = "121864768012064"; 
 const CHECK_SERVER_PRESENCE = true; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
 const PER_USER_DELAY = 5000;        // 5 Seconds delay per user check
