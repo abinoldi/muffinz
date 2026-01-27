@@ -122,35 +122,16 @@ local ROD_DELAYS = {
 -- INSTANT FISHING LOGIC (UPDATED)
 -- ===============================
 local function RunInstantFish()
-    -- 1. Deteksi ID Rod Berdasarkan Tool yang sedang dipegang
-    local currentDelay = 5 -- Default Starter
-    local char = lp.Character
-    if char then
-        local tool = char:FindFirstChildOfClass("Tool")
-        if tool then
-            -- Cari ID di ShopRods berdasarkan Nama Tool (Mencocokkan dengan logika EquipRod)
-            for _, shopRod in ipairs(ShopRods) do
-                if tool.Name == shopRod.Name or tool:GetAttribute("RodId") == shopRod.ID then
-                    -- Jika cocok, ambil delay dari tabel ROD_DELAYS berdasarkan ID tersebut
-                    currentDelay = ROD_DELAYS[shopRod.ID] or currentDelay
-                    break
-                end
-            end
-        end
-    end
-
-    -- 2. Update Status GUI (Sekarang akan muncul sesuai delay di tabel, misal 4.35s)
+    -- Ambil delay dari tabel berdasarkan ID yang diset di EquipRod
+    local currentDelay = ROD_DELAYS[STATE.CurrentRodID] or 5
     STATE.Status = "Instant (" .. currentDelay .. "s)"
 
-    -- 3. Eksekusi Pancing Instan
     pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
-    
     local timestamp = os.time() + os.clock()
     pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
-    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630, 0.996) end)
+    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end)
     
-    -- Menunggu sesuai delay dari tabel (Contoh: Carbon Rod ID 76 -> 4.35s)
-    task.wait(currentDelay)
+    task.wait(currentDelay) -- Delay dinamis aktif
     
     pcall(function() RE_FishingCompleted:FireServer() end)
     task.wait(0.2)
@@ -386,22 +367,31 @@ local function EquipRod(nameID)
         if nameID == "Best" then
             local bestPrice = -1
             for _, s in ipairs(ShopRods) do
-                if tonumber(r.Id) == s.ID and s.Price > bestPrice then targetRod = r; bestPrice = s.Price; STATE.CurrentRod = s.Name; STATE.CurrentRodID = s.ID; end
+                if tonumber(r.Id) == s.ID and s.Price > bestPrice then 
+                    targetRod = r
+                    bestPrice = s.Price
+                    STATE.CurrentRod = s.Name
+                    STATE.CurrentRodID = s.ID -- Simpan ID ke STATE untuk Delay
+                end
             end
         else
-            if tonumber(r.Id) == nameID then targetRod = r; STATE.CurrentRodID = tonumber(r.Id); break end
+            if tonumber(r.Id) == nameID then 
+                targetRod = r
+                STATE.CurrentRodID = tonumber(r.Id) -- Simpan ID manual
+                break 
+            end
         end
     end
 
-    -- TAMBAHAN: Fallback jika tidak menemukan rod di daftar ShopRods (misalnya Flimsy Rod)
+    -- Fallback jika rod tidak ada di ShopRods (Flimsy/Starter)
     if nameID == "Best" and not targetRod then
         for _, r in pairs(rods) do
-            targetRod = r -- Ambil rod apa saja yang pertama ketemu
+            targetRod = r
             STATE.CurrentRod = "Basic/Unknown"
+            STATE.CurrentRodID = tonumber(r.Id) or 0
             break
         end
     end
-    -- AKHIR TAMBAHAN
 
     if targetRod then
         pcall(function()
@@ -478,43 +468,39 @@ end)
 -- ===============================
 -- MODIFIED MAIN LOOP
 -- ===============================
-local function RunInstantFish()
-    -- 1. Ambil Delay berdasarkan ID yang tersimpan di STATE
-    local currentDelay = 5 -- Default 5s jika tidak ditemukan
-    
-    if STATE.CurrentRodID and ROD_DELAYS[STATE.CurrentRodID] then
-        currentDelay = ROD_DELAYS[STATE.CurrentRodID]
-    else
-        -- Fallback: Jika ID di STATE nol, coba deteksi dari tool yang dipegang
-        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-        if tool then
-            -- Cari ID berdasarkan nama tool di ShopRods 
-            for _, s in ipairs(ShopRods) do
-                if tool.Name == s.Name then
-                    currentDelay = ROD_DELAYS[s.ID] or 5
-                    STATE.CurrentRodID = s.ID
-                    break
+task.spawn(function()
+    while task.wait(0.5) do
+        if AutoActive then
+            local success, err = pcall(function()
+                UpdateGameMode()      -- Cek Quest & Buy Rod
+                AutoBuyBestBait()     -- Beli Umpan
+                EquipBestBait()        -- Pasang Umpan
+            
+                -- Logika Pergerakan & Pancing Instan
+                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    else
+                        RunInstantFish() -- Sekarang semua mode pakai ini
+                    end
+
+                elseif STATE.Mode == "Lever" then
+                    ExecuteLeverLogic()
+
+                elseif STATE.Mode == "Element" then
+                    EquipRod(169) -- Ghostfin
+                    if STATE.CurrentArea ~= STATE.NextLocation then
+                        Teleport(STATE.NextLocation)
+                    else
+                        RunInstantFish()
+                    end
                 end
-            end
-            -- Cek khusus untuk Ghostfin (karena tidak ada di ShopRods biasa)
-            if tool.Name:find("Ghostfin") then currentDelay = 1.2 end
+            end)
+            if not success then warn("Loop Error: " .. tostring(err)) end
         end
     end
-
-    STATE.Status = "Instant (" .. currentDelay .. "s)"
-
-    -- 2. Proses Fishing
-    pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
-    local timestamp = os.time() + os.clock()
-    pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
-    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end)
-    
-    task.wait(currentDelay) -- Menggunakan delay yang sudah cocok
-    
-    pcall(function() RE_FishingCompleted:FireServer() end)
-    task.wait(0.2)
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-end
+end)
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() STATE.FishCount=STATE.FishCount+1; CalcStats(); STATE.Status="Caught!"; task.delay(1,function() STATE.Status="Casting" end) end)
