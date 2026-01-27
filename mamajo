@@ -8,13 +8,14 @@ const os = require("os");
 const MSRV_URL = "https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/msrv";
 const PLACE_ID = "121864768012064"; 
 const CHECK_SERVER_PRESENCE = true; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
-const PER_USER_DELAY = 5000; // 5 Seconds delay per user check
-const CHECK_INTERVAL = 60;   // Wait 60s total before starting next cycle
-const RESTART_COOLDOWN = 300; // 5 Minutes cooldown
+const PER_USER_DELAY = 5000;        // 5 Seconds delay per user check
+const CHECK_INTERVAL = 60;          // Wait 60s total before starting next cycle
+const RESTART_COOLDOWN = 300;       // 5 Minutes cooldown
 // ---------------------
 
 function ensurePackage(pkg) {
-  try { require.resolve(pkg); } catch {
+  try { require.resolve(pkg);
+  } catch {
     try { execSync(`npm install ${pkg}`, { stdio: "inherit" }); } catch (e) { process.exit(1); }
   }
 }
@@ -29,7 +30,7 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 
 // State Tracking
 let lastRestartMap = {}; 
-let accountStates = {}; 
+let accountStates = {};
 
 function initSystem() {
   try {
@@ -44,6 +45,7 @@ function initSystem() {
 }
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 const ask = (q) => new Promise(r => {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   rl.question(q, (ans) => { rl.close(); r(ans); });
@@ -80,7 +82,23 @@ async function getUserInfo(cookie) {
   } catch { return { id: null, name: "Expired" }; }
 }
 
-function stopPackage(pkg) { try { execSync(`am force-stop ${pkg}`); } catch {} }
+// --- BAGIAN YANG DIPERBAIKI ---
+// Menggunakan 'pidof' dan 'kill' alih-alih 'am force-stop'
+// Ini mencegah aplikasi kloningan lain (yang berbagi UID sama) ikut tertutup.
+function stopPackage(pkg) { 
+  try { 
+    // Cari Process ID (PID) spesifik aplikasi tersebut
+    const pid = execSync(`pidof ${pkg}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+    
+    // Jika PID ditemukan, matikan hanya proses tersebut
+    if (pid) {
+        execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+    }
+  } catch (e) {
+    // Abaikan jika proses sudah mati atau tidak ditemukan
+  } 
+}
+// ------------------------------
 
 function launchPackage(pkg, url) {
   try {
@@ -90,7 +108,10 @@ function launchPackage(pkg, url) {
 }
 
 function isProcessRunning(pkg) {
-  try { execSync(`pidof ${pkg}`, { stdio: 'ignore' }); return true; } catch { return false; }
+  try { 
+    execSync(`pidof ${pkg}`, { stdio: 'ignore' });
+    return true; 
+  } catch { return false; }
 }
 
 async function getSinglePresence(userId, cookie) {
@@ -138,9 +159,7 @@ function renderDashboard(cleanCode, statusMessage) {
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
   console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
-  
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
-  
   Object.keys(accountStates).sort().forEach(pkg => {
     const s = accountStates[pkg];
     table.push([
@@ -150,7 +169,6 @@ function renderDashboard(cleanCode, statusMessage) {
       s.action
     ]);
   });
-  
   console.log(table.toString());
 }
 
@@ -170,7 +188,6 @@ async function main() {
     const userInfo = await getUserInfo(cookie);
     accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
     lastRestartMap[pkg] = 0;
-    
     accountStates[pkg] = {
       username: userInfo.name || "Unknown",
       isRunning: false,
@@ -204,21 +221,18 @@ async function main() {
   }
 
   console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
-  
   while (true) {
     const cycleStartTime = Date.now();
-
     for (const acc of accounts) {
       accountStates[acc.pkg].action = "🔎 CHECKING...";
       renderDashboard(cleanCode, `Checking ${acc.username}...`);
-
+      
       // 1. Check Process (Always)
       const isRunning = isProcessRunning(acc.pkg);
       
       // 2. Check Presence (Optional Config)
       let serverStatus = "Disabled ⚪";
       let isStuck = false;
-
       if (CHECK_SERVER_PRESENCE) {
           serverStatus = await getSinglePresence(acc.userId, acc.cookie);
           isStuck = serverStatus.includes("Online");
@@ -253,7 +267,9 @@ async function main() {
         if (onCooldown) {
           action = `⏳ Wait (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
         } else {
-          if (isRunning) stopPackage(acc.pkg);
+          // --- BAGIAN INI MENGGUNAKAN FUNGSI BARU ---
+          if (isRunning) stopPackage(acc.pkg); 
+          // ------------------------------------------
           action = `♻️ ${reason}`;
           launchPackage(acc.pkg, finalLaunchUrl);
           lastRestartMap[acc.pkg] = now;
@@ -267,7 +283,6 @@ async function main() {
         serverStatus: serverStatus,
         action: action
       };
-      
       await sleep(PER_USER_DELAY);
     }
 
@@ -279,7 +294,6 @@ async function main() {
       Object.keys(accountStates).forEach(pkg => {
           if(accountStates[pkg].action === "🔎 CHECKING...") accountStates[pkg].action = "-";
       });
-      
       renderDashboard(cleanCode, `Sleeping (${Math.floor(remainingTime)}s)`);
       await sleep(remainingTime * 1000);
     }
