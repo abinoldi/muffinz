@@ -217,7 +217,7 @@ async function main() {
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    await sleep(60000);
+    await sleep(120000);
   }
 
   console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
