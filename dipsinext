@@ -97,26 +97,62 @@ local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
--- INSTANT FISHING LOGIC
+-- INSTANT FISHING DELAY
+-- ===============================
+-- [DATA DELAY ROD]
+local ROD_DELAYS = {
+    [79]  = 4.6,  -- Luck Rod
+    [76]  = 4.35, -- Carbon Rod
+    [85]  = 4.2,  -- Grass Rod
+    [77]  = 4.35, -- Demascus Rod
+    [78]  = 3.85, -- Ice Rod
+    [4]   = 3.5,  -- Lucky Rod
+    [80]  = 2.7,  -- Midnight Rod
+    [6]   = 2.3,  -- Steampunk Rod
+    [7]   = 2.2,  -- Chrome Rod
+    [255] = 2.2,  -- Flourescent Rod
+    [5]   = 1.85, -- Astral Rod
+    [126] = 1.7,  -- Ares Rod
+    [168] = 1.6,  -- Angler Rod
+    [169] = 1.2,  -- Ghostfin Rod
+    [257] = 1.0,  -- Element Rod
+}
+
+-- ===============================
+-- INSTANT FISHING LOGIC (UPDATED)
 -- ===============================
 local function RunInstantFish()
-    -- 0. Force Stop Auto Fishing State before instant sequence
+    -- 0. Get Current Rod Delay
+    local currentDelay = 5 -- Default delay (Starter Rod)
+    local char = game.Players.LocalPlayer.Character
+    if char then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool and tool:FindFirstChild("FishingRodConfig") then
+            -- Mencoba mengambil ID dari atribut atau konfigurasi tool
+            local rodId = tool:GetAttribute("RodId") or tonumber(tool.Name) 
+            currentDelay = ROD_DELAYS[rodId] or 5
+        end
+    end
+
+    STATE.Status = "Instant (" .. currentDelay .. "s)"
+
+    -- 1. Force Stop Auto Fishing State
     pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
     
     local timestamp = os.time() + os.clock()
     
-    -- 1. Charge Rod
+    -- 2. Charge Rod
     pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
     
-    -- 2. Start Minigame
-    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
+    -- 3. Start Minigame
+    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630, 0.996) end)
     
-    -- 3. Wait 1.5s
-    task.wait(1.5)
+    -- 4. Wait based on Rod Table
+    task.wait(currentDelay)
     
-    -- 4. Complete & Cleanup
+    -- 5. Complete & Cleanup
     pcall(function() RE_FishingCompleted:FireServer() end)
-    task.wait(0.3)
+    task.wait(0.2)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
@@ -278,7 +314,7 @@ local function UpdateGameMode()
             else 
                 progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
             end
-            local bestArea = "Treasure Room"
+            local bestArea = "Esoteric Island"
             local currentBestRodValue = 0
             for _, ownedId in ipairs(ownedRods) do
                 for _, shopRod in ipairs(ShopRods) do
@@ -425,50 +461,57 @@ local oldStop = FishingController.FishingStopped
 FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
 -- ===============================
--- MAIN LOOP (REVISED WITH 1-MINUTE SELL TIMER)
+-- MAIN LOOP (REVISED FOR INSTANT)
 -- ===============================
-local sellTimer = 0 -- Add this variable outside the loop to track time
+local sellTimer = 0
 
 task.spawn(function()
     while task.wait(0.5) do
         if AutoActive then
             pcall(function()
-                -- [[ SELL LOGIC: Runs every 60 seconds ]] --
+                -- SELL LOGIC
                 sellTimer = sellTimer + 0.5
                 if sellTimer >= 60 then
                     RF_SellAllItems:InvokeServer()
                     sellTimer = 0
                 end
-                -- [[ END SELL LOGIC ]] --
 
-                UpdateGameMode()      -- 🧠 QUEST BRAIN
-                AutoBuyBestBait()     -- ✅ GLOBAL
-                EquipBestBait()        -- ✅ GLOBAL
-                
-                -- The rest of your logic remains the same...
+                UpdateGameMode()      
+                AutoBuyBestBait()     
+                EquipBestBait()        
+            
                 if STATE.Mode == "FarmNextRod" then
                     EquipRod("Best")
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
+                    else
+                        RunInstantFish() -- Gunakan Instant Fishing
                     end
+
                 elseif STATE.Mode == "DeepSea" then
                     EquipRod("Best")
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
+                    else
+                        RunInstantFish() -- Gunakan Instant Fishing
                     end
+
                 elseif STATE.Mode == "Lever" then
                     ExecuteLeverLogic()
+
                 elseif STATE.Mode == "Element" then
+                    EquipRod(169) -- Ghostfin
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
                     else
-                        EquipRod(169)
-                        STATE.Status = "Instant Fishing..."
-                        RunInstantFish()
+                        RunInstantFish() -- Gunakan Instant Fishing
                     end
+
                 elseif STATE.Mode == "Finished" then
                     if STATE.CurrentArea ~= "Esoteric Island" then
                         Teleport("Esoteric Island")
+                    else
+                        RunInstantFish()
                     end
                 end
             end)
