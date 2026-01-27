@@ -522,29 +522,127 @@ local function StartAutoTotemLoop()
 end
 
 -- ===============================
--- TRADING LOGIC
+-- TRADING LOGIC (FIXED & IMPROVED)
 -- ===============================
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 
+local function IsItemTradeable(item)
+    -- Jangan trade item yang sedang dipakai, dilock, atau difavoritkan
+    if item.Locked or item.Favorited or item.IsFavorite then return false end
+    return true
+end
+
 local function ScanInventoryForTrade()
-    local secrets, specialMutations = {}, {}
+    local tradeList = {}
     local inv = PlayerData:GetExpect("Inventory")
-    if not inv then return secrets, specialMutations end
+    
+    if not inv then return tradeList end
+    
     for _, items in pairs(inv) do
         for _, item in ipairs(items) do
-            local name, rarity = GetFishNameAndRarity(item)
-            local mutation = GetMutation(item)
-            if string.upper(tostring(rarity)) == "SECRET" then
-                table.insert(secrets, {uuid = item.UUID, name = name})
-            end
-            if string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage") then
-                table.insert(specialMutations, {uuid = item.UUID, name = name, mutation = mutation})
-            elseif name == "Ruby" and mutation == "Gemstone" then
-                table.insert(specialMutations, {uuid = item.UUID, name = name, mutation = mutation})
+            if IsItemTradeable(item) then
+                local name, rarity = GetFishNameAndRarity(item)
+                local mutation = GetMutation(item)
+                
+                local isSecret = (tostring(rarity):upper() == "SECRET")
+                local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
+                local isRareMutation = (string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage"))
+                
+                -- LOGIKA FILTER BERDASARKAN CONFIG
+                local shouldTrade = false
+                
+                if MasterConfig.TradeMode == "ALL" then
+                    -- Trade SEMUA ikan (Common sampai Secret)
+                    shouldTrade = true
+                elseif MasterConfig.TradeMode == "SECRETS_FIRST" then
+                    -- Hanya Secret & Mutasi Langka
+                    if isSecret or isRubyGem or isRareMutation then shouldTrade = true end
+                elseif MasterConfig.TradeMode == "RUBY_GEMSTONE" then
+                    -- Hanya Ruby Gemstone
+                    if isRubyGem then shouldTrade = true end
+                end
+
+                if shouldTrade then
+                    -- Prioritaskan Secret agar ditrade duluan
+                    local priority = 1
+                    if isSecret then priority = 3
+                    elseif isRubyGem then priority = 2 end
+                    
+                    table.insert(tradeList, {
+                        uuid = item.UUID, 
+                        name = name, 
+                        rarity = rarity, 
+                        priority = priority
+                    })
+                end
             end
         end
     end
-    return secrets, specialMutations
+    
+    -- Urutkan item biar yang mahal ditrade duluan
+    table.sort(tradeList, function(a, b) return a.priority > b.priority end)
+    
+    return tradeList
+end
+
+local function IsItemStillInInventory(uuid)
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return false end
+    for _, items in pairs(inv) do
+        for _, item in ipairs(items) do 
+            if item.UUID == uuid then return true end 
+        end
+    end
+    return false
+end
+
+function RunAutoTrade()
+    if TradingState.IsTrading then return end
+    TradingState.IsTrading = true
+    
+    print("♻️ [Auto Trade] Dimulai... Target: " .. MasterConfig.TargetUsername)
+
+    TradingState.Thread = task.spawn(function()
+        while MasterConfig.AutoTrade and TradingState.IsTrading do
+            -- Cek apakah Target ID sudah ada
+            if not MasterConfig.TargetId or MasterConfig.TargetId == 0 then
+                pcall(function()
+                    MasterConfig.TargetId = Services.Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername)
+                end)
+                if not MasterConfig.TargetId then
+                    warn("⚠️ [Auto Trade] Target User tidak ditemukan! Cek config nama.")
+                    task.wait(5)
+                end
+            end
+
+            if MasterConfig.TargetId then
+                local itemsToTrade = ScanInventoryForTrade()
+                
+                if #itemsToTrade > 0 then
+                    local targetItem = itemsToTrade[1]
+                    -- print("♻️ [Trading] Mengirim: " .. targetItem.name .. " (" .. targetItem.rarity .. ")")
+                    
+                    pcall(function() 
+                        RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, targetItem.uuid) 
+                    end)
+                    
+                    local start = os.clock()
+                    -- Tunggu sampai item hilang dari tas (maksimal 5 detik)
+                    repeat 
+                        task.wait(0.5) 
+                    until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
+                else
+                    -- Jika tidak ada item yang cocok, tunggu agak lama
+                    -- print("💤 [Auto Trade] Tidak ada item untuk ditrade.")
+                    task.wait(2)
+                end
+            end
+            
+            task.wait(MasterConfig.TradeDelay)
+        end
+        TradingState.IsTrading = false
+        print("🛑 [Auto Trade] Berhenti.")
+    end)
 end
 
 local function IsItemStillInInventory(uuid)
