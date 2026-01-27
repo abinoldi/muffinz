@@ -325,6 +325,8 @@ local function EquipRod(nameID)
     local inv = PlayerDataReplion:GetExpect("Inventory")
     local rods = inv["Fishing Rods"] or {}
     local targetRod = nil
+    
+    -- Logika Pencarian Best Rod
     for _, r in pairs(rods) do
         if nameID == "Best" then
             local bestPrice = -1
@@ -335,6 +337,17 @@ local function EquipRod(nameID)
             if tonumber(r.Id) == nameID then targetRod = r; break end
         end
     end
+
+    -- TAMBAHAN: Fallback jika tidak menemukan rod di daftar ShopRods (misalnya Flimsy Rod)
+    if nameID == "Best" and not targetRod then
+        for _, r in pairs(rods) do
+            targetRod = r -- Ambil rod apa saja yang pertama ketemu
+            STATE.CurrentRod = "Basic/Unknown"
+            break
+        end
+    end
+    -- AKHIR TAMBAHAN
+
     if targetRod then
         pcall(function()
             RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods")
