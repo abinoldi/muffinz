@@ -4,6 +4,20 @@
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
+local Plrs = game:GetService("Players")
+local MyLp = Plrs.LocalPlayer
+
+-- 1. Lakukan Respawn (Reset Character)
+if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
+    MyLp.Character.Humanoid.Health = 0 -- Mematikan karakter agar respawn
+end
+
+-- 2. Tunggu sampai karakter muncul kembali sepenuhnya
+MyLp.CharacterAdded:Wait() -- Menunggu event spawn
+MyLp.Character:WaitForChild("HumanoidRootPart", 10) -- Menunggu fisik karakter dimuat
+
+-- 3. Tunggu 3 Detik
+task.wait(3)
 
 -- ===============================
 -- 1. ANTI-AFK
