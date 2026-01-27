@@ -134,7 +134,7 @@ local function RunInstantFish()
     task.wait(currentDelay) -- Delay dinamis aktif
     
     pcall(function() RE_FishingCompleted:FireServer() end)
-    task.wait(0.2)
+    task.wait(0.3)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 -- ===============================
