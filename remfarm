@@ -50,6 +50,7 @@ local PotatoLoopThread = nil
 local StartFishingV1, StopFishingV1, RunAutoTrade
 
 -- [3] WEB CONFIG LOADER (AUTO UPDATE)
+-- [3] WEB CONFIG LOADER (AUTO UPDATE)
 local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
 
@@ -59,10 +60,18 @@ local function LoadWebConfig()
 
     if success then
         local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
+    
         if decodeSuccess then
             local settingsChanged = false
+            local locationChanged = false -- TRACK LOCATION CHANGE
+
             for key, value in pairs(decodedData) do
                 if MasterConfig[key] ~= value then
+                    -- Check if the specific key changing is the location
+                    if key == "SelectedLocation" then 
+                        locationChanged = true 
+                    end
+                    
                     MasterConfig[key] = value
                     settingsChanged = true
                 end
@@ -70,12 +79,19 @@ local function LoadWebConfig()
 
             -- DYNAMIC SWITCHING
             if settingsChanged then
+                -- 1. Handle Location Change (THIS WAS MISSING)
+                if locationChanged and MasterConfig.AutoTeleport then
+                    task.spawn(TeleportToFishingLocation)
+                end
+
+                -- 2. Handle Fishing Toggle
                 if MasterConfig.FishingEnabled and not FishingState.IsFishing then
                     task.spawn(StartFishingV1)
                 elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then
                     StopFishingV1()
                 end
 
+                -- 3. Handle Trading Toggle
                 if MasterConfig.AutoTrade and not TradingState.IsTrading then
                     task.spawn(RunAutoTrade)
                 elseif not MasterConfig.AutoTrade and TradingState.IsTrading then
