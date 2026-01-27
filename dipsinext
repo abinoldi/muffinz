@@ -122,35 +122,41 @@ local ROD_DELAYS = {
 -- INSTANT FISHING LOGIC (UPDATED)
 -- ===============================
 local function RunInstantFish()
-    -- 0. Get Current Rod Delay
-    local currentDelay = 5 -- Default delay (Starter Rod)
-    local char = game.Players.LocalPlayer.Character
+    -- 1. Deteksi ID Rod dari Tool yang sedang dipegang
+    local currentDelay = 5 -- Default Starter
+    local char = lp.Character
     if char then
         local tool = char:FindFirstChildOfClass("Tool")
-        if tool and tool:FindFirstChild("FishingRodConfig") then
-            -- Mencoba mengambil ID dari atribut atau konfigurasi tool
-            local rodId = tool:GetAttribute("RodId") or tonumber(tool.Name) 
-            currentDelay = ROD_DELAYS[rodId] or 5
+        if tool then
+            -- Coba ambil ID dari atribut "RodId" atau dari konfigurasi pancingan
+            local rodId = tool:GetAttribute("RodId") 
+            
+            -- Jika tidak ada di atribut, coba cari di folder konfigurasi tool
+            if not rodId and tool:FindFirstChild("FishingRodConfig") then
+                local config = tool:FindFirstChild("FishingRodConfig")
+                -- Asumsi ada Value bernama 'Id' di dalam config
+                rodId = config:FindFirstChild("Id") and config.Id.Value
+            end
+
+            -- Jika ID ditemukan, gunakan delay dari tabel ROD_DELAYS
+            if rodId and ROD_DELAYS[tonumber(rodId)] then
+                currentDelay = ROD_DELAYS[tonumber(rodId)]
+            end
         end
     end
 
+    -- 2. Update Status GUI agar sesuai dengan Delay yang aktif
     STATE.Status = "Instant (" .. currentDelay .. "s)"
 
-    -- 1. Force Stop Auto Fishing State
+    -- 3. Eksekusi Pancing Instan
     pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
     
     local timestamp = os.time() + os.clock()
-    
-    -- 2. Charge Rod
     pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
-    
-    -- 3. Start Minigame
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630, 0.996) end)
     
-    -- 4. Wait based on Rod Table
-    task.wait(currentDelay)
+    task.wait(currentDelay) -- Menunggu sesuai delay asli rod (Contoh: 4.35s untuk Carbon)
     
-    -- 5. Complete & Cleanup
     pcall(function() RE_FishingCompleted:FireServer() end)
     task.wait(0.2)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
