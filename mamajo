@@ -10,7 +10,7 @@ const PLACE_ID = "121864768012064";
 const CHECK_SERVER_PRESENCE = false; 
 
 // --- TIMING SETTINGS ---
-const APP_OPEN_DELAY = 12000; // 12 Seconds (Increased slightly to be safe)
+const APP_OPEN_DELAY = 15000; // 15 Seconds (Extra time for clone apps to stabilize)
 const LOOP_DELAY = 40000;     // 40 Seconds Cooldown
 const CHECK_INTERVAL = 60;    
 
@@ -65,43 +65,29 @@ function getLaunchBounds(index) {
     return { left, top, right, bottom };
 }
 
-// --- 2. SMARTER TASK FINDER (PID BASED) ---
+// --- 2. NEW METHOD: WINDOW MANAGER DUMP ---
+// This finds the Task ID by looking at the actual windows drawn on screen
+// which usually works even when "dumpsys activity" hides the app.
 function getTaskId(pkg) {
     try {
-        // Step A: Get the PID (Process ID) of the app
-        // This confirms the app is actually running
-        const pidCmd = `pidof ${pkg}`;
-        let pid = "";
-        try {
-            pid = execSync(pidCmd).toString().trim();
-        } catch (e) {
-            return null; // App is not running yet
-        }
+        // Get list of all visible windows
+        const out = execSync("dumpsys window windows").toString();
         
-        if (!pid) return null;
-
-        // Step B: Search 'dumpsys' for that specific PID
-        // This links the Process directly to the Window Task
-        const out = execSync("dumpsys activity tasks").toString();
-        const lines = out.split("\n");
-        let currentTaskId = null;
+        // Split into blocks per window (usually starts with "Window{")
+        const blocks = out.split("Window{");
         
-        for (const line of lines) {
-            // Track the Task ID of the current block
-            if (line.includes("Task") && line.includes("#")) {
-                const match = line.match(/#(\d+)/);
-                if (match) currentTaskId = match[1];
-            }
-            
-            // Check if this line mentions our PID
-            // Format often looks like: "app=ProcessRecord{... :com.roblox.client/...}"
-            // or just simply matches the package name near the Task header
-            if (currentTaskId && (line.includes(`p${pid}`) || line.includes(pkg))) {
-                return currentTaskId;
+        for (const block of blocks) {
+            // Check if this window block belongs to our package
+            if (block.includes(pkg)) {
+                // Look for "taskId=123" inside this block
+                const match = block.match(/taskId=(\d+)/);
+                if (match) {
+                    return match[1]; // Found it!
+                }
             }
         }
     } catch (e) {
-        // console.log(e); // Silent fail
+        // console.log(e); 
     }
     return null;
 }
@@ -162,37 +148,41 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 3. LAUNCH LOGIC (DEBUG ENABLED) ---
+// --- 3. LAUNCH LOGIC ---
 async function launchPackage(pkg, url, index) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    // We remove 'stdio: ignore' here so you can see if the launch command itself has an error
     try {
         const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                     `--windowingMode 5 ` +
                     `-a android.intent.action.VIEW -d "${url}"`;
-        execSync(cmd, { stdio: 'pipe' }); // Pipe output to suppress noise but keep execution safe
+        execSync(cmd, { stdio: 'pipe' }); 
     } catch(err) {
-        console.log("   ⚠️ Warning: Launch command reported an issue (App might still open).");
+        console.log("   ⚠️ Launch command sent (ignoring output).");
     }
 
     process.stdout.write(`   ⏳ Allow ${APP_OPEN_DELAY/1000}s for app to open... `);
     await sleep(APP_OPEN_DELAY);
     console.log("OK.");
 
-    // B. Resize Loop
+    // B. Window Search & Resize Loop
     const bounds = getLaunchBounds(index);
     let success = false;
 
-    process.stdout.write("   Auto-arranging... ");
+    process.stdout.write("   Auto-arranging (Window Scan)... ");
     
-    // Try for 5 more seconds to find the Task ID
     for (let i = 0; i < 10; i++) { 
         const taskId = getTaskId(pkg);
         
         if (taskId) {
-            execSync(`am task resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
+            // Try Task Resize first
+            try {
+                execSync(`am task resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
+            } catch (e) {
+                // Fallback: Stack Resize (For older Android or some clones)
+                execSync(`am stack resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
+            }
             console.log(`✅ Moved to Grid #${index + 1} (ID: ${taskId})`);
             success = true;
             break; 
@@ -202,13 +192,11 @@ async function launchPackage(pkg, url, index) {
     
     if (!success) {
         console.log("⚠️ Could not resize.");
-        // Debug: Check if process exists at all
         try {
-            const pid = execSync(`pidof ${pkg}`).toString().trim();
-            console.log(`   (Debug: Process PID ${pid} is running, but Task ID was not found in dumpsys)`);
-        } catch(e) {
-            console.log(`   (Debug: Process is NOT running. The launch command failed.)`);
-        }
+             // Debug dump to help you see what's happening if it fails again
+             const pid = execSync(`pidof ${pkg}`).toString().trim();
+             console.log(`   (Debug: PID ${pid} is running. Check 'dumpsys window windows' manually)`);
+        } catch (e) {}
     }
 
   } catch (e) {
@@ -329,7 +317,7 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    // Launch -> Wait 12s -> PID Check -> Resize
+    // Launch -> Wait -> Window Search -> Resize
     await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
     
     lastRestartMap[acc.pkg] = Date.now();
