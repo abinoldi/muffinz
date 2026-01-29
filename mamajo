@@ -10,8 +10,9 @@ const PLACE_ID = "121864768012064";
 const CHECK_SERVER_PRESENCE = false; 
 
 // --- TIMING SETTINGS ---
-const LAUNCH_DELAY = 40000;  // 40 Seconds wait between launching apps (Requested)
-const CHECK_INTERVAL = 60;   // Monitor cycle speed
+const APP_OPEN_DELAY = 10000; // 10 Seconds (Wait for app to show up before resizing)
+const LOOP_DELAY = 40000;     // 40 Seconds (Wait before starting the next account)
+const CHECK_INTERVAL = 60;    // Monitor cycle speed
 
 // --- LAYOUT CONFIGURATION ---
 const GRID_COLUMNS = 4;      // 4 Columns
@@ -40,7 +41,6 @@ let accountStates = {};
 // --- 1. SCREEN DETECTION (FIXED PATH) ---
 function getScreenInfo() {
   try {
-    // Uses full path to fix "wm: not found" error
     const sizeOut = execSync("/system/bin/wm size").toString();
     const match = sizeOut.match(/(\d+)x(\d+)/); 
     if (match) {
@@ -146,25 +146,29 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 4. LAUNCH AND SNAP STRATEGY ---
+// --- 4. LAUNCH AND SNAP STRATEGY (UPDATED) ---
 async function launchPackage(pkg, url, index) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    // A. Start the App (Standard Freeform)
+    // A. Start the App
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--windowingMode 5 ` +
                 `-a android.intent.action.VIEW -d "${url}"`;
     execSync(cmd, { stdio: 'ignore' });
 
-    // B. Wait & Resize Loop (The "Auto-Arrange" Trick)
-    // We check rapidly to catch the window as soon as it opens
+    // --- NEW: Wait 10s for slow apps to open ---
+    process.stdout.write(`   ⏳ Allow 10s for app to open... `);
+    await sleep(APP_OPEN_DELAY);
+    console.log("OK.");
+
+    // B. Resize Loop (Now runs AFTER the wait)
     const bounds = getLaunchBounds(index);
     let success = false;
 
     process.stdout.write("   Auto-arranging... ");
-    for (let i = 0; i < 15; i++) { // Try for 3-4 seconds
-        await sleep(250);
+    // We check for another 5 seconds just in case it's still initializing
+    for (let i = 0; i < 20; i++) { 
         const taskId = getTaskId(pkg);
         
         if (taskId) {
@@ -174,8 +178,9 @@ async function launchPackage(pkg, url, index) {
             success = true;
             break; 
         }
+        await sleep(250);
     }
-    if (!success) console.log("⚠️ Could not resize (App started too slow?)");
+    if (!success) console.log("⚠️ Could not resize (App still not found)");
 
   } catch (e) {
       console.log(`❌ Error: ${e.message}`);
@@ -295,16 +300,16 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    // Launch and Auto-Arrange
+    // Launch -> Wait 10s -> Resize
     await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
     
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
     
-    // --- REQUESTED 40s DELAY ---
-    console.log(`⏳ Waiting ${LAUNCH_DELAY/1000}s before next app...`);
-    await sleep(LAUNCH_DELAY); 
+    // Wait the full 40s interval before the next account
+    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s before next account...`);
+    await sleep(LOOP_DELAY); 
   }
 
   console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
@@ -343,7 +348,6 @@ async function main() {
       }
       
       if (shouldRestart) {
-        // If we are on cooldown (restarted recently), just wait
         if (timeSinceRestart < 60) {
           action = `⏳ Wait (${Math.floor(60 - timeSinceRestart)}s)`;
         } else {
@@ -360,7 +364,7 @@ async function main() {
         serverStatus: serverStatus,
         action: action
       };
-      await sleep(500); // Quick check delay
+      await sleep(500); 
     }
 
     const cycleEndTime = Date.now();
