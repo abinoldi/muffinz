@@ -10,14 +10,13 @@ const PLACE_ID = "121864768012064";
 const CHECK_SERVER_PRESENCE = false; 
 
 // --- TIMING SETTINGS ---
-const APP_OPEN_DELAY = 10000; // 10 Seconds (Wait for app to open)
-const LOOP_DELAY = 40000;     // 40 Seconds (Wait before next account)
+const APP_OPEN_DELAY = 12000; // 12 Seconds (Wait for window to appear)
+const LOOP_DELAY = 40000;     // 40 Seconds (Time for you to move it)
 const CHECK_INTERVAL = 60;    
 
-// --- LAYOUT CONFIGURATION ---
-const GRID_COLUMNS = 4;
-const GAP = 5; 
-// ---------------------
+// --- SMALL WINDOW SIZE ---
+const SMALL_WIDTH = 350;
+const SMALL_HEIGHT = 600;
 
 function ensurePackage(pkg) {
   try { require.resolve(pkg);
@@ -37,62 +36,22 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 let lastRestartMap = {}; 
 let accountStates = {};
 
-// --- 1. SCREEN DETECTION ---
-function getScreenInfo() {
-  try {
-    const sizeOut = execSync("/system/bin/wm size").toString();
-    const match = sizeOut.match(/(\d+)x(\d+)/); 
-    if (match) {
-        const w = parseInt(match[1]);
-        const h = parseInt(match[2]);
-        return { width: Math.min(w, h), height: Math.max(w, h) };
-    }
-  } catch (e) {}
-  return { width: 1080, height: 2400 };
-}
-
-const SCREEN = getScreenInfo();
-// Adjust width slightly to ensure 4 columns fit without overflow
-const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 2))) / GRID_COLUMNS);
-const WIN_H = Math.floor(WIN_W * 1.5); 
-
-function getLaunchBounds(index) {
-    const col = index % GRID_COLUMNS; 
-    const row = Math.floor(index / GRID_COLUMNS);
-    
-    // Start from RIGHT side
-    const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
-    const top = (row * (WIN_H + GAP)) + GAP + 60; 
-    const right = left + WIN_W;
-    const bottom = top + WIN_H;
-    
-    return { left, top, right, bottom };
-}
-
-// --- 2. ROBUST "GREEDY" TASK FINDER ---
+// --- 1. WINDOW SCANNER (New Method) ---
+// This finds the app by looking at visible windows, which works for Clone Apps
 function getTaskId(pkg) {
     try {
-        // Get the full raw dump of all activities/tasks
-        const out = execSync("dumpsys activity tasks").toString();
+        const out = execSync("dumpsys window windows").toString();
+        // Split by "Window{" to isolate each window block
+        const blocks = out.split("Window{");
         
-        // Split into "Task" blocks to process one by one
-        // Android logs usually start a task with "Task id #" or "* TaskRecord"
-        const taskBlocks = out.split(/Task id #|TaskRecord{/);
-
-        // Skip the first empty chunk
-        for (let i = 1; i < taskBlocks.length; i++) {
-            const block = taskBlocks[i];
-            
-            // Extract the ID from the very start of this block
-            // It usually looks like "123 ... " or "123 ... A=..."
-            const idMatch = block.match(/^(\d+)/);
-            if (!idMatch) continue;
-            const taskId = idMatch[1];
-
-            // "Greedy" Check: Does this block contain our package name ANYWHERE?
-            // This catches Clones, distinct User IDs, and aliased activities.
+        for (const block of blocks) {
+            // If this window belongs to our package
             if (block.includes(pkg)) {
-                return taskId;
+                // Find the taskId inside this block
+                const match = block.match(/taskId=(\d+)/);
+                if (match) {
+                    return match[1];
+                }
             }
         }
     } catch (e) {}
@@ -155,12 +114,12 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 3. LAUNCH LOGIC (UPDATED) ---
-async function launchPackage(pkg, url, index) {
+// --- 2. LAUNCH & RESIZE SMALL ---
+async function launchPackage(pkg, url) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    // A. Start App (No output check needed here)
+    // A. Start App
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--windowingMode 5 ` +
                 `-a android.intent.action.VIEW -d "${url}"`;
@@ -170,33 +129,32 @@ async function launchPackage(pkg, url, index) {
     await sleep(APP_OPEN_DELAY);
     console.log("OK.");
 
-    // B. Resize with Greedy Scanner
-    const bounds = getLaunchBounds(index);
+    // B. Make it SMALL (Fixed Size, Top-Left)
+    process.stdout.write("   Resizing to small window... ");
     let success = false;
-
-    process.stdout.write("   Auto-arranging... ");
     
-    // Try to find the task 10 times (5 seconds)
+    // Scan for window (Try 10 times)
     for (let i = 0; i < 10; i++) { 
-        const taskId = getTaskId(pkg); // <--- Using new Greedy Finder
+        const taskId = getTaskId(pkg);
         
         if (taskId) {
-            // Found it! Now Resize.
             try {
-                execSync(`am task resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
-                console.log(`✅ Moved to Grid #${index + 1} (ID: ${taskId})`);
+                // Resize to 350x600 at position 50,50
+                // You can drag it manually after this!
+                execSync(`am task resize ${taskId} 50 50 ${50 + SMALL_WIDTH} ${50 + SMALL_HEIGHT}`, { stdio: 'ignore' });
+                console.log(`✅ Success! (ID: ${taskId})`);
                 success = true;
                 break; 
-            } catch(resizeErr) {
-                 // Try legacy resize if new one fails
-                 try { execSync(`am stack resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' }); success = true; break;} catch(e){}
+            } catch(e) {
+                // Fallback for older Android
+                try { execSync(`am stack resize ${taskId} 50 50 ${50 + SMALL_WIDTH} ${50 + SMALL_HEIGHT}`, { stdio: 'ignore' }); success = true; break;} catch(e2){}
             }
         }
         await sleep(500);
     }
     
     if (!success) {
-        console.log("⚠️ Could not resize (Task ID not found in dumpsys).");
+        console.log("⚠️ Could not resize (Window not found). You may need to resize manually.");
     }
 
   } catch (e) {
@@ -255,7 +213,7 @@ function renderDashboard(cleanCode, statusMessage) {
   console.clear();
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
-  console.log(`📏 SCREEN: ${SCREEN.width}x${SCREEN.height} | Grid: ${GRID_COLUMNS} Cols | Win: ${WIN_W}x${WIN_H}`);
+  console.log(`📏 MODE: AUTO-SMALL + MANUAL ARRANGE`);
   console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
   Object.keys(accountStates).sort().forEach(pkg => {
@@ -286,9 +244,8 @@ async function main() {
     process.stdout.write(`Reading ${pkg}... \r`);
     const cookie = getRobloxCookie(pkg);
     const userInfo = await getUserInfo(cookie);
-    const gridIndex = packages.indexOf(pkg);
     
-    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name, gridIndex });
+    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
     lastRestartMap[pkg] = 0;
     accountStates[pkg] = {
       username: userInfo.name || "Unknown",
@@ -317,13 +274,14 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+    // Launch & Make Small
+    await launchPackage(acc.pkg, finalLaunchUrl);
     
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
     
-    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s before next account...`);
+    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s (Move your window now!)...`);
     await sleep(LOOP_DELAY); 
   }
 
@@ -368,7 +326,7 @@ async function main() {
         } else {
           if (isRunning) stopPackage(acc.pkg);
           action = `♻️ ${reason}`;
-          await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+          await launchPackage(acc.pkg, finalLaunchUrl);
           lastRestartMap[acc.pkg] = now;
         }
       }
