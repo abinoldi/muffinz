@@ -8,13 +8,14 @@ const os = require("os");
 const MSRV_URL = "https://ghostbin.axel.org/paste/2oqfg/raw";
 const PLACE_ID = "121864768012064"; 
 const CHECK_SERVER_PRESENCE = false; 
-const PER_USER_DELAY = 5000;
-const CHECK_INTERVAL = 60;
-const RESTART_COOLDOWN = 300;
+
+// --- TIMING SETTINGS ---
+const LAUNCH_DELAY = 40000;  // 40 Seconds wait between launching apps (Requested)
+const CHECK_INTERVAL = 60;   // Monitor cycle speed
 
 // --- LAYOUT CONFIGURATION ---
-const GRID_COLUMNS = 4;
-const GAP = 5;
+const GRID_COLUMNS = 4;      // 4 Columns
+const GAP = 5;               // Pixel gap between windows
 // ---------------------
 
 function ensurePackage(pkg) {
@@ -36,10 +37,10 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 let lastRestartMap = {}; 
 let accountStates = {};
 
-// --- FIX 1: USE FULL PATH FOR WM ---
+// --- 1. SCREEN DETECTION (FIXED PATH) ---
 function getScreenInfo() {
   try {
-    // Use /system/bin/wm explicitly to avoid "not found" error
+    // Uses full path to fix "wm: not found" error
     const sizeOut = execSync("/system/bin/wm size").toString();
     const match = sizeOut.match(/(\d+)x(\d+)/); 
     if (match) {
@@ -47,9 +48,7 @@ function getScreenInfo() {
         const h = parseInt(match[2]);
         return { width: Math.min(w, h), height: Math.max(w, h) };
     }
-  } catch (e) {
-    // Silent fallback
-  }
+  } catch (e) {}
   return { width: 1080, height: 2400 };
 }
 
@@ -57,39 +56,39 @@ const SCREEN = getScreenInfo();
 const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 1))) / GRID_COLUMNS);
 const WIN_H = Math.floor(WIN_W * 1.6); 
 
+// --- 2. GRID CALCULATION ---
 function getLaunchBounds(index) {
     const col = index % GRID_COLUMNS; 
     const row = Math.floor(index / GRID_COLUMNS);
+    
+    // Start from RIGHT side (Column 0 is far right)
     const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
-    const top = (row * (WIN_H + GAP)) + GAP + 60; 
+    const top = (row * (WIN_H + GAP)) + GAP + 60; // +60 for status bar
     const right = left + WIN_W;
     const bottom = top + WIN_H;
+    
     return { left, top, right, bottom };
 }
 
-// --- FIX 2: NEW TASK ID FINDER ---
+// --- 3. TASK ID FINDER (REQUIRED FOR RESIZING) ---
 function getTaskId(pkg) {
     try {
         const out = execSync("dumpsys activity tasks").toString();
         const lines = out.split("\n");
         let currentTaskId = null;
         
-        // Scan specifically for the Task ID belonging to this package
         for (const line of lines) {
-            // Pattern: "Task id #123" or "Task{... #123 ...}"
             if (line.includes("Task") && line.includes("#")) {
                 const match = line.match(/#(\d+)/);
                 if (match) currentTaskId = match[1];
             }
-            // If we find the package name inside this task block
-            if (currentTaskId && line.includes(pkg) && (line.includes("realActivity") || line.includes("u0"))) {
+            if (currentTaskId && line.includes(pkg)) {
                 return currentTaskId;
             }
         }
     } catch (e) {}
     return null;
 }
-// -----------------------------------
 
 function initSystem() {
   try {
@@ -147,32 +146,41 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- FIX 3: LAUNCH THEN RESIZE STRATEGY ---
-function launchPackage(pkg, url, index) {
+// --- 4. LAUNCH AND SNAP STRATEGY ---
+async function launchPackage(pkg, url, index) {
   try {
-    // 1. Launch standard (Force Freeform Mode 5)
-    // Removed --task-launch-bounds because it crashes on your Android version
+    console.log(`\n🚀 Launching: ${pkg}`);
+    
+    // A. Start the App (Standard Freeform)
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--windowingMode 5 ` +
                 `-a android.intent.action.VIEW -d "${url}"`;
-    
     execSync(cmd, { stdio: 'ignore' });
 
-    // 2. Wait for app to actually open (Critical for resizing)
-    execSync("sleep 2");
+    // B. Wait & Resize Loop (The "Auto-Arrange" Trick)
+    // We check rapidly to catch the window as soon as it opens
+    const bounds = getLaunchBounds(index);
+    let success = false;
 
-    // 3. Find Task ID and Resize
-    const taskId = getTaskId(pkg);
-    if (taskId) {
-        const b = getLaunchBounds(index);
-        // Command: am task resize <taskId> <left> <top> <right> <bottom>
-        execSync(`am task resize ${taskId} ${b.left} ${b.top} ${b.right} ${b.bottom}`, { stdio: 'ignore' });
+    process.stdout.write("   Auto-arranging... ");
+    for (let i = 0; i < 15; i++) { // Try for 3-4 seconds
+        await sleep(250);
+        const taskId = getTaskId(pkg);
+        
+        if (taskId) {
+            // Apply the grid coordinates
+            execSync(`am task resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
+            console.log(`✅ Moved to Grid #${index + 1}`);
+            success = true;
+            break; 
+        }
     }
+    if (!success) console.log("⚠️ Could not resize (App started too slow?)");
+
   } catch (e) {
-      // Ignore errors to keep loop running
+      console.log(`❌ Error: ${e.message}`);
   }
 }
-// ------------------------------
 
 function isProcessRunning(pkg) {
   try { 
@@ -286,12 +294,17 @@ async function main() {
   
   for (const acc of accounts) {
     stopPackage(acc.pkg);
-    launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+    
+    // Launch and Auto-Arrange
+    await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+    
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    // Wait longer between launches to allow resizing to happen cleanly
-    await sleep(5000); 
+    
+    // --- REQUESTED 40s DELAY ---
+    console.log(`⏳ Waiting ${LAUNCH_DELAY/1000}s before next app...`);
+    await sleep(LAUNCH_DELAY); 
   }
 
   console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
@@ -312,7 +325,6 @@ async function main() {
       
       const now = Date.now();
       const timeSinceRestart = (now - lastRestartMap[acc.pkg]) / 1000;
-      const onCooldown = timeSinceRestart < RESTART_COOLDOWN;
       
       let action = "-";
       let shouldRestart = false;
@@ -331,12 +343,13 @@ async function main() {
       }
       
       if (shouldRestart) {
-        if (onCooldown) {
-          action = `⏳ Wait (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
+        // If we are on cooldown (restarted recently), just wait
+        if (timeSinceRestart < 60) {
+          action = `⏳ Wait (${Math.floor(60 - timeSinceRestart)}s)`;
         } else {
           if (isRunning) stopPackage(acc.pkg);
           action = `♻️ ${reason}`;
-          launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+          await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
           lastRestartMap[acc.pkg] = now;
         }
       }
@@ -347,12 +360,11 @@ async function main() {
         serverStatus: serverStatus,
         action: action
       };
-      await sleep(PER_USER_DELAY);
+      await sleep(500); // Quick check delay
     }
 
     const cycleEndTime = Date.now();
-    const elapsedTimeSeconds = (cycleEndTime - cycleStartTime) / 1000;
-    const remainingTime = CHECK_INTERVAL - elapsedTimeSeconds;
+    const remainingTime = CHECK_INTERVAL - ((cycleEndTime - cycleStartTime) / 1000);
 
     if (remainingTime > 0) {
       Object.keys(accountStates).forEach(pkg => {
