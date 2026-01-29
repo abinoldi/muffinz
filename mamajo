@@ -8,9 +8,13 @@ const os = require("os");
 const MSRV_URL = "https://ghostbin.axel.org/paste/2oqfg/raw";
 const PLACE_ID = "121864768012064"; 
 const CHECK_SERVER_PRESENCE = false; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
-const PER_USER_DELAY = 5000;        // 5 Seconds delay per user check
-const CHECK_INTERVAL = 60;          // Wait 60s total before starting next cycle
-const RESTART_COOLDOWN = 300;       // 5 Minutes cooldown
+const PER_USER_DELAY = 5000;         // 5 Seconds delay per user check
+const CHECK_INTERVAL = 60;           // Wait 60s total before starting next cycle
+const RESTART_COOLDOWN = 300;        // 5 Minutes cooldown
+
+// --- LAYOUT CONFIGURATION ---
+const GRID_COLUMNS = 4;              // 4 Columns as requested
+const GAP = 5;                       // Gap between windows in pixels
 // ---------------------
 
 function ensurePackage(pkg) {
@@ -32,6 +36,54 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 let lastRestartMap = {}; 
 let accountStates = {};
 
+// --- NEW: SCREEN DETECTION LOGIC ---
+function getScreenInfo() {
+  try {
+    // Detect Resolution (e.g. "Physical size: 1080x2400")
+    const sizeOut = execSync("wm size").toString();
+    // Regex to capture the WxH numbers
+    const match = sizeOut.match(/(\d+)x(\d+)/); 
+    
+    if (match) {
+        // Ensure width is the shorter side (Portrait mode standard)
+        const w = parseInt(match[1]);
+        const h = parseInt(match[2]);
+        return { 
+            width: Math.min(w, h), 
+            height: Math.max(w, h) 
+        };
+    }
+  } catch (e) {
+    // Fallback if detection fails
+    console.log("⚠️ Failed to detect screen size, using default 1080p.");
+  }
+  return { width: 1080, height: 2400 };
+}
+
+// Global screen info
+const SCREEN = getScreenInfo();
+const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 1))) / GRID_COLUMNS);
+const WIN_H = Math.floor(WIN_W * 1.6); // 1.6 Aspect Ratio (Vertical Rectangle)
+
+function getLaunchBounds(index) {
+    // Arrange from Right to Left
+    const col = index % GRID_COLUMNS; 
+    const row = Math.floor(index / GRID_COLUMNS);
+
+    // Calculate Right-Side Start:
+    // If col 0 (first), we want it on the far right.
+    // X = Width - ((col + 1) * (Width + Gap))
+    const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
+    
+    const top = (row * (WIN_H + GAP)) + GAP + 50; // +50 for Status bar buffer
+    const right = left + WIN_W;
+    const bottom = top + WIN_H;
+
+    // Bounds format: "[left,top][right,bottom]"
+    return `[${left},${top}][${right},${bottom}]`;
+}
+// -----------------------------------
+
 function initSystem() {
   try {
     const uid = execSync("id -u").toString().trim();
@@ -45,7 +97,6 @@ function initSystem() {
 }
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 const ask = (q) => new Promise(r => {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   rl.question(q, (ans) => { rl.close(); r(ans); });
@@ -82,30 +133,31 @@ async function getUserInfo(cookie) {
   } catch { return { id: null, name: "Expired" }; }
 }
 
-// --- BAGIAN YANG DIPERBAIKI ---
-// Menggunakan 'pidof' dan 'kill' alih-alih 'am force-stop'
-// Ini mencegah aplikasi kloningan lain (yang berbagi UID sama) ikut tertutup.
 function stopPackage(pkg) { 
   try { 
-    // Cari Process ID (PID) spesifik aplikasi tersebut
     const pid = execSync(`pidof ${pkg}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    
-    // Jika PID ditemukan, matikan hanya proses tersebut
     if (pid) {
         execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
     }
-  } catch (e) {
-    // Abaikan jika proses sudah mati atau tidak ditemukan
-  } 
+  } catch (e) {} 
 }
-// ------------------------------
 
-function launchPackage(pkg, url) {
+// --- MODIFIED LAUNCH FUNCTION ---
+function launchPackage(pkg, url, index) {
   try {
-    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${url}"`;
+    const bounds = getLaunchBounds(index);
+    // Flag 0x10000000 = FLAG_ACTIVITY_NEW_TASK (Required for start from service/shell)
+    // --windowingMode 5 = Freeform
+    // --task-launch-bounds = Position
+    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
+                `--windowingMode 5 ` +
+                `--task-launch-bounds "${bounds}" ` +
+                `-a android.intent.action.VIEW -d "${url}"`;
+    
     execSync(cmd, { stdio: 'ignore' });
   } catch {}
 }
+// ------------------------------
 
 function isProcessRunning(pkg) {
   try { 
@@ -158,6 +210,7 @@ function renderDashboard(cleanCode, statusMessage) {
   console.clear();
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
+  console.log(`📏 SCREEN: ${SCREEN.width}x${SCREEN.height} | Grid: ${GRID_COLUMNS} Cols | Win: ${WIN_W}x${WIN_H}`);
   console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
   Object.keys(accountStates).sort().forEach(pkg => {
@@ -182,11 +235,18 @@ async function main() {
   if (!packages.length) { console.log("❌ No Roblox packages found."); process.exit(0); }
 
   let accounts = [];
+  // Sort packages to ensure consistent grid placement (Optional)
+  packages.sort(); 
+
   for (const pkg of packages) {
     process.stdout.write(`Reading ${pkg}... \r`);
     const cookie = getRobloxCookie(pkg);
     const userInfo = await getUserInfo(cookie);
-    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
+    // Assign a persistent index based on the sorted order for consistent grid position
+    // This ensures app #1 is always at grid pos #1
+    const gridIndex = packages.indexOf(pkg);
+    
+    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name, gridIndex });
     lastRestartMap[pkg] = 0;
     accountStates[pkg] = {
       username: userInfo.name || "Unknown",
@@ -211,9 +271,13 @@ async function main() {
   const finalLaunchUrl = `roblox://placeID=${PLACE_ID}&linkCode=${cleanCode}`;
 
   console.log("\n🚀 Launching all instances...");
+  
+  // Launch Loop
   for (const acc of accounts) {
     stopPackage(acc.pkg);
-    launchPackage(acc.pkg, finalLaunchUrl);
+    // PASS THE GRID INDEX HERE
+    launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+    
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
@@ -227,18 +291,15 @@ async function main() {
       accountStates[acc.pkg].action = "🔎 CHECKING...";
       renderDashboard(cleanCode, `Checking ${acc.username}...`);
       
-      // 1. Check Process (Always)
       const isRunning = isProcessRunning(acc.pkg);
-      
-      // 2. Check Presence (Optional Config)
       let serverStatus = "Disabled ⚪";
       let isStuck = false;
+
       if (CHECK_SERVER_PRESENCE) {
           serverStatus = await getSinglePresence(acc.userId, acc.cookie);
           isStuck = serverStatus.includes("Online");
       }
       
-      // 3. Logic
       const now = Date.now();
       const timeSinceRestart = (now - lastRestartMap[acc.pkg]) / 1000;
       const onCooldown = timeSinceRestart < RESTART_COOLDOWN;
@@ -247,36 +308,30 @@ async function main() {
       let shouldRestart = false;
       let reason = "";
 
-      // Decide if restart is needed based on Config
       if (CHECK_SERVER_PRESENCE) {
-          // Full Mode: Restart if Dead OR Stuck
           if (!isRunning || isStuck) {
               shouldRestart = true;
               reason = isRunning ? "RESTART (Stuck)" : "REOPEN (Crash)";
           }
       } else {
-          // No-Ping Mode: ONLY Restart if Dead
           if (!isRunning) {
               shouldRestart = true;
               reason = "REOPEN (Crash)";
           }
       }
       
-      // Execute Restart
       if (shouldRestart) {
         if (onCooldown) {
           action = `⏳ Wait (${Math.floor(RESTART_COOLDOWN - timeSinceRestart)}s)`;
         } else {
-          // --- BAGIAN INI MENGGUNAKAN FUNGSI BARU ---
-          if (isRunning) stopPackage(acc.pkg); 
-          // ------------------------------------------
+          if (isRunning) stopPackage(acc.pkg);
           action = `♻️ ${reason}`;
-          launchPackage(acc.pkg, finalLaunchUrl);
+          // RE-LAUNCH WITH SAME GRID INDEX
+          launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
           lastRestartMap[acc.pkg] = now;
         }
       }
       
-      // Update State
       accountStates[acc.pkg] = {
         username: acc.username,
         isRunning: isRunning,
