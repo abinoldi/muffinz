@@ -10,11 +10,11 @@ const PLACE_ID = "121864768012064";
 const CHECK_SERVER_PRESENCE = false; 
 
 // --- TIMING ---
-const LOOP_DELAY = 40000;     // 40 Seconds Cooldown (Time for you to move it)
+const LOOP_DELAY = 40000;     // 40 Seconds Cooldown
 const CHECK_INTERVAL = 60;    
 
-// --- WINDOW SIZE SETTINGS ---
-// This sets the window to 350x600 pixels at the top-left corner
+// --- SMALL WINDOW SIZE ---
+// Sets window to 350x600 at Top-Left (0,0)
 const START_X = 0;
 const START_Y = 0;
 const WIDTH = 350;
@@ -94,24 +94,49 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- DIRECT LAUNCH WITH BOUNDS (NO WAITING) ---
+// --- NEW HELPER: Get ID of whatever is on screen ---
+function getTopTaskId() {
+    try {
+        const out = execSync("dumpsys activity top").toString();
+        const lines = out.split("\n");
+        for (const line of lines) {
+            // Finds "TASK com.roblox... id=123"
+            if (line.includes("TASK") && line.includes("id=")) {
+                const match = line.match(/id=(\d+)/);
+                if (match) return match[1];
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+// --- LAUNCH AND INSTANT SHRINK ---
 async function launchPackage(pkg, url) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    // Calculate the coordinate string: "[0,0][350,600]"
-    const bounds = `[${START_X},${START_Y}][${START_X + WIDTH},${START_Y + HEIGHT}]`;
-    
-    // COMMAND: Starts app immediately with these bounds
-    // Removed --windowingMode 5 (since you said your app is already modded)
-    // Removed all sleep/resize logic
+    // 1. Launch (Without bounds, because it crashes your phone)
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
-                `--bounds "${bounds}" ` + 
                 `-a android.intent.action.VIEW -d "${url}"`;
-    
-    // Run it immediately
     execSync(cmd, { stdio: 'ignore' });
-    console.log(`   ✅ Sent Launch Command (Size: ${WIDTH}x${HEIGHT})`);
+
+    // 2. Wait 2 seconds (Absolute minimum for window to exist)
+    await sleep(2000);
+
+    // 3. Force Resize "Top App" Immediately
+    const taskId = getTopTaskId();
+    if (taskId) {
+        try {
+            // Attempt standard resize
+            execSync(`am task resize ${taskId} ${START_X} ${START_Y} ${START_X + WIDTH} ${START_Y + HEIGHT}`, { stdio: 'ignore' });
+            console.log(`   ✅ Shrunk to ${WIDTH}x${HEIGHT}`);
+        } catch(e) {
+            // Attempt legacy resize (common for older Androids)
+            try { execSync(`am stack resize ${taskId} ${START_X} ${START_Y} ${START_X + WIDTH} ${START_Y + HEIGHT}`, { stdio: 'ignore' }); } catch(e2) {}
+        }
+    } else {
+        console.log("   ⚠️ App started, but not ready to resize yet.");
+    }
 
   } catch (e) {
       console.log(`❌ Error: ${e.message}`);
@@ -169,7 +194,7 @@ function renderDashboard(cleanCode, statusMessage) {
   console.clear();
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
-  console.log(`📏 MODE: INSTANT LAUNCH (Size ${WIDTH}x${HEIGHT})`);
+  console.log(`📏 MODE: INSTANT SHRINK (350x600)`);
   console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
   Object.keys(accountStates).sort().forEach(pkg => {
@@ -230,7 +255,7 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    // Launch Immediate
+    // Launch and Shrink immediately
     await launchPackage(acc.pkg, finalLaunchUrl);
     
     lastRestartMap[acc.pkg] = Date.now();
