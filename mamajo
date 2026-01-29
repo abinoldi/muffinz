@@ -11,7 +11,7 @@ const CHECK_SERVER_PRESENCE = false;
 
 // --- TIMING SETTINGS ---
 const APP_OPEN_DELAY = 10000; // 10 Seconds (Wait for app to open)
-const LOOP_DELAY = 40000;     // 40 Seconds (Cooldown between accounts)
+const LOOP_DELAY = 40000;     // 40 Seconds (Cooldown)
 const CHECK_INTERVAL = 60;    
 
 // --- LAYOUT CONFIGURATION ---
@@ -68,15 +68,16 @@ function getLaunchBounds(index) {
     return { left, top, right, bottom };
 }
 
-// --- 2. ROBUST WINDOW FINDER ---
-// Scans visible windows (Bypasses hidden Task IDs)
-function getTaskIdGeneric() {
+// --- 2. FIXED WINDOW FINDER ---
+// Now searches for the PACKAGE NAME (com.roblox.clienb) 
+// instead of the Title "Roblox". This fixes "Window not found".
+function getTaskIdByPackage(pkg) {
     try {
         const out = execSync("dumpsys window windows").toString();
         const blocks = out.split("Window{");
         for (const block of blocks) {
-            // Check for ANY Roblox window (Original or Clone)
-            if (block.toLowerCase().includes("roblox")) {
+            // Check if this window block contains our package name
+            if (block.includes(pkg)) {
                 const match = block.match(/taskId=(\d+)/);
                 if (match) return match[1];
             }
@@ -141,7 +142,7 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 3. LAUNCH LOGIC (NO WindowingMode + Auto-Grid) ---
+// --- 3. LAUNCH LOGIC (AUTO-BOUNDS) ---
 async function launchPackage(pkg, url, index) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
@@ -150,8 +151,7 @@ async function launchPackage(pkg, url, index) {
     const b = getLaunchBounds(index);
     const boundsStr = `[${b.left},${b.top}][${b.right},${b.bottom}]`;
     
-    // Command WITHOUT --windowingMode 5
-    // But WITH --bounds to attempt sizing on launch
+    // Command WITH --bounds (as requested)
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--bounds "${boundsStr}" ` + 
                 `-a android.intent.action.VIEW -d "${url}"`;
@@ -159,7 +159,7 @@ async function launchPackage(pkg, url, index) {
     try {
         execSync(cmd, { stdio: 'ignore' });
     } catch(e) {
-        // If --bounds causes a crash on your specific ROM, retry without it
+        // Fallback if --bounds crashes it
         execSync(cmd.replace(`--bounds "${boundsStr}" `, ""), { stdio: 'ignore' });
     }
 
@@ -167,9 +167,8 @@ async function launchPackage(pkg, url, index) {
     await sleep(APP_OPEN_DELAY);
     console.log("OK.");
 
-    // FORCE SNAP TO GRID
-    // (This ensures it goes to the right spot even if launch ignored bounds)
-    const taskId = getTaskIdGeneric();
+    // SAFETY CHECK: Force Resize using Package Name Finder
+    const taskId = getTaskIdByPackage(pkg);
     if (taskId) {
         try {
             execSync(`am task resize ${taskId} ${b.left} ${b.top} ${b.right} ${b.bottom}`, { stdio: 'ignore' });
@@ -179,7 +178,7 @@ async function launchPackage(pkg, url, index) {
              try { execSync(`am stack resize ${taskId} ${b.left} ${b.top} ${b.right} ${b.bottom}`, { stdio: 'ignore' }); } catch(e2){}
         }
     } else {
-        console.log("   ⚠️ Window not found (Manual arrange required)");
+        console.log("   ⚠️ Window not found (Check if app opened)");
     }
 
   } catch (e) {
@@ -238,7 +237,7 @@ function renderDashboard(cleanCode, statusMessage) {
   console.clear();
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
-  console.log(`📏 MODE: MODDED APP (Grid Arrange)`);
+  console.log(`📏 MODE: AUTO-BOUNDS LAUNCH`);
   console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
   Object.keys(accountStates).sort().forEach(pkg => {
