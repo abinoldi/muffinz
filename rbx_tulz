@@ -3,7 +3,7 @@
 # Konfigurasi Lokasi Backup
 BACKUP_DIR="/sdcard/RobloxBackups"
 
-# Fungsi untuk mengecek Root
+# Fungsi cek Root
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "❌ Script ini MEMBUTUHKAN akses Root!"
@@ -12,24 +12,20 @@ check_root() {
     fi
 }
 
-# Fungsi Backup
+# Fungsi 1: Backup
 do_backup() {
     echo "=========================================="
     echo "       MEMULAI PROSES BACKUP...           "
     echo "=========================================="
-    
-    # Buat folder backup jika belum ada
     mkdir -p "$BACKUP_DIR"
-    
-    # Loop mencari semua folder paket yang berawalan com.roblox.clien
     count=0
+    
+    # Deteksi folder data
     for folder in /data/data/com.roblox.clien*; do
-        # Lewati jika tidak ada folder yang cocok
         [ -e "$folder" ] || continue
-        
         pkg_name=$(basename "$folder")
         
-        # Cek dua kemungkinan lokasi Cookies (Default atau root webview)
+        # Cek lokasi cookie
         cookie_path=""
         if [ -f "$folder/app_webview/Default/Cookies" ]; then
             cookie_path="$folder/app_webview/Default/Cookies"
@@ -45,84 +41,111 @@ do_backup() {
             echo "⚠️  SKIP: $pkg_name (File Cookies tidak ditemukan)"
         fi
     done
-    
     echo "------------------------------------------"
-    echo "Selesai! $count database tersimpan di:"
-    echo "$BACKUP_DIR"
+    echo "Selesai! $count database tersimpan di $BACKUP_DIR"
 }
 
-# Fungsi Restore
+# Fungsi 2: Restore
 do_restore() {
     echo "=========================================="
     echo "       MEMULAI PROSES RESTORE...          "
     echo "=========================================="
-    
     if [ ! -d "$BACKUP_DIR" ]; then
-        echo "❌ Folder backup tidak ditemukan di $BACKUP_DIR"
+        echo "❌ Folder backup tidak ditemukan!"
         exit 1
     fi
 
     count=0
     for db_file in "$BACKUP_DIR"/com.roblox.clien*.db; do
-        # Lewati jika folder kosong
         [ -e "$db_file" ] || continue
-
-        filename=$(basename "$db_file")
-        pkg_name="${filename%.db}"
+        pkg_name=$(basename "$db_file" .db)
         target_folder="/data/data/$pkg_name"
-        
-        # Tentukan target path (asumsi ke folder Default agar standar)
-        # Kita buat strukturnya jika belum ada
         target_path="$target_folder/app_webview/Default/Cookies"
         target_dir_parent="$target_folder/app_webview/Default"
 
         if [ -d "$target_folder" ]; then
-            # 1. Pastikan folder tujuan ada
             if [ ! -d "$target_dir_parent" ]; then
                 mkdir -p "$target_dir_parent"
-                # Set owner folder baru agar sesuai dengan aplikasi
+                # Fix permission folder induk
                 app_uid_folder=$(stat -c "%u:%g" "$target_folder")
                 chown -R "$app_uid_folder" "$target_folder/app_webview"
             fi
 
-            # 2. Copy file
             cp "$db_file" "$target_path"
             
-            # 3. FIX PERMISSION (Sangat Penting)
-            # Ambil UID:GID dari folder data aplikasi
+            # FIX PERMISSION
             app_uid=$(stat -c "%u:%g" "$target_folder")
-            
-            # Terapkan owner ke file database
             chown "$app_uid" "$target_path"
-            # Terapkan permission rw-rw---- (660)
             chmod 660 "$target_path"
             
-            echo "✅ Restore SUKSES: $pkg_name (Perms Fixed)"
+            echo "✅ Restore SUKSES: $pkg_name"
             count=$((count + 1))
         else
-            echo "❌ GAGAL: Aplikasi $pkg_name belum terinstall."
+            echo "❌ GAGAL: $pkg_name belum terinstall."
         fi
     done
-
     echo "------------------------------------------"
-    echo "Selesai! $count database berhasil dikembalikan."
+    echo "Selesai! $count database dikembalikan."
+}
+
+# Fungsi 3: Uninstall (Hapus App)
+do_uninstall() {
+    echo "=========================================="
+    echo "       MENGHAPUS APLIKASI CLONE...        "
+    echo "=========================================="
+    
+    # Cari paket terinstall via PM List
+    # Filter hanya yang bernama "com.roblox.clien"
+    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+
+    if [ -z "$pkgs" ]; then
+        echo "❌ Tidak ada aplikasi Roblox Clone yang terinstall."
+        return
+    fi
+
+    echo "⚠️  DAFTAR APLIKASI YANG AKAN DIHAPUS:"
+    echo "$pkgs"
+    echo "------------------------------------------"
+    echo "❗ PERINGATAN: Pastikan sudah Backup Cookies (Menu 1)"
+    echo -n "❓ Yakin hapus SEMUA aplikasi di atas? (y/n): "
+    read confirm
+
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        for pkg in $pkgs; do
+            echo "⏳ Menghapus $pkg..."
+            pm uninstall "$pkg" > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                echo "   ✅ Terhapus."
+            else
+                echo "   ❌ Gagal menghapus."
+            fi
+        done
+        echo "✨ Selesai. Semua bersih!"
+    else
+        echo "🚫 Operasi dibatalkan."
+    fi
 }
 
 # --- MAIN MENU ---
 check_root
 
-echo "=========================================="
-echo "    ROBLOX CLONE COOKIE MANAGER (ROOT)    "
-echo "=========================================="
-echo "1. Backup Semua Akun (ke SDCard)"
-echo "2. Restore Semua Akun (Fix Permissions)"
-echo "3. Keluar"
-echo -n "Pilih menu [1-3]: "
-read choice
+while true; do
+    echo ""
+    echo "=========================================="
+    echo "    ROBLOX CLONE MANAGER v2.0 (ROOT)      "
+    echo "=========================================="
+    echo "1. Backup Semua Akun (ke SDCard)"
+    echo "2. Restore Semua Akun (Fix Perms)"
+    echo "3. HAPUS SEMUA APP (Uninstall)"
+    echo "4. Keluar"
+    echo -n "Pilih menu [1-4]: "
+    read choice
 
-case $choice in
-    1) do_backup ;;
-    2) do_restore ;;
-    3) echo "Keluar."; exit 0 ;;
-    *) echo "Pilihan tidak valid."; exit 1 ;;
-esac
+    case $choice in
+        1) do_backup ;;
+        2) do_restore ;;
+        3) do_uninstall ;;
+        4) echo "Keluar."; exit 0 ;;
+        *) echo "Pilihan salah." ;;
+    esac
+done
