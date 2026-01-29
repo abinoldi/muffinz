@@ -9,15 +9,16 @@ const MSRV_URL = "https://ghostbin.axel.org/paste/2oqfg/raw";
 const PLACE_ID = "121864768012064"; 
 const CHECK_SERVER_PRESENCE = false; 
 
-// --- TIMING SETTINGS ---
-const APP_OPEN_DELAY = 10000; // 10 Seconds (Wait for app to open)
-const LOOP_DELAY = 40000;     // 40 Seconds (Cooldown)
+// --- TIMING ---
+const LOOP_DELAY = 40000;     // 40 Seconds Cooldown (Time for you to move it)
 const CHECK_INTERVAL = 60;    
 
-// --- LAYOUT CONFIGURATION ---
-const GRID_COLUMNS = 4;
-const GAP = 5; 
-// ---------------------
+// --- WINDOW SIZE SETTINGS ---
+// This sets the window to 350x600 pixels at the top-left corner
+const START_X = 0;
+const START_Y = 0;
+const WIDTH = 350;
+const HEIGHT = 600;
 
 function ensurePackage(pkg) {
   try { require.resolve(pkg);
@@ -36,55 +37,6 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 
 let lastRestartMap = {}; 
 let accountStates = {};
-
-// --- 1. SCREEN & GRID CALCULATION ---
-function getScreenInfo() {
-  try {
-    const sizeOut = execSync("/system/bin/wm size").toString();
-    const match = sizeOut.match(/(\d+)x(\d+)/); 
-    if (match) {
-        const w = parseInt(match[1]);
-        const h = parseInt(match[2]);
-        return { width: Math.min(w, h), height: Math.max(w, h) };
-    }
-  } catch (e) {}
-  return { width: 1080, height: 2400 };
-}
-
-const SCREEN = getScreenInfo();
-const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 2))) / GRID_COLUMNS);
-const WIN_H = Math.floor(WIN_W * 1.5); 
-
-function getLaunchBounds(index) {
-    const col = index % GRID_COLUMNS; 
-    const row = Math.floor(index / GRID_COLUMNS);
-    
-    // Arrange: 4-3-2-1 (Start from RIGHT side)
-    const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
-    const top = (row * (WIN_H + GAP)) + GAP + 60; 
-    const right = left + WIN_W;
-    const bottom = top + WIN_H;
-    
-    return { left, top, right, bottom };
-}
-
-// --- 2. FIXED WINDOW FINDER ---
-// Now searches for the PACKAGE NAME (com.roblox.clienb) 
-// instead of the Title "Roblox". This fixes "Window not found".
-function getTaskIdByPackage(pkg) {
-    try {
-        const out = execSync("dumpsys window windows").toString();
-        const blocks = out.split("Window{");
-        for (const block of blocks) {
-            // Check if this window block contains our package name
-            if (block.includes(pkg)) {
-                const match = block.match(/taskId=(\d+)/);
-                if (match) return match[1];
-            }
-        }
-    } catch (e) {}
-    return null;
-}
 
 function initSystem() {
   try {
@@ -142,44 +94,24 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 3. LAUNCH LOGIC (AUTO-BOUNDS) ---
-async function launchPackage(pkg, url, index) {
+// --- DIRECT LAUNCH WITH BOUNDS (NO WAITING) ---
+async function launchPackage(pkg, url) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    // Calculate Grid Position
-    const b = getLaunchBounds(index);
-    const boundsStr = `[${b.left},${b.top}][${b.right},${b.bottom}]`;
+    // Calculate the coordinate string: "[0,0][350,600]"
+    const bounds = `[${START_X},${START_Y}][${START_X + WIDTH},${START_Y + HEIGHT}]`;
     
-    // Command WITH --bounds (as requested)
+    // COMMAND: Starts app immediately with these bounds
+    // Removed --windowingMode 5 (since you said your app is already modded)
+    // Removed all sleep/resize logic
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
-                `--bounds "${boundsStr}" ` + 
+                `--bounds "${bounds}" ` + 
                 `-a android.intent.action.VIEW -d "${url}"`;
     
-    try {
-        execSync(cmd, { stdio: 'ignore' });
-    } catch(e) {
-        // Fallback if --bounds crashes it
-        execSync(cmd.replace(`--bounds "${boundsStr}" `, ""), { stdio: 'ignore' });
-    }
-
-    process.stdout.write(`   ⏳ Loading (${APP_OPEN_DELAY/1000}s)... `);
-    await sleep(APP_OPEN_DELAY);
-    console.log("OK.");
-
-    // SAFETY CHECK: Force Resize using Package Name Finder
-    const taskId = getTaskIdByPackage(pkg);
-    if (taskId) {
-        try {
-            execSync(`am task resize ${taskId} ${b.left} ${b.top} ${b.right} ${b.bottom}`, { stdio: 'ignore' });
-            console.log(`   ✅ Snapped to Grid Pos #${index + 1}`);
-        } catch(e) {
-             // Fallback
-             try { execSync(`am stack resize ${taskId} ${b.left} ${b.top} ${b.right} ${b.bottom}`, { stdio: 'ignore' }); } catch(e2){}
-        }
-    } else {
-        console.log("   ⚠️ Window not found (Check if app opened)");
-    }
+    // Run it immediately
+    execSync(cmd, { stdio: 'ignore' });
+    console.log(`   ✅ Sent Launch Command (Size: ${WIDTH}x${HEIGHT})`);
 
   } catch (e) {
       console.log(`❌ Error: ${e.message}`);
@@ -237,7 +169,7 @@ function renderDashboard(cleanCode, statusMessage) {
   console.clear();
   const stats = getSystemStats();
   console.log(`📱 SYSTEM: CPU ${stats.cpu} | RAM ${stats.ram} | UP ${stats.uptime}`);
-  console.log(`📏 MODE: AUTO-BOUNDS LAUNCH`);
+  console.log(`📏 MODE: INSTANT LAUNCH (Size ${WIDTH}x${HEIGHT})`);
   console.log(`📊 STATUS: ${statusMessage} | Mode: ${CHECK_SERVER_PRESENCE ? "FULL" : "NO-PING"} | Code: ...${cleanCode.slice(-4)}`);
   const table = new Table({ head: ['User', 'State', 'Status', 'Action'], colWidths: [12, 12, 15, 20] });
   Object.keys(accountStates).sort().forEach(pkg => {
@@ -269,10 +201,7 @@ async function main() {
     const cookie = getRobloxCookie(pkg);
     const userInfo = await getUserInfo(cookie);
     
-    // Assign index based on sorted list to keep grid consistent
-    const gridIndex = packages.indexOf(pkg);
-    
-    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name, gridIndex });
+    accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name });
     lastRestartMap[pkg] = 0;
     accountStates[pkg] = {
       username: userInfo.name || "Unknown",
@@ -301,14 +230,14 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    // Launch with Index for Grid Calculation
-    await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+    // Launch Immediate
+    await launchPackage(acc.pkg, finalLaunchUrl);
     
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
     
-    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s...`);
+    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s (Arrange now!)...`);
     await sleep(LOOP_DELAY); 
   }
 
@@ -353,7 +282,7 @@ async function main() {
         } else {
           if (isRunning) stopPackage(acc.pkg);
           action = `♻️ ${reason}`;
-          await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
+          await launchPackage(acc.pkg, finalLaunchUrl);
           lastRestartMap[acc.pkg] = now;
         }
       }
