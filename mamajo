@@ -7,14 +7,14 @@ const os = require("os");
 // --- CONFIGURATION ---
 const MSRV_URL = "https://ghostbin.axel.org/paste/2oqfg/raw";
 const PLACE_ID = "121864768012064"; 
-const CHECK_SERVER_PRESENCE = false; // <-- SET FALSE TO FIX RED PING (Disable Internet Checks)
-const PER_USER_DELAY = 5000;         // 5 Seconds delay per user check
-const CHECK_INTERVAL = 60;           // Wait 60s total before starting next cycle
-const RESTART_COOLDOWN = 300;        // 5 Minutes cooldown
+const CHECK_SERVER_PRESENCE = false; 
+const PER_USER_DELAY = 5000;
+const CHECK_INTERVAL = 60;
+const RESTART_COOLDOWN = 300;
 
 // --- LAYOUT CONFIGURATION ---
-const GRID_COLUMNS = 4;              // 4 Columns as requested
-const GAP = 5;                       // Gap between windows in pixels
+const GRID_COLUMNS = 4;
+const GAP = 5;
 // ---------------------
 
 function ensurePackage(pkg) {
@@ -36,47 +36,58 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 let lastRestartMap = {}; 
 let accountStates = {};
 
-// --- NEW: SCREEN DETECTION LOGIC (FIXED) ---
+// --- FIX 1: USE FULL PATH FOR WM ---
 function getScreenInfo() {
   try {
-    // FIX: Use full path "/system/bin/wm" instead of just "wm"
+    // Use /system/bin/wm explicitly to avoid "not found" error
     const sizeOut = execSync("/system/bin/wm size").toString();
     const match = sizeOut.match(/(\d+)x(\d+)/); 
-    
     if (match) {
         const w = parseInt(match[1]);
         const h = parseInt(match[2]);
-        return { 
-            width: Math.min(w, h), 
-            height: Math.max(w, h) 
-        };
+        return { width: Math.min(w, h), height: Math.max(w, h) };
     }
   } catch (e) {
-    console.log("⚠️ Failed to detect screen size, using default 1080p.");
+    // Silent fallback
   }
   return { width: 1080, height: 2400 };
 }
 
-// Global screen info
 const SCREEN = getScreenInfo();
 const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 1))) / GRID_COLUMNS);
-const WIN_H = Math.floor(WIN_W * 1.6); // 1.6 Aspect Ratio (Vertical Rectangle)
+const WIN_H = Math.floor(WIN_W * 1.6); 
 
 function getLaunchBounds(index) {
-    // Arrange from Right to Left
     const col = index % GRID_COLUMNS; 
     const row = Math.floor(index / GRID_COLUMNS);
-
-    // Calculate Right-Side Start:
-    // If col 0 (first), we want it on the far right.
     const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
-    
-    const top = (row * (WIN_H + GAP)) + GAP + 50; // +50 for Status bar buffer
+    const top = (row * (WIN_H + GAP)) + GAP + 60; 
     const right = left + WIN_W;
     const bottom = top + WIN_H;
+    return { left, top, right, bottom };
+}
 
-    // Bounds format: "[left,top][right,bottom]"
-    return `[${left},${top}][${right},${bottom}]`;
+// --- FIX 2: NEW TASK ID FINDER ---
+function getTaskId(pkg) {
+    try {
+        const out = execSync("dumpsys activity tasks").toString();
+        const lines = out.split("\n");
+        let currentTaskId = null;
+        
+        // Scan specifically for the Task ID belonging to this package
+        for (const line of lines) {
+            // Pattern: "Task id #123" or "Task{... #123 ...}"
+            if (line.includes("Task") && line.includes("#")) {
+                const match = line.match(/#(\d+)/);
+                if (match) currentTaskId = match[1];
+            }
+            // If we find the package name inside this task block
+            if (currentTaskId && line.includes(pkg) && (line.includes("realActivity") || line.includes("u0"))) {
+                return currentTaskId;
+            }
+        }
+    } catch (e) {}
+    return null;
 }
 // -----------------------------------
 
@@ -132,31 +143,33 @@ async function getUserInfo(cookie) {
 function stopPackage(pkg) { 
   try { 
     const pid = execSync(`pidof ${pkg}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    if (pid) {
-        execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
-    }
+    if (pid) execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
   } catch (e) {} 
 }
 
-// --- MODIFIED LAUNCH FUNCTION ---
-// REPLACE your old launchPackage function with this:
+// --- FIX 3: LAUNCH THEN RESIZE STRATEGY ---
 function launchPackage(pkg, url, index) {
   try {
-    const bounds = getLaunchBounds(index);
-    console.log(`\n🔹 [DEBUG] Try Launch: ${pkg}`);
-    console.log(`🔹 [DEBUG] Bounds: ${bounds}`);
-
+    // 1. Launch standard (Force Freeform Mode 5)
+    // Removed --task-launch-bounds because it crashes on your Android version
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--windowingMode 5 ` +
-                `--task-launch-bounds "${bounds}" ` +
                 `-a android.intent.action.VIEW -d "${url}"`;
     
-    // CHANGED: "inherit" will show the real error on your screen
-    execSync(cmd, { stdio: 'inherit' }); 
-    
+    execSync(cmd, { stdio: 'ignore' });
+
+    // 2. Wait for app to actually open (Critical for resizing)
+    execSync("sleep 2");
+
+    // 3. Find Task ID and Resize
+    const taskId = getTaskId(pkg);
+    if (taskId) {
+        const b = getLaunchBounds(index);
+        // Command: am task resize <taskId> <left> <top> <right> <bottom>
+        execSync(`am task resize ${taskId} ${b.left} ${b.top} ${b.right} ${b.bottom}`, { stdio: 'ignore' });
+    }
   } catch (e) {
-      console.log(`❌ FAILED to launch ${pkg}`);
-      // The error message usually prints directly to console due to 'inherit'
+      // Ignore errors to keep loop running
   }
 }
 // ------------------------------
@@ -277,7 +290,8 @@ async function main() {
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    await sleep(40000);
+    // Wait longer between launches to allow resizing to happen cleanly
+    await sleep(5000); 
   }
 
   console.log(`\n💤 Monitor active (Check Presence: ${CHECK_SERVER_PRESENCE})...`);
