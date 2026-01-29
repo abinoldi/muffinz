@@ -36,16 +36,14 @@ const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 let lastRestartMap = {}; 
 let accountStates = {};
 
-// --- NEW: SCREEN DETECTION LOGIC ---
+// --- NEW: SCREEN DETECTION LOGIC (FIXED) ---
 function getScreenInfo() {
   try {
-    // Detect Resolution (e.g. "Physical size: 1080x2400")
-    const sizeOut = execSync("wm size").toString();
-    // Regex to capture the WxH numbers
+    // FIX: Use full path "/system/bin/wm" instead of just "wm"
+    const sizeOut = execSync("/system/bin/wm size").toString();
     const match = sizeOut.match(/(\d+)x(\d+)/); 
     
     if (match) {
-        // Ensure width is the shorter side (Portrait mode standard)
         const w = parseInt(match[1]);
         const h = parseInt(match[2]);
         return { 
@@ -54,7 +52,6 @@ function getScreenInfo() {
         };
     }
   } catch (e) {
-    // Fallback if detection fails
     console.log("⚠️ Failed to detect screen size, using default 1080p.");
   }
   return { width: 1080, height: 2400 };
@@ -72,7 +69,6 @@ function getLaunchBounds(index) {
 
     // Calculate Right-Side Start:
     // If col 0 (first), we want it on the far right.
-    // X = Width - ((col + 1) * (Width + Gap))
     const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
     
     const top = (row * (WIN_H + GAP)) + GAP + 50; // +50 for Status bar buffer
@@ -146,9 +142,6 @@ function stopPackage(pkg) {
 function launchPackage(pkg, url, index) {
   try {
     const bounds = getLaunchBounds(index);
-    // Flag 0x10000000 = FLAG_ACTIVITY_NEW_TASK (Required for start from service/shell)
-    // --windowingMode 5 = Freeform
-    // --task-launch-bounds = Position
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--windowingMode 5 ` +
                 `--task-launch-bounds "${bounds}" ` +
@@ -235,15 +228,12 @@ async function main() {
   if (!packages.length) { console.log("❌ No Roblox packages found."); process.exit(0); }
 
   let accounts = [];
-  // Sort packages to ensure consistent grid placement (Optional)
   packages.sort(); 
 
   for (const pkg of packages) {
     process.stdout.write(`Reading ${pkg}... \r`);
     const cookie = getRobloxCookie(pkg);
     const userInfo = await getUserInfo(cookie);
-    // Assign a persistent index based on the sorted order for consistent grid position
-    // This ensures app #1 is always at grid pos #1
     const gridIndex = packages.indexOf(pkg);
     
     accounts.push({ pkg, cookie, userId: userInfo.id, username: userInfo.name, gridIndex });
@@ -272,12 +262,9 @@ async function main() {
 
   console.log("\n🚀 Launching all instances...");
   
-  // Launch Loop
   for (const acc of accounts) {
     stopPackage(acc.pkg);
-    // PASS THE GRID INDEX HERE
     launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
-    
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
@@ -326,7 +313,6 @@ async function main() {
         } else {
           if (isRunning) stopPackage(acc.pkg);
           action = `♻️ ${reason}`;
-          // RE-LAUNCH WITH SAME GRID INDEX
           launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
           lastRestartMap[acc.pkg] = now;
         }
