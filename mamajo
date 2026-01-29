@@ -10,13 +10,13 @@ const PLACE_ID = "121864768012064";
 const CHECK_SERVER_PRESENCE = false; 
 
 // --- TIMING SETTINGS ---
-const APP_OPEN_DELAY = 10000; // 10 Seconds (Wait for app to show up before resizing)
-const LOOP_DELAY = 40000;     // 40 Seconds (Wait before starting the next account)
-const CHECK_INTERVAL = 60;    // Monitor cycle speed
+const APP_OPEN_DELAY = 12000; // 12 Seconds (Increased slightly to be safe)
+const LOOP_DELAY = 40000;     // 40 Seconds Cooldown
+const CHECK_INTERVAL = 60;    
 
 // --- LAYOUT CONFIGURATION ---
-const GRID_COLUMNS = 4;      // 4 Columns
-const GAP = 5;               // Pixel gap between windows
+const GRID_COLUMNS = 4;
+const GAP = 5; 
 // ---------------------
 
 function ensurePackage(pkg) {
@@ -34,11 +34,10 @@ const TERMUX_PREFIX = "/data/data/com.termux/files/usr/bin";
 const NODE_PATH = `${TERMUX_PREFIX}/node`;
 const SQLITE_PATH = `${TERMUX_PREFIX}/sqlite3`;
 
-// State Tracking
 let lastRestartMap = {}; 
 let accountStates = {};
 
-// --- 1. SCREEN DETECTION (FIXED PATH) ---
+// --- 1. SCREEN DETECTION ---
 function getScreenInfo() {
   try {
     const sizeOut = execSync("/system/bin/wm size").toString();
@@ -56,37 +55,54 @@ const SCREEN = getScreenInfo();
 const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 1))) / GRID_COLUMNS);
 const WIN_H = Math.floor(WIN_W * 1.6); 
 
-// --- 2. GRID CALCULATION ---
 function getLaunchBounds(index) {
     const col = index % GRID_COLUMNS; 
     const row = Math.floor(index / GRID_COLUMNS);
-    
-    // Start from RIGHT side (Column 0 is far right)
     const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
-    const top = (row * (WIN_H + GAP)) + GAP + 60; // +60 for status bar
+    const top = (row * (WIN_H + GAP)) + GAP + 60; 
     const right = left + WIN_W;
     const bottom = top + WIN_H;
-    
     return { left, top, right, bottom };
 }
 
-// --- 3. TASK ID FINDER (REQUIRED FOR RESIZING) ---
+// --- 2. SMARTER TASK FINDER (PID BASED) ---
 function getTaskId(pkg) {
     try {
+        // Step A: Get the PID (Process ID) of the app
+        // This confirms the app is actually running
+        const pidCmd = `pidof ${pkg}`;
+        let pid = "";
+        try {
+            pid = execSync(pidCmd).toString().trim();
+        } catch (e) {
+            return null; // App is not running yet
+        }
+        
+        if (!pid) return null;
+
+        // Step B: Search 'dumpsys' for that specific PID
+        // This links the Process directly to the Window Task
         const out = execSync("dumpsys activity tasks").toString();
         const lines = out.split("\n");
         let currentTaskId = null;
         
         for (const line of lines) {
+            // Track the Task ID of the current block
             if (line.includes("Task") && line.includes("#")) {
                 const match = line.match(/#(\d+)/);
                 if (match) currentTaskId = match[1];
             }
-            if (currentTaskId && line.includes(pkg)) {
+            
+            // Check if this line mentions our PID
+            // Format often looks like: "app=ProcessRecord{... :com.roblox.client/...}"
+            // or just simply matches the package name near the Task header
+            if (currentTaskId && (line.includes(`p${pid}`) || line.includes(pkg))) {
                 return currentTaskId;
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        // console.log(e); // Silent fail
+    }
     return null;
 }
 
@@ -146,41 +162,54 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 4. LAUNCH AND SNAP STRATEGY (UPDATED) ---
+// --- 3. LAUNCH LOGIC (DEBUG ENABLED) ---
 async function launchPackage(pkg, url, index) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    // A. Start the App
-    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
-                `--windowingMode 5 ` +
-                `-a android.intent.action.VIEW -d "${url}"`;
-    execSync(cmd, { stdio: 'ignore' });
+    // We remove 'stdio: ignore' here so you can see if the launch command itself has an error
+    try {
+        const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
+                    `--windowingMode 5 ` +
+                    `-a android.intent.action.VIEW -d "${url}"`;
+        execSync(cmd, { stdio: 'pipe' }); // Pipe output to suppress noise but keep execution safe
+    } catch(err) {
+        console.log("   ⚠️ Warning: Launch command reported an issue (App might still open).");
+    }
 
-    // --- NEW: Wait 10s for slow apps to open ---
-    process.stdout.write(`   ⏳ Allow 10s for app to open... `);
+    process.stdout.write(`   ⏳ Allow ${APP_OPEN_DELAY/1000}s for app to open... `);
     await sleep(APP_OPEN_DELAY);
     console.log("OK.");
 
-    // B. Resize Loop (Now runs AFTER the wait)
+    // B. Resize Loop
     const bounds = getLaunchBounds(index);
     let success = false;
 
     process.stdout.write("   Auto-arranging... ");
-    // We check for another 5 seconds just in case it's still initializing
-    for (let i = 0; i < 20; i++) { 
+    
+    // Try for 5 more seconds to find the Task ID
+    for (let i = 0; i < 10; i++) { 
         const taskId = getTaskId(pkg);
         
         if (taskId) {
-            // Apply the grid coordinates
             execSync(`am task resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
-            console.log(`✅ Moved to Grid #${index + 1}`);
+            console.log(`✅ Moved to Grid #${index + 1} (ID: ${taskId})`);
             success = true;
             break; 
         }
-        await sleep(250);
+        await sleep(500);
     }
-    if (!success) console.log("⚠️ Could not resize (App still not found)");
+    
+    if (!success) {
+        console.log("⚠️ Could not resize.");
+        // Debug: Check if process exists at all
+        try {
+            const pid = execSync(`pidof ${pkg}`).toString().trim();
+            console.log(`   (Debug: Process PID ${pid} is running, but Task ID was not found in dumpsys)`);
+        } catch(e) {
+            console.log(`   (Debug: Process is NOT running. The launch command failed.)`);
+        }
+    }
 
   } catch (e) {
       console.log(`❌ Error: ${e.message}`);
@@ -300,14 +329,13 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    // Launch -> Wait 10s -> Resize
+    // Launch -> Wait 12s -> PID Check -> Resize
     await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
     
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
     
-    // Wait the full 40s interval before the next account
     console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s before next account...`);
     await sleep(LOOP_DELAY); 
   }
