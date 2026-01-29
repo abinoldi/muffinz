@@ -139,16 +139,25 @@ function stopPackage(pkg) {
 }
 
 // --- MODIFIED LAUNCH FUNCTION ---
+// REPLACE your old launchPackage function with this:
 function launchPackage(pkg, url, index) {
   try {
     const bounds = getLaunchBounds(index);
+    console.log(`\n🔹 [DEBUG] Try Launch: ${pkg}`);
+    console.log(`🔹 [DEBUG] Bounds: ${bounds}`);
+
     const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
                 `--windowingMode 5 ` +
                 `--task-launch-bounds "${bounds}" ` +
                 `-a android.intent.action.VIEW -d "${url}"`;
     
-    execSync(cmd, { stdio: 'ignore' });
-  } catch {}
+    // CHANGED: "inherit" will show the real error on your screen
+    execSync(cmd, { stdio: 'inherit' }); 
+    
+  } catch (e) {
+      console.log(`❌ FAILED to launch ${pkg}`);
+      // The error message usually prints directly to console due to 'inherit'
+  }
 }
 // ------------------------------
 
