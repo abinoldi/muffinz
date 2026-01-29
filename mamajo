@@ -10,8 +10,8 @@ const PLACE_ID = "121864768012064";
 const CHECK_SERVER_PRESENCE = false; 
 
 // --- TIMING SETTINGS ---
-const APP_OPEN_DELAY = 15000; // 15 Seconds (Extra time for clone apps to stabilize)
-const LOOP_DELAY = 40000;     // 40 Seconds Cooldown
+const APP_OPEN_DELAY = 10000; // 10 Seconds (Wait for app to open)
+const LOOP_DELAY = 40000;     // 40 Seconds (Wait before next account)
 const CHECK_INTERVAL = 60;    
 
 // --- LAYOUT CONFIGURATION ---
@@ -52,43 +52,50 @@ function getScreenInfo() {
 }
 
 const SCREEN = getScreenInfo();
-const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 1))) / GRID_COLUMNS);
-const WIN_H = Math.floor(WIN_W * 1.6); 
+// Adjust width slightly to ensure 4 columns fit without overflow
+const WIN_W = Math.floor((SCREEN.width - (GAP * (GRID_COLUMNS + 2))) / GRID_COLUMNS);
+const WIN_H = Math.floor(WIN_W * 1.5); 
 
 function getLaunchBounds(index) {
     const col = index % GRID_COLUMNS; 
     const row = Math.floor(index / GRID_COLUMNS);
+    
+    // Start from RIGHT side
     const left = SCREEN.width - ((col + 1) * (WIN_W + GAP)) + GAP;
     const top = (row * (WIN_H + GAP)) + GAP + 60; 
     const right = left + WIN_W;
     const bottom = top + WIN_H;
+    
     return { left, top, right, bottom };
 }
 
-// --- 2. NEW METHOD: WINDOW MANAGER DUMP ---
-// This finds the Task ID by looking at the actual windows drawn on screen
-// which usually works even when "dumpsys activity" hides the app.
+// --- 2. ROBUST "GREEDY" TASK FINDER ---
 function getTaskId(pkg) {
     try {
-        // Get list of all visible windows
-        const out = execSync("dumpsys window windows").toString();
+        // Get the full raw dump of all activities/tasks
+        const out = execSync("dumpsys activity tasks").toString();
         
-        // Split into blocks per window (usually starts with "Window{")
-        const blocks = out.split("Window{");
-        
-        for (const block of blocks) {
-            // Check if this window block belongs to our package
+        // Split into "Task" blocks to process one by one
+        // Android logs usually start a task with "Task id #" or "* TaskRecord"
+        const taskBlocks = out.split(/Task id #|TaskRecord{/);
+
+        // Skip the first empty chunk
+        for (let i = 1; i < taskBlocks.length; i++) {
+            const block = taskBlocks[i];
+            
+            // Extract the ID from the very start of this block
+            // It usually looks like "123 ... " or "123 ... A=..."
+            const idMatch = block.match(/^(\d+)/);
+            if (!idMatch) continue;
+            const taskId = idMatch[1];
+
+            // "Greedy" Check: Does this block contain our package name ANYWHERE?
+            // This catches Clones, distinct User IDs, and aliased activities.
             if (block.includes(pkg)) {
-                // Look for "taskId=123" inside this block
-                const match = block.match(/taskId=(\d+)/);
-                if (match) {
-                    return match[1]; // Found it!
-                }
+                return taskId;
             }
         }
-    } catch (e) {
-        // console.log(e); 
-    }
+    } catch (e) {}
     return null;
 }
 
@@ -148,55 +155,48 @@ function stopPackage(pkg) {
   } catch (e) {} 
 }
 
-// --- 3. LAUNCH LOGIC ---
+// --- 3. LAUNCH LOGIC (UPDATED) ---
 async function launchPackage(pkg, url, index) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
     
-    try {
-        const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
-                    `--windowingMode 5 ` +
-                    `-a android.intent.action.VIEW -d "${url}"`;
-        execSync(cmd, { stdio: 'pipe' }); 
-    } catch(err) {
-        console.log("   ⚠️ Launch command sent (ignoring output).");
-    }
+    // A. Start App (No output check needed here)
+    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
+                `--windowingMode 5 ` +
+                `-a android.intent.action.VIEW -d "${url}"`;
+    execSync(cmd, { stdio: 'ignore' });
 
     process.stdout.write(`   ⏳ Allow ${APP_OPEN_DELAY/1000}s for app to open... `);
     await sleep(APP_OPEN_DELAY);
     console.log("OK.");
 
-    // B. Window Search & Resize Loop
+    // B. Resize with Greedy Scanner
     const bounds = getLaunchBounds(index);
     let success = false;
 
-    process.stdout.write("   Auto-arranging (Window Scan)... ");
+    process.stdout.write("   Auto-arranging... ");
     
+    // Try to find the task 10 times (5 seconds)
     for (let i = 0; i < 10; i++) { 
-        const taskId = getTaskId(pkg);
+        const taskId = getTaskId(pkg); // <--- Using new Greedy Finder
         
         if (taskId) {
-            // Try Task Resize first
+            // Found it! Now Resize.
             try {
                 execSync(`am task resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
-            } catch (e) {
-                // Fallback: Stack Resize (For older Android or some clones)
-                execSync(`am stack resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' });
+                console.log(`✅ Moved to Grid #${index + 1} (ID: ${taskId})`);
+                success = true;
+                break; 
+            } catch(resizeErr) {
+                 // Try legacy resize if new one fails
+                 try { execSync(`am stack resize ${taskId} ${bounds.left} ${bounds.top} ${bounds.right} ${bounds.bottom}`, { stdio: 'ignore' }); success = true; break;} catch(e){}
             }
-            console.log(`✅ Moved to Grid #${index + 1} (ID: ${taskId})`);
-            success = true;
-            break; 
         }
         await sleep(500);
     }
     
     if (!success) {
-        console.log("⚠️ Could not resize.");
-        try {
-             // Debug dump to help you see what's happening if it fails again
-             const pid = execSync(`pidof ${pkg}`).toString().trim();
-             console.log(`   (Debug: PID ${pid} is running. Check 'dumpsys window windows' manually)`);
-        } catch (e) {}
+        console.log("⚠️ Could not resize (Task ID not found in dumpsys).");
     }
 
   } catch (e) {
@@ -317,7 +317,6 @@ async function main() {
   for (const acc of accounts) {
     stopPackage(acc.pkg);
     
-    // Launch -> Wait -> Window Search -> Resize
     await launchPackage(acc.pkg, finalLaunchUrl, acc.gridIndex);
     
     lastRestartMap[acc.pkg] = Date.now();
