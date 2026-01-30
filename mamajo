@@ -122,27 +122,26 @@ async function launchPackage(pkg, url) {
   try {
     console.log(`\n🚀 Launching: ${pkg}`);
 
+    const prefsFile = `/data/data/${pkg}/shared_prefs/com.roblox.clienb_preferences.xml`;
+
     // 1️⃣ Force-stop
     execSync(`su -c "am force-stop ${pkg}"`);
 
-    // 2️⃣ Inject Small Window (Left=20, Right=220, Bottom=250)
-    const prefsFile = `/data/data/${pkg}/shared_prefs/com.roblox.clienb_preferences.xml`;
-    execSync(`su -c "sed -i 's/app_cloner_current_window_left\\\\\" value=\\\\\"[0-9]*/app_cloner_current_window_left\\\\\" value=\\\\\"20/' ${prefsFile}"`);
-    execSync(`su -c "sed -i 's/app_cloner_current_window_right\\\\\" value=\\\\\"[0-9]*/app_cloner_current_window_right\\\\\" value=\\\\\"220/' ${prefsFile}"`);
-    execSync(`su -c "sed -i 's/app_cloner_current_window_bottom\\\\\" value=\\\\\"[0-9]*/app_cloner_current_window_bottom\\\\\" value=\\\\\"250/' ${prefsFile}"`);
+    // 2️⃣ Inject small window
+    execSync(`su -c 'sed -i "s/app_cloner_current_window_left\\\" value=\\\"[0-9]\\+/app_cloner_current_window_left\\\" value=20/" ${prefsFile}'`);
+    execSync(`su -c 'sed -i "s/app_cloner_current_window_right\\\" value=\\\"[0-9]\\+/app_cloner_current_window_right\\\" value=220/" ${prefsFile}'`);
+    execSync(`su -c 'sed -i "s/app_cloner_current_window_bottom\\\" value=\\\"[0-9]\\+/app_cloner_current_window_bottom\\\" value=250/" ${prefsFile}'`);
 
-    // 3️⃣ Launch the app
-    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
-                `-a android.intent.action.VIEW -d "${url}"`;
+    // 3️⃣ Launch app
+    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${url}"`;
     execSync(`su -c "${cmd}"`, { stdio: 'ignore' });
 
     console.log(`   ✅ Launched small window at LEFT=20, WIDTH=200, HEIGHT=250`);
 
   } catch (e) {
-      console.log(`❌ Error in launchPackage: ${e.message}`);
+    console.log(`❌ Error in launchPackage: ${e.message}`);
   }
 }
-
 
 function isProcessRunning(pkg) {
   try { 
