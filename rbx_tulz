@@ -1,178 +1,151 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v2.7 (SMART RESTORE BY INSTALLED PKG)
+# ROBLOX CLONE MANAGER v2.8 (SEQUENTIAL RESTORE)
 # ==========================================================
 
-# Konfigurasi Lokasi
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
 BASE_URL="http://146.190.147.43:88"
 
-# Fungsi cek Root
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "❌ Script ini MEMBUTUHKAN akses Root!"
-        echo "Silakan jalankan dengan: su -c 'sh $0'"
         exit 1
     fi
 }
 
-# Fungsi 1: Backup Akun
 do_backup() {
     echo "=========================================="
     echo "       MEMULAI PROSES BACKUP...           "
     echo "=========================================="
     mkdir -p "$BACKUP_DIR"
     count=0
-    
     for folder in /data/data/com.roblox.clien*; do
         [ -e "$folder" ] || continue
         pkg_name=$(basename "$folder")
-        
         cookie_path=""
-        if [ -f "$folder/app_webview/Default/Cookies" ]; then
-            cookie_path="$folder/app_webview/Default/Cookies"
-        elif [ -f "$folder/app_webview/Cookies" ]; then
-            cookie_path="$folder/app_webview/Cookies"
-        fi
+        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
+        [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
 
         if [ -n "$cookie_path" ]; then
             cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
             echo "✅ Backup SUKSES: $pkg_name"
             count=$((count + 1))
-        else
-            echo "⚠️  SKIP: $pkg_name (Cookies tidak ditemukan)"
         fi
     done
     echo "------------------------------------------"
     echo "Selesai! $count database tersimpan."
 }
 
-# Fungsi 2: Restore Berdasarkan Aplikasi Terinstall (SMART MODE)
-do_restore() {
+# Fungsi Restore Berdasarkan Urutan (Tanpa Cek Nama Paket)
+do_restore_sequential() {
     echo "=========================================="
-    echo "    RESTORE BERDASARKAN APP TERINSTALL    "
+    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
     echo "=========================================="
     
-    # Ambil list package yang terinstall di sistem
-    installed_pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+    # Ambil daftar file backup ke dalam array
+    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    # Ambil daftar aplikasi terinstall ke dalam array
+    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
-    if [ -z "$installed_pkgs" ]; then
-        echo "❌ Tidak ada aplikasi Roblox Clone yang terinstall."
+    total_backups=${#backups[@]}
+    total_pkgs=${#pkgs[@]}
+
+    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
+        echo "❌ Data backup atau aplikasi tidak ditemukan."
         return 1
     fi
 
-    count=0
-    for pkg in $installed_pkgs; do
-        db_file="$BACKUP_DIR/${pkg}.db"
-        target_folder="/data/data/$pkg"
+    echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
+    echo "------------------------------------------"
 
-        # Cek apakah file backup untuk paket ini ada
-        if [ -f "$db_file" ]; then
-            target_dir_parent="$target_folder/app_webview/Default"
-            target_path="$target_dir_parent/Cookies"
+    # Loop menggunakan indeks agar urut
+    i=0
+    while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
+        current_db="${backups[$i]}"
+        current_pkg="${pkgs[$i]}"
+        
+        target_folder="/data/data/$current_pkg"
+        target_dir_parent="$target_folder/app_webview/Default"
+        target_path="$target_dir_parent/Cookies"
 
-            mkdir -p "$target_dir_parent"
-            cp "$db_file" "$target_path"
-            
-            # Fix Ownership & Permissions
-            app_uid=$(stat -c "%u:%g" "$target_folder")
-            chown -R "$app_uid" "$target_folder/app_webview"
-            chmod 660 "$target_path"
-            
-            echo "✅ $pkg: Berhasil dipulihkan."
-            count=$((count + 1))
-        else
-            echo "⚠️  $pkg: Terinstall tapi file backup (${pkg}.db) tidak ada."
-        fi
+        echo "🔄 Merestore [$(basename "$current_db")] ke [$current_pkg]..."
+
+        mkdir -p "$target_dir_parent"
+        cp "$current_db" "$target_path"
+        
+        # Perbaikan Izin Akses
+        app_uid=$(stat -c "%u:%g" "$target_folder")
+        chown -R "$app_uid" "$target_folder/app_webview"
+        chmod 660 "$target_path"
+        
+        echo "✅ Berhasil."
+        i=$((i + 1))
     done
     echo "------------------------------------------"
-    echo "Selesai! $count akun berhasil dipasangkan."
+    echo "Selesai! $i akun dipulihkan."
 }
 
-# Fungsi 3: Hapus Semua Aplikasi Clone
 do_uninstall() {
     echo "=========================================="
     echo "       MENGHAPUS APLIKASI CLONE...        "
     echo "=========================================="
     pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-
-    if [ -z "$pkgs" ]; then
-        echo "❌ Tidak ada aplikasi Roblox Clone yang terinstall."
-        return
-    fi
-
-    echo -n "❓ Yakin hapus SEMUA aplikasi clone? (y/n): "
+    [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
+    
+    echo -n "❓ Yakin hapus SEMUA? (y/n): "
     read confirm
-
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         for pkg in $pkgs; do
-            echo "⏳ Menghapus $pkg..."
-            pm uninstall "$pkg" > /dev/null 2>&1
-            [ $? -eq 0 ] && echo "   ✅ Terhapus." || echo "   ❌ Gagal."
+            pm uninstall "$pkg" > /dev/null 2>&1 && echo "✅ $pkg Terhapus."
         done
     fi
 }
 
-# Fungsi 4: AUTO PROCESS
 do_auto_process() {
     echo "=========================================="
     echo "       PROSES OTOMATIS BERJALAN           "
     echo "=========================================="
-
     total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
-    if [ "$total_backup" -eq 0 ]; then
-        echo "❌ Tidak ada data backup di $BACKUP_DIR."
-        return
-    fi
+    [ "$total_backup" -eq 0 ] && echo "❌ Tidak ada backup." && return
 
-    echo "📦 Ditemukan $total_backup backup. Menyiapkan instalasi..."
     mkdir -p "$DOWNLOAD_DIR"
-
     for i in $(seq 1 "$total_backup"); do
         echo "------------------------------------------"
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
-
-        if [ ! -f "$SAVE_PATH" ]; then
-            echo "📥 Mengunduh $APK_NAME..."
-            curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
-        fi
-
+        [ ! -f "$SAVE_PATH" ] && curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
+        
         if [ -f "$SAVE_PATH" ]; then
             echo "⏳ Memasang $APK_NAME..."
             pm install -r "$SAVE_PATH" > /dev/null 2>&1
-            echo "⏳ Sinkronisasi sistem (3 detik)..."
             sleep 3
         fi
     done
 
-    # Jalankan restore yang menyesuaikan dengan apa yang baru saja terinstall
-    do_restore
-    echo "✨ SEMUA PROSES OTOMATIS SELESAI!"
+    do_restore_sequential
+    echo "✨ SEMUA PROSES SELESAI!"
 }
 
 # --- MAIN MENU ---
 check_root
-
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX CLONE MANAGER v2.7 (ROOT)      "
+    echo "    ROBLOX CLONE MANAGER v2.8 (ROOT)      "
     echo "=========================================="
     echo "1. Backup Akun"
-    echo "2. Restore Akun (Ikuti App Terinstall)"
+    echo "2. Restore Akun (Urutan Sequential)"
     echo "3. Hapus Semua Aplikasi Clone"
     echo "4. PROSES OTOMATIS (Download+Install+Restore)"
     echo "5. Keluar"
     echo "------------------------------------------"
     echo -n "Pilih menu [1-5]: "
     read choice
-
     case $choice in
         1) do_backup ;;
-        2) do_restore ;;
+        2) do_restore_sequential ;;
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) exit 0 ;;
