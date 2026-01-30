@@ -100,7 +100,7 @@ restore_to_app() {
 
 do_main_process() {
     echo "=========================================="
-    echo "   ROBLOX GENERATOR & RESTORE (v7.0)      "
+    echo "   ROBLOX GENERATOR & RESTORE (v8.0)      "
     echo "=========================================="
     prepare_env
     
