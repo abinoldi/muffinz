@@ -2,8 +2,8 @@
 
 # Konfigurasi Lokasi
 BACKUP_DIR="/sdcard/RobloxBackups"
-DOWNLOAD_DIR="uwNahlh"
-GIT_REPO="https://github.com/ltsdw/gofile-downloader"
+DOWNLOAD_DIR="/data/data/com.termux/files/home/rbx_apks"
+SERVER_URL="http://146.190.147.43:88"
 SCRIPT_DIR="/data/data/com.termux/files/home"
 
 # Fungsi cek Root
@@ -17,6 +17,76 @@ check_root() {
 
 # Set PATH untuk root (Termux specific)
 export PATH=/data/data/com.termux/files/usr/bin:$PATH
+
+# Fungsi untuk download APK dari server
+download_apk_files() {
+    local app_count=$1
+    echo "⏳ Memulai proses download dari server..."
+    
+    # Buat folder download jika belum ada
+    mkdir -p "$DOWNLOAD_DIR"
+    cd "$DOWNLOAD_DIR" || {
+        echo "❌ Tidak bisa masuk ke folder $DOWNLOAD_DIR"
+        return 1
+    }
+    
+    echo "📁 Folder download: $DOWNLOAD_DIR"
+    
+    downloaded_count=0
+    for i in $(seq 1 $app_count); do
+        apk_file="$i.apk"
+        url="$SERVER_URL/$apk_file"
+        
+        # Cek apakah file sudah ada
+        if [ -f "$apk_file" ]; then
+            echo "📦 File $apk_file sudah ada, skip download..."
+            downloaded_count=$((downloaded_count + 1))
+            continue
+        fi
+        
+        echo "⬇️  Downloading $apk_file..."
+        echo "   URL: $url"
+        
+        # Coba download dengan wget atau curl
+        if command -v wget >/dev/null 2>&1; then
+            wget --timeout=30 --tries=3 "$url" -O "$apk_file"
+        elif command -v curl >/dev/null 2>&1; then
+            curl -L --connect-timeout 30 --max-time 60 --retry 3 "$url" -o "$apk_file"
+        else
+            echo "❌ Tidak ada wget atau curl!"
+            echo "   Install di Termux: pkg install wget"
+            return 1
+        fi
+        
+        # Cek jika download berhasil
+        if [ -f "$apk_file" ] && [ -s "$apk_file" ]; then
+            file_size=$(du -h "$apk_file" | cut -f1)
+            echo "   ✅ Berhasil ($file_size)"
+            downloaded_count=$((downloaded_count + 1))
+        else
+            echo "   ❌ Gagal download $apk_file"
+            rm -f "$apk_file" 2>/dev/null
+        fi
+        
+        # Jeda sebentar antar download
+        sleep 1
+    done
+    
+    echo ""
+    echo "📊 Download selesai: $downloaded_count/$app_count file berhasil"
+    
+    if [ $downloaded_count -eq 0 ]; then
+        echo "❌ Tidak ada file yang berhasil didownload!"
+        return 1
+    fi
+    
+    # Tampilkan file yang berhasil didownload
+    echo ""
+    echo "📋 File APK yang tersedia:"
+    ls -la *.apk 2>/dev/null | head -10
+    
+    return 0
+}
 
 # Fungsi 1: Backup
 do_backup() {
@@ -71,7 +141,7 @@ do_restore() {
     echo "✅ Restore selesai: $count app dipulihkan."
 }
 
-# Fungsi 3: Download & Auto-Install dengan pilihan jumlah
+# Fungsi 3: Download & Install dengan pilihan jumlah
 do_download_install() {
     echo "=========================================="
     echo "       DOWNLOAD & INSTALL CLONES          "
@@ -93,7 +163,10 @@ do_download_install() {
     read app_count
     
     case $app_count in
-        0) return ;;
+        0) 
+            echo "Kembali ke menu utama..."
+            return 
+            ;;
         1|2|3|4|5|6|7|8)
             echo "⏳ Menginstall $app_count app..."
             ;;
@@ -109,7 +182,7 @@ do_download_install() {
     
     if [ $installed_pkgs -ge $app_count ]; then
         echo "ℹ️  Jumlah app yang diminta ($app_count) sudah terinstall."
-        echo "   Tidak perlu download/install tambahan."
+        echo "   Tidak perlu install tambahan."
         return 0
     fi
     
@@ -119,73 +192,34 @@ do_download_install() {
     
     # Tanya apakah ingin download
     echo ""
-    echo "⬇️  Download APK files dari internet?"
+    echo "⬇️  Download APK files dari server?"
     echo "   y = Ya, download dulu"
     echo "   n = Tidak, lanjut install dari file yang sudah ada"
     printf "Pilih [y/n]: "
     read download_choice
     
-    if [ "$download_choice" = "y" ] || [ "$download_choice" = "Y" ]; then
-        echo "⏳ Cloning downloader..."
+    # Normalize input
+    download_choice=$(echo "$download_choice" | tr '[:upper:]' '[:lower:]')
+    
+    if [ "$download_choice" = "y" ] || [ "$download_choice" = "ya" ] || [ "$download_choice" = "yes" ]; then
+        # Download APK files dari server
+        download_apk_files $app_count
         
-        # Change to home directory first
-        cd "$SCRIPT_DIR" || {
-            echo "❌ Tidak bisa pindah ke direktori: $SCRIPT_DIR"
-            return 1
-        }
-        
-        # Check if git exists
-        if ! command -v git >/dev/null 2>&1; then
-            echo "❌ Git tidak ditemukan! Instal dulu di Termux: pkg install git"
-            echo "   Jalankan di Termux (bukan sebagai root): pkg install git"
+        if [ $? -ne 0 ]; then
+            echo "❌ Gagal download APK files!"
+            echo "   Cek koneksi internet atau server."
             return 1
         fi
-        
-        if [ ! -d "gofile-downloader" ]; then
-            echo "📦 Cloning repository..."
-            git clone "$GIT_REPO" || {
-                echo "❌ Gagal clone repository!"
-                return 1
-            }
-        fi
-        
-        cd gofile-downloader || {
-            echo "❌ Tidak bisa masuk ke folder gofile-downloader"
-            return 1
-        }
-        
-        # Check if python3 exists
-        if ! command -v python3 >/dev/null 2>&1; then
-            echo "❌ Python3 tidak ditemukan! Instal dulu: pkg install python"
-            return 1
-        fi
-        
-        # Check if pip3 exists
-        if command -v pip3 >/dev/null 2>&1; then
-            echo "📦 Menginstall requirements..."
-            pip3 install -r requirements.txt 2>/dev/null || echo "⚠️ Gagal install requirements (mungkin sudah terinstall)"
-        else
-            echo "⚠️ pip3 tidak ditemukan, skip install requirements"
-        fi
-        
-        if [ -f "gofile-downloader.py" ]; then
-            echo "🌐 Downloading APK files..."
-            python3 gofile-downloader.py || echo "⚠️ Gagal download dari gofile"
-        else
-            echo "❌ File gofile-downloader.py tidak ditemukan!"
-        fi
-        
-        cd ..
     fi
     
     # Proses instalasi
     echo ""
     echo "🔧 Memulai proses instalasi..."
     
-    # Cek apakah folder download ada
+    # Pastikan kita di folder yang benar
     if [ ! -d "$DOWNLOAD_DIR" ]; then
-        echo "❌ Folder $DOWNLOAD_DIR tidak ditemukan!"
-        echo "   Silakan download manual atau pilih 'y' untuk download otomatis."
+        echo "❌ Folder download tidak ditemukan: $DOWNLOAD_DIR"
+        echo "   Silakan pilih 'y' untuk download terlebih dahulu."
         return 1
     fi
     
@@ -194,45 +228,53 @@ do_download_install() {
         return 1
     }
     
+    echo "📁 Direktori: $(pwd)"
+    
+    # Tampilkan file APK yang ada
+    echo "📋 File APK yang tersedia:"
+    ls -la *.apk 2>/dev/null || echo "   Tidak ada file .apk ditemukan"
+    
     installed_count=0
     start_number=$((installed_pkgs + 1))
     end_number=$app_count
     
-    echo "📁 Mencari APK files dari $start_number.apk sampai $end_number.apk..."
-    
     for i in $(seq $start_number $end_number); do
         apk_file="$i.apk"
-        if [ -f "$apk_file" ]; then
-            # Tentukan nama package
-            if [ $i -eq 1 ]; then
-                pkg_name="com.roblox.client"
-            else
-                pkg_name="com.roblox.clien$i"
-            fi
-            
-            echo ""
-            echo "📦 [$i/$end_number] Menginstall $apk_file..."
-            echo "   Package name: $pkg_name"
-            
-            # Cek apakah sudah terinstall
-            if pm list packages | grep -q "$pkg_name" 2>/dev/null; then
-                echo "   ⚠️  Sudah terinstall, skip..."
-                installed_count=$((installed_count + 1))
-                continue
-            fi
-            
-            # Install APK
-            if pm install "$apk_file" 2>/dev/null; then
-                echo "   ✅ Berhasil diinstall!"
-                installed_count=$((installed_count + 1))
-                
-                # Tunggu sebentar agar package terdaftar
-                sleep 1
-            else
-                echo "   ❌ Gagal menginstall $apk_file"
-            fi
-        else
+        
+        if [ ! -f "$apk_file" ]; then
             echo "❌ File $apk_file tidak ditemukan!"
+            echo "   Download manual: $SERVER_URL/$apk_file"
+            continue
+        fi
+        
+        # Tentukan nama package
+        if [ $i -eq 1 ]; then
+            pkg_name="com.roblox.client"
+        else
+            pkg_name="com.roblox.clien$i"
+        fi
+        
+        echo ""
+        echo "📦 [$i/$end_number] Menginstall $apk_file..."
+        echo "   Package name: $pkg_name"
+        echo "   File size: $(du -h "$apk_file" | cut -f1)"
+        
+        # Cek apakah sudah terinstall
+        if pm list packages | grep -q "$pkg_name" 2>/dev/null; then
+            echo "   ⚠️  Sudah terinstall, skip..."
+            installed_count=$((installed_count + 1))
+            continue
+        fi
+        
+        # Install APK
+        echo "   ⚙️  Menginstall..."
+        if pm install "$apk_file" 2>/dev/null; then
+            echo "   ✅ Berhasil diinstall!"
+            installed_count=$((installed_count + 1))
+            sleep 1
+        else
+            echo "   ❌ Gagal menginstall $apk_file"
+            echo "   💡 Coba: pm install -r \"$apk_file\""
         fi
     done
     
@@ -245,10 +287,15 @@ do_download_install() {
     echo "   Berhasil: $installed_count app"
     
     if [ $installed_count -lt $app_count ]; then
-        echo "   ❌ Ada $(($app_count - $installed_count)) app yang gagal diinstall"
+        echo "   ⚠️  Ada $(($app_count - $installed_count)) app yang gagal diinstall"
     else
         echo "   ✅ Semua app berhasil diinstall!"
     fi
+    
+    # Tampilkan semua app Roblox yang terinstall
+    echo ""
+    echo "📱 Daftar app Roblox yang terinstall:"
+    pm list packages | grep "roblox" || echo "   Tidak ada app Roblox"
 }
 
 # Fungsi 4: Uninstall
@@ -275,7 +322,9 @@ do_uninstall() {
     printf "Pilih [y/n]: "
     read confirm
     
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+    confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
+    
+    if [ "$confirm" = "y" ] || [ "$confirm" = "ya" ] || [ "$confirm" = "yes" ]; then
         echo ""
         echo "🗑️  Menghapus app..."
         count=0
@@ -286,6 +335,7 @@ do_uninstall() {
                 count=$((count + 1))
             else
                 echo "   ❌ Gagal menghapus $pkg"
+                echo "   💡 Coba: pm uninstall -k --user 0 \"$pkg\""
             fi
         done
         echo ""
@@ -300,6 +350,8 @@ check_root
 echo "=========================================="
 echo "       ROBOX MULTI-CLONE MANAGER          "
 echo "=========================================="
+echo "📡 Server APK: $SERVER_URL"
+echo "📁 Folder: $DOWNLOAD_DIR"
 
 while true; do 
     echo ""
