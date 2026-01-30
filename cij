@@ -1,14 +1,40 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CUSTOM COOKIE RESTORER (STAND-ALONE v2.9)
+# ROBLOX CUSTOM COOKIE RESTORER (v3.0 - SMART PATH)
 # ==========================================================
 
-# Fungsi cek Root
+# Fungsi Mencari Lokasi sqlite3 secara otomatis
+find_sqlite() {
+    # Cek lokasi umum di Android
+    paths="/system/bin/sqlite3 /system/xbin/sqlite3 /data/adb/magisk/sqlite3 /data/data/com.termux/files/usr/bin/sqlite3"
+    
+    for p in $paths; do
+        if [ -f "$p" ]; then
+            SQLITE_BIN="$p"
+            return 0
+        fi
+    done
+
+    # Jika tidak ketemu di folder umum, coba perintah 'which'
+    SQLITE_BIN=$(which sqlite3)
+    
+    if [ -z "$SQLITE_BIN" ]; then
+        echo "❌ sqlite3 tetap tidak ditemukan secara otomatis."
+        echo -n "👉 Masukkan path manual (misal: /sdcard/sqlite3): "
+        read manual_path
+        if [ -f "$manual_path" ]; then
+            SQLITE_BIN="$manual_path"
+        else
+            echo "❌ File tidak valid. Keluar."
+            exit 1
+        fi
+    fi
+}
+
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "❌ Script ini MEMBUTUHKAN akses Root!"
-        echo "Silakan jalankan dengan: su -c 'sh $0'"
         exit 1
     fi
 }
@@ -18,11 +44,14 @@ do_custom_restore() {
     echo "      ROBLOX CUSTOM COOKIE RESTORE        "
     echo "=========================================="
 
-    # 1. Deteksi Aplikasi yang terinstall
+    # Cari sqlite3 dulu
+    find_sqlite
+    echo "✅ Menggunakan sqlite3 dari: $SQLITE_BIN"
+
+    # 1. Deteksi Aplikasi
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    
     if [ ${#pkgs[@]} -eq 0 ]; then
-        echo "❌ Tidak ada aplikasi Roblox Clone yang ditemukan."
+        echo "❌ Tidak ada aplikasi Roblox Clone."
         return
     fi
 
@@ -36,63 +65,47 @@ do_custom_restore() {
     echo -n "❓ Pilih nomor aplikasi (1-${#pkgs[@]}): "
     read choice
     index=$((choice-1))
-
-    if [ $index -lt 0 ] || [ $index -ge ${#pkgs[@]} ]; then
-        echo "❌ Pilihan tidak valid!"
-        return
-    fi
+    [ $index -lt 0 ] || [ $index -ge ${#pkgs[@]} ] && echo "❌ Pilihan salah." && return
 
     SELECTED_PKG="${pkgs[$index]}"
     folder="/data/data/$SELECTED_PKG"
     echo "✅ Target: $SELECTED_PKG"
 
-    # 3. Deteksi Cookie Path sesuai instruksi Anda
+    # 3. Deteksi Cookie Path (Gunakan logika yang Anda berikan)
     cookie_path=""
     [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
     [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
 
-    # Jika path tidak ditemukan (aplikasi baru diinstall), gunakan Default path
+    # Fallback jika folder baru dibuat
     if [ -z "$cookie_path" ]; then
-        echo "ℹ️ Path cookie belum ada, menggunakan default: $folder/app_webview/Default/Cookies"
-        cookie_path="$folder/app_webview/Default/Cookies"
         mkdir -p "$folder/app_webview/Default"
+        cookie_path="$folder/app_webview/Default/Cookies"
     fi
 
     # 4. Input Cookie
     echo "------------------------------------------"
-    echo "📝 Masukkan/Tempel Cookie (|_CAEaAhAD...):"
+    echo "📝 Masukkan/Tempel Cookie ROBLOSECURITY:"
     read -r CUSTOM_COOKIE
+    [ -z "$CUSTOM_COOKIE" ] && echo "❌ Kosong." && return
 
-    if [ -z "$CUSTOM_COOKIE" ]; then
-        echo "❌ Cookie tidak boleh kosong!"
-        return
-    fi
-
-    # 5. Proses Injeksi menggunakan SQLite3
-    echo "⏳ Menyiapkan database Cookies..."
+    # 5. Injeksi Cookie
+    echo "⏳ Menyuntikkan cookie..."
     
-    if command -v sqlite3 >/dev/null 2>&1; then
-        # Buat tabel jika belum ada
-        sqlite3 "$cookie_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, UNIQUE (host_key, name, path));"
-        
-        # Hapus cookie lama dan masukkan yang baru
-        sqlite3 "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
-        sqlite3 "$cookie_path" "INSERT INTO cookies (host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc) VALUES ('.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, $(date +%s));"
-        
-        # 6. Fix Permission & Ownership
-        echo "⏳ Memperbaiki izin akses..."
-        APP_UID=$(stat -c "%u:%g" "$folder")
-        chown -R "$APP_UID" "$folder/app_webview"
-        chmod 660 "$cookie_path"
-        
-        echo "------------------------------------------"
-        echo "✨ SELESAI! Cookie berhasil disuntikkan ke:"
-        echo "📂 Path: $cookie_path"
-    else
-        echo "❌ Error: Perangkat Anda tidak memiliki 'sqlite3'. Injeksi cookie gagal."
-    fi
+    # Inisialisasi tabel jika file baru
+    "$SQLITE_BIN" "$cookie_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, UNIQUE (host_key, name, path));"
+    
+    # Hapus lama & Masukkan baru
+    "$SQLITE_BIN" "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
+    "$SQLITE_BIN" "$cookie_path" "INSERT INTO cookies (host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc) VALUES ('.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, $(date +%s));"
+
+    # 6. Fix Permissions
+    app_uid=$(stat -c "%u:%g" "$folder")
+    chown -R "$app_uid" "$folder/app_webview"
+    chmod 660 "$cookie_path"
+
+    echo "------------------------------------------"
+    echo "✨ BERHASIL dipasang ke $SELECTED_PKG"
 }
 
-# Jalankan skrip
 check_root
 do_custom_restore
