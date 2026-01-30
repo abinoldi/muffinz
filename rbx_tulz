@@ -1,10 +1,15 @@
 #!/system/sh
 
-# Konfigurasi Lokasi Backup dan Download
+# ==========================================================
+# ROBLOX CLONE MANAGER v2.3 (CLEAN VERSION)
+# ==========================================================
+
+# Konfigurasi Lokasi
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
+BASE_URL="http://146.190.147.43:88"
 
-# Fungsi cek Root
+# Fungsi cek Root [cite: 1, 2, 3]
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "❌ Script ini MEMBUTUHKAN akses Root!"
@@ -13,7 +18,7 @@ check_root() {
     fi
 }
 
-# Fungsi 1: Backup
+# Fungsi 1: Backup Akun [cite: 3, 5, 8]
 do_backup() {
     echo "=========================================="
     echo "       MEMULAI PROSES BACKUP...           "
@@ -44,7 +49,7 @@ do_backup() {
     echo "Selesai! $count database tersimpan di $BACKUP_DIR"
 }
 
-# Fungsi 2: Restore
+# Fungsi 2: Restore Akun (Fix Permissions) [cite: 9, 13, 16]
 do_restore() {
     echo "=========================================="
     echo "       MEMULAI PROSES RESTORE...          "
@@ -70,6 +75,7 @@ do_restore() {
             fi
 
             cp "$db_file" "$target_path"
+            # Perbaikan Izin Akses agar aplikasi bisa membaca database 
             app_uid=$(stat -c "%u:%g" "$target_folder")
             chown "$app_uid" "$target_path"
             chmod 660 "$target_path"
@@ -84,7 +90,7 @@ do_restore() {
     echo "Selesai! $count database dikembalikan."
 }
 
-# Fungsi 3: Uninstall
+# Fungsi 3: Hapus Semua Aplikasi Clone [cite: 19, 23, 26]
 do_uninstall() {
     echo "=========================================="
     echo "       MENGHAPUS APLIKASI CLONE...        "
@@ -96,85 +102,93 @@ do_uninstall() {
         return
     fi
 
-    echo "⚠️  DAFTAR APLIKASI YANG AKAN DIHAPUS:"
-    echo "$pkgs"
-    echo "------------------------------------------"
-    echo -n "❓ Yakin hapus SEMUA aplikasi di atas? (y/n): "
+    echo "⚠️  Daftar aplikasi terdeteksi: $pkgs"
+    echo -n "❓ Yakin hapus SEMUA? (y/n): "
     read confirm
 
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         for pkg in $pkgs; do
             echo "⏳ Menghapus $pkg..."
             pm uninstall "$pkg" > /dev/null 2>&1
-            [ $? -eq 0 ] && echo "   ✅ Terhapus." || echo "   ❌ Gagal menghapus."
+            [ $? -eq 0 ] && echo "   ✅ Terhapus." || echo "   ❌ Gagal."
         done
-        echo "✨ Selesai. Semua bersih!"
+        echo "✨ Pembersihan selesai!"
     else
         echo "🚫 Operasi dibatalkan."
     fi
 }
 
-# Fungsi 4: Otomatisasi (New)
+# Fungsi 4: AUTO PROCESS (Download -> Install -> Restore) [cite: 28, 29]
 do_auto_process() {
     echo "=========================================="
     echo "       PROSES OTOMATIS BERJALAN           "
     echo "=========================================="
 
-    # 1. Cek Data Backup
     if [ ! -d "$BACKUP_DIR" ]; then
-        echo "❌ Folder backup tidak ditemukan!"
+        echo "❌ Folder backup tidak ditemukan! Silakan lakukan backup terlebih dahulu."
         return
     fi
-    
-    backup_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null)
-    total_backup=$(echo "$backup_files" | wc -w)
+
+    # Cek jumlah backup untuk menentukan jumlah download APK
+    total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
 
     if [ "$total_backup" -eq 0 ]; then
-        echo "❌ Tidak ada data backup untuk diproses."
+        echo "❌ Tidak ada data backup yang tersedia."
         return
     fi
-    echo "📦 Ditemukan $total_backup data akun terbackup."
 
-    # 2. Download APK (Simulasi)
+    echo "📦 Menyiapkan $total_backup akun untuk dipasang."
     mkdir -p "$DOWNLOAD_DIR"
-    echo "📥 Mengunduh $total_backup APK..."
-    for i in $(seq 1 "$total_backup"); do
-        echo "   -> Menyiapkan APK ke-$i..."
-        # Bagian ini bisa diisi dengan wget jika ada link download asli
-        # wget -q "URL_SERVER/$i.apk" -O "$DOWNLOAD_DIR/$i.apk"
-        sleep 1
-    done
 
-    # 3. Install Massal
-    echo "🚀 Memulai Instalasi Massal..."
     for i in $(seq 1 "$total_backup"); do
-        if [ -f "$DOWNLOAD_DIR/$i.apk" ]; then
-            echo "   ⏳ Memasang APK ke-$i..."
-            pm install "$DOWNLOAD_DIR/$i.apk" > /dev/null 2>&1
+        echo "------------------------------------------"
+        APK_NAME="$i.apk"
+        TARGET_URL="$BASE_URL/$APK_NAME"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+
+        # Step 1: Download
+        if [ ! -f "$SAVE_PATH" ]; then
+            echo "📥 Mengunduh $APK_NAME dari $BASE_URL..."
+            wget -q "$TARGET_URL" -O "$SAVE_PATH" || curl -L "$TARGET_URL" -o "$SAVE_PATH"
         else
-            echo "   ⚠️ APK $i.apk tidak ditemukan, melewati..."
+            echo "✅ $APK_NAME sudah ada di folder download."
+        fi
+
+        # Step 2: Install
+        if [ -f "$SAVE_PATH" ]; then
+            echo "⏳ Menginstall $APK_NAME..."
+            pm install -r "$SAVE_PATH" > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                echo "✅ Install $APK_NAME Berhasil."
+            else
+                echo "❌ Gagal menginstall $APK_NAME."
+            fi
+        else
+            echo "❌ File $APK_NAME tidak ditemukan/gagal unduh."
         fi
     done
 
-    # 4. Restore
-    echo "🔧 Memulai sinkronisasi data akun..."
+    # Step 3: Restore Data
+    echo "------------------------------------------"
+    echo "🔧 Sinkronisasi Cookies ke aplikasi baru..."
     do_restore
     echo "✨ SEMUA PROSES SELESAI!"
 }
 
-# --- MAIN MENU ---
+# --- MAIN MENU --- [cite: 27, 28]
 check_root
 
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX CLONE MANAGER v2.0 (ROOT)      "
+    echo "    ROBLOX CLONE MANAGER v2.3 (ROOT)      "
     echo "=========================================="
-    echo "1. Backup Semua Akun (ke SDCard)"
-    echo "2. Restore Semua Akun (Fix Perms)"
-    echo "3. HAPUS SEMUA APP (Uninstall)"
-    echo "4. PROSES OTOMATIS (Download-Install-Restore)"
+    echo "1. Backup Akun (Sekarang)"
+    echo "2. Restore Akun (Manual)"
+    echo "3. Hapus Semua Aplikasi Clone"
+    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
     echo "5. Keluar"
+    echo "------------------------------------------"
     echo -n "Pilih menu [1-5]: "
     read choice
 
@@ -184,6 +198,6 @@ while true; do
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) echo "Keluar."; exit 0 ;;
-        *) echo "Pilihan salah." ;;
+        *) echo "⚠️ Pilihan tidak valid." ;;
     esac
 done
