@@ -1,7 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ROBLOX Cookie Injector - Direct SU Version
+# ROBLOX Cookie Injector - Absolute Path Version
 # Target Package: com.roblox.client
+
+# --- DEFINISI PATH BINARY ---
+# Ini memastikan root menggunakan sqlite3 milik Termux, bukan milik sistem Android
+SQLITE_BIN="/data/data/com.termux/files/usr/bin/sqlite3"
 
 # --- CONFIGURATION ---
 ROBLOX_PACKAGE="com.roblox.client"
@@ -18,12 +22,9 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # --- PREPARE SQL ---
-# Escape single quotes agar tidak merusak perintah SQL
 SAFE_COOKIE=$(echo "$COOKIE_VALUE" | sed "s/'/''/g")
-
-# Generate Chrome Timestamp
 NOW=$(($(date +%s) * 1000000 + 11644473600000000))
-EXPIRE=$(($NOW + 31536000000000)) # Valid 1 tahun ke depan
+EXPIRE=$(($NOW + 31536000000000))
 
 cat > "$REMOTE_SQL_FILE" << EOF
 BEGIN TRANSACTION;
@@ -41,19 +42,19 @@ COMMIT;
 EOF
 
 # --- EXECUTION ---
-echo -e "${YELLOW}➤ Menjalankan injeksi via su -c...${NC}"
+echo -e "${YELLOW}➤ Menjalankan injeksi dengan SQLITE_BIN: $SQLITE_BIN${NC}"
 
-# Gabungkan semua perintah sistem dalam satu blok su -c
+# Menjalankan perintah sebagai root
+# Bagian ini menggunakan variable SQLITE_BIN yang sudah didefinisikan di atas
 su -c "
     am force-stop $ROBLOX_PACKAGE && \
-    sqlite3 $COOKIE_DB < $REMOTE_SQL_FILE && \
+    $SQLITE_BIN $COOKIE_DB < $REMOTE_SQL_FILE && \
     rm $REMOTE_SQL_FILE
 "
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Berhasil disuntikkan! Silakan buka Roblox.${NC}"
+    echo -e "${GREEN}✓ Berhasil! Cookie telah disuntikkan menggunakan path absolut.${NC}"
 else
-    echo -e "${RED}✗ Gagal. Pastikan kamu sudah memberikan izin root (Magisk/KernelSU).${NC}"
-    # Hapus file temp jika su -c gagal di tengah jalan
+    echo -e "${RED}✗ Gagal. Pastikan file sqlite3 ada di $SQLITE_BIN dan root aktif.${NC}"
     [ -f "$REMOTE_SQL_FILE" ] && rm "$REMOTE_SQL_FILE"
 fi
