@@ -267,7 +267,7 @@ async function main() {
   if(cleanCode.includes("linkCode=")) cleanCode = cleanCode.split("linkCode=")[1].split("&")[0];
   const finalLaunchUrl = `roblox://placeID=${PLACE_ID}&linkCode=${cleanCode}`;
 
-  console.log("\n🚀 Launching all instancess...");
+  console.log("\n🚀 Launching all instances ....");
   
   let LEFT = 20;
   const WIDTH = 200;
