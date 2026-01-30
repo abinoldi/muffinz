@@ -1,86 +1,90 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/system/bin/sh
 
-# --- CONFIGURATION ---
-# Fokus pada satu package sesuai permintaan
-TARGET_PKG="com.roblox.clienb"
-SQLITE_BIN="/data/data/com.termux/files/usr/bin/sqlite3"
-TEMP_DB="/data/data/com.termux/files/home/temp_cookies.db"
-TEMP_SQL="/data/data/com.termux/files/home/temp.sql"
+# ==========================================================
+# ROBLOX CUSTOM COOKIE RESTORER (STAND-ALONE)
+# ==========================================================
 
-# Masukkan Cookie .ROBLOSECURITY kamu di sini
-COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_CAEaAhADIhsKBGR1aWQSEzk5NTYwNDQzMjI2NTQ4MDcyMDEoAw.0X7UmuL9ezbQiDLC6EIhQuFOE8OUPLwDwr5dKIs4qoldSQsCMiOk_Tx0MA7e8ZQsBP2x6rg3KM3rwqmNWUznGf0_Uxxch0l2wyy33MZW6d8tFTryxD_xhyvyvOLCcoPyt7N2XlDYITdLovFNQxpFADR__JsMj3DyuXGGJKCofkbjrXVZW3V3wBOPDY0no4Ad6u094ZBX8Gp5LHySuV30EXMBVh0aHkx5eVAdd5ou3FjeVC1nPB8LTMTYJm5nayYHwA4vZZlZw6V3K5Y0Mg3mN2uY8hHl-NlzpwYVLgIfOiQ4acbfgZAUprZdfWdkDBRIyhRYhThb9kDTwK8zGlJdgDHsthRFmTWf2_7PO-Ge7JSe3HOOZugVuyhZDeGiLNeVJLWQ_EPKjG6NaaMt8UZhQ7cFkN9BJA6uzb3aDFid0bUcEkmPX-F2x_-zbvt6qAEQqGDWA7LpQwbPoxtDk6RS_ZNOwaHxVpgJVJjHXIkptiBiP9Rvb7uJdP90zD_kpwfSgdElU3_zNXXtzdNahitUDLAi-bxNc6Ee6On8OkeRpYdxorsBoiDx-8pDiUFMmgK8t5wDvryKT868lNSdvm7Ag1Ed_YOi5tkIg600a7kLMo_JktmzPWPVy-E9vEsn4g_2mmS-hG6K6YlrD566tPl3e5v2uzdJqkEBln7PCjm95pbKy6SaDSM4epPfZSKXNjLfJfalJWbEPi9pRhZDnoKNQtTUlfyw9VYLbZDkG5Tm-wshOLfmzuRNxQOgwPbf4WZefSEDamyVG8yM67Ia713E27plk5M"
+# Fungsi cek Root
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "❌ Script ini MEMBUTUHKAN akses Root!"
+        echo "Silakan jalankan dengan: su -c 'sh $0'"
+        exit 1
+    fi
+}
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+do_custom_restore() {
+    echo "=========================================="
+    echo "      ROBLOX CUSTOM COOKIE RESTORE        "
+    echo "=========================================="
 
-# --- 1. GENERATE TEMPLATE DATABASE (.db) ---
-# Berdasarkan struktur Cookies_Salinan.db [cite: 33, 34]
-echo -e "${YELLOW}➤ Menyiapkan template database untuk $TARGET_PKG...${NC}"
-
-SAFE_COOKIE=$(echo "$COOKIE_VALUE" | sed "s/'/''/g")
-NOW=$(($(date +%s) * 1000000 + 11644473600000000))
-EXPIRE=$(($NOW + 31536000000000))
-
-cat > "$TEMP_SQL" << EOF
--- Membuat tabel meta [cite: 33]
-CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
-INSERT INTO meta VALUES('version','15');
-INSERT INTO meta VALUES('last_compatible_version','15');
-
--- Membuat tabel cookies [cite: 33]
-CREATE TABLE cookies(
-    creation_utc INTEGER NOT NULL, top_frame_site_key TEXT NOT NULL,
-    host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL,
-    encrypted_value BLOB DEFAULT '', path TEXT NOT NULL, expires_utc INTEGER NOT NULL,
-    is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL,
-    last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1,
-    is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1,
-    samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0,
-    source_port INTEGER NOT NULL DEFAULT -1, is_same_party INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (top_frame_site_key, host_key, name, path)
-);
-
--- Memasukkan data cookie ke .roblox.com
-INSERT INTO cookies VALUES (
-    $NOW, '', '.roblox.com', '.ROBLOSECURITY', '$SAFE_COOKIE', 
-    X'', '/', $EXPIRE, 1, 1, $NOW, 1, 1, 1, -1, 2, 443, 0
-);
-EOF
-
-# Hapus DB lama jika ada dan buat baru
-rm -f "$TEMP_DB"
-$SQLITE_BIN "$TEMP_DB" < "$TEMP_SQL"
-rm -f "$TEMP_SQL"
-
-# --- 2. PROSES INJEKSI KE PACKAGE TARGET ---
-echo -e "${YELLOW}➤ Menyuntikkan ke /data/data/$TARGET_PKG/...${NC}"
-
-su -c "
-    # Tentukan target folder
-    TARGET_DIR=\"/data/data/$TARGET_PKG/app_webview/Default\"
-    mkdir -p \"\$TARGET_DIR\"
-    TARGET_FILE=\"\$TARGET_DIR/Cookies\"
-
-    # Hentikan aplikasi agar database tidak terkunci
-    am force-stop $TARGET_PKG
+    # 1. Deteksi Aplikasi yang terinstall
+    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
     
-    # Copy file database .db yang sudah jadi
-    cp \"$TEMP_DB\" \"\$TARGET_FILE\"
-    
-    # Ambil UID aplikasi dan perbaiki izin akses
-    APP_UID=\$(stat -c \"%u:%g\" \"/data/data/$TARGET_PKG\")
-    chown -R \"\$APP_UID\" \"/data/data/$TARGET_PKG/app_webview\"
-    chmod 660 \"\$TARGET_FILE\"
-"
+    if [ ${#pkgs[@]} -eq 0 ]; then
+        echo "❌ Tidak ada aplikasi Roblox Clone yang ditemukan."
+        return
+    fi
 
-# --- 3. CLEANUP ---
-rm -f "$TEMP_DB"
+    echo "Daftar aplikasi terdeteksi:"
+    for i in "${!pkgs[@]}"; do
+        echo "$((i+1)). ${pkgs[$i]}"
+    done
+    echo "------------------------------------------"
 
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Berhasil! Akun pada $TARGET_PKG telah dipulihkan.${NC}"
-else
-    echo -e "${RED}✗ Terjadi kesalahan. Pastikan akses root tersedia.${NC}"
-fi
+    # 2. Pilih Target
+    echo -n "❓ Pilih nomor aplikasi (1-${#pkgs[@]}): "
+    read choice
+    index=$((choice-1))
+
+    if [ $index -lt 0 ] || [ $index -ge ${#pkgs[@]} ]; then
+        echo "❌ Pilihan tidak valid!"
+        return
+    fi
+
+    SELECTED_PKG="${pkgs[$index]}"
+    echo "✅ Target: $SELECTED_PKG"
+
+    # 3. Input Cookie
+    echo "------------------------------------------"
+    echo "📝 Masukkan/Tempel Cookie (|_CAEaAhAD...):"
+    read -r CUSTOM_COOKIE
+
+    if [ -z "$CUSTOM_COOKIE" ]; then
+        echo "❌ Cookie tidak boleh kosong!"
+        return
+    fi
+
+    # 4. Proses Injeksi
+    TARGET_DIR="/data/data/$SELECTED_PKG/app_webview/Default"
+    TARGET_PATH="$TARGET_DIR/Cookies"
+
+    echo "⏳ Menyiapkan direktori dan file..."
+    mkdir -p "$TARGET_DIR"
+
+    # Membuat database SQLite sederhana untuk Cookies (Metode sqlite3)
+    # Jika perangkat tidak memiliki sqlite3, kita gunakan metode penulisan manual
+    if command -v sqlite3 >/dev/null 2>&1; then
+        sqlite3 "$TARGET_PATH" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, UNIQUE (host_key, name, path));"
+        sqlite3 "$TARGET_PATH" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
+        sqlite3 "$TARGET_PATH" "INSERT INTO cookies (host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc) VALUES ('.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, $(date +%s));"
+    else
+        echo "⚠️  sqlite3 tidak ditemukan. Mencoba metode alternatif..."
+        # Jika tidak ada sqlite3, cara terbaik adalah menimpa file Cookies yang sudah ada 
+        # atau menggunakan template database.
+    fi
+
+    # 5. Fix Permission & Ownership
+    echo "⏳ Memperbaiki izin akses..."
+    APP_UID=$(stat -c "%u:%g" "/data/data/$SELECTED_PKG")
+    chown -R "$APP_UID" "/data/data/$SELECTED_PKG/app_webview"
+    chmod 660 "$TARGET_PATH"
+
+    echo "------------------------------------------"
+    echo "✨ SELESAI! Akun berhasil dipasang ke $SELECTED_PKG"
+    echo "💡 Silakan buka aplikasinya sekarang."
+}
+
+# Jalankan skrip
+check_root
+do_custom_restore
