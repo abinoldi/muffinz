@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX MASS INJECTOR v4.4 (DELAYED 30s)
+# ROBLOX MASS INJECTOR v5.0 (STRICT ORIGINAL v3.9 + DELAY)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
@@ -31,62 +31,62 @@ prepare_sqlite() {
     fi
 }
 
-# --- LOGIKA INJEKSI TUNGGAL (CORE v3.9) ---
-inject_single_step() {
-    local TARGET_PKG="$1"
-    local TARGET_COOKIE="$2"
-    local folder="/data/data/$TARGET_PKG"
+# --- FUNGSI INJEKSI (DICOPY PERSIS DARI v3.9 ANDA) ---
+inject_original_logic() {
+    local SELECTED_PKG="$1"
+    local CUSTOM_COOKIE="$2"
+    local folder="/data/data/$SELECTED_PKG"
 
     echo "------------------------------------------"
-    echo "🔄 Memproses: $TARGET_PKG"
-    
-    # 1. Force Stop (Sesuai Permintaan)
-    echo "   🛑 Mematikan aplikasi..."
-    am force-stop "$TARGET_PKG" > /dev/null 2>&1
-    sleep 1
+    echo "🔄 Memproses: $SELECTED_PKG"
 
-    # 2. Setup Path
+    # 1. Force Stop (Sesuai permintaan: DILAKUKAN DI AWAL)
+    echo "   🛑 Force Stop aplikasi..."
+    am force-stop "$SELECTED_PKG" > /dev/null 2>&1
+    sleep 2
+
+    # 2. Tentukan Path (Sama persis v3.9)
     local cookie_path=""
     [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
     [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
     
+    # Fallback path (Sama persis v3.9)
     if [ -z "$cookie_path" ]; then
         mkdir -p "$folder/app_webview/Default"
         cookie_path="$folder/app_webview/Default/Cookies"
     fi
 
-    # 3. Eksekusi SQL (Create -> Delete -> Insert)
-    echo "   💉 Menyuntikkan database..."
+    # 3. Injeksi SQL (SAMA PERSIS v3.9)
+    echo "   💉 Menyuntikkan cookie..."
     
-    # Create Table (Agar tidak error "no such table")
+    # TAMBAHAN PENTING: Create Table (Wajib untuk mass inject app baru)
+    # Kita menggunakan struktur yang sama persis dengan INSERT di bawah
     "$SQLITE_BIN" "$cookie_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, top_frame_site_key TEXT NOT NULL DEFAULT '', UNIQUE (host_key, name, path));"
 
-    # Delete Old
+    # Query Hapus Lama
     "$SQLITE_BIN" "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
 
-    # Insert New (Logika v3.9)
-    "$SQLITE_BIN" "$cookie_path" "INSERT OR REPLACE INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, top_frame_site_key) VALUES ((strftime('%s','now') * 1000000), '.roblox.com', '.ROBLOSECURITY', '$TARGET_COOKIE', '/', 253402300799000000, 1, 1, (strftime('%s','now') * 1000000), 1, 1, 1, -1, 0, '');"
+    # Query Insert Baru (CODE ASLI v3.9 ANDA)
+    "$SQLITE_BIN" "$cookie_path" "INSERT OR REPLACE INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, top_frame_site_key) VALUES ((strftime('%s','now') * 1000000), '.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, (strftime('%s','now') * 1000000), 1, 1, 1, -1, 0, '');"
 
     if [ $? -eq 0 ]; then
-        # 4. Fix Permission
+        # 4. Fix Permissions
         local app_uid=$(stat -c "%u:%g" "$folder")
         chown -R "$app_uid" "$folder/app_webview"
         chmod 660 "$cookie_path"
-        echo "   ✅ SUKSES TERPASANG!"
-        return 0
+        echo "   ✅ SUKSES: Cookie terpasang."
     else
-        echo "   ❌ GAGAL (Error SQL)"
-        return 1
+        echo "   ❌ GAGAL: Error SQL."
     fi
 }
 
-do_delayed_process() {
+do_mass_inject() {
     echo "=========================================="
-    echo "    ROBLOX INJECTOR (DELAY 30s MODE)      "
+    echo "    ROBLOX MASS INJECTOR v5.0 (DELAYED)   "
     echo "=========================================="
     prepare_sqlite
     
-    # Reset Queue
+    # Bersihkan queue
     rm -f "$COOKIE_QUEUE"
     touch "$COOKIE_QUEUE"
 
@@ -99,8 +99,8 @@ do_delayed_process() {
         return
     fi
 
-    echo "📱 Ditemukan $total_apps aplikasi."
-    echo "📝 INPUT COOKIE (Ketik 'done' untuk mulai)"
+    echo "📱 Terdeteksi $total_apps aplikasi."
+    echo "📝 INPUT COOKIE (Ketik 'done' lalu Enter untuk mulai)"
     echo "------------------------------------------"
 
     # Loop Input
@@ -125,11 +125,11 @@ do_delayed_process() {
         fi
     done
 
-    echo "=========================================="
-    echo "🚀 MEMULAI PROSES SATU PER SATU..."
-    echo "=========================================="
+    echo "------------------------------------------"
+    echo "🚀 MEMULAI PROSES (Delay 30 detik/app)..."
+    echo "------------------------------------------"
 
-    # Loop Eksekusi dengan Delay
+    # Loop Eksekusi
     line_num=1
     for pkg in "${pkgs[@]}"; do
         # Baca cookie baris ke-N
@@ -140,18 +140,15 @@ do_delayed_process() {
             break
         fi
 
-        # Jalankan Injeksi
-        inject_single_step "$pkg" "$current_cookie"
+        # Jalankan Logika v3.9
+        inject_original_logic "$pkg" "$current_cookie"
         
-        # Cek apakah ini antrian terakhir
-        # (Kita hitung sisa baris di file)
-        remaining=$(wc -l < "$COOKIE_QUEUE")
+        # DELAY 30 DETIK (Kecuali yang terakhir)
         if [ $line_num -lt $i ]; then
-            echo "⏳ Menunggu 30 detik sebelum lanjut..."
-            # Countdown sederhana
+            echo "⏳ Menunggu 30 detik..."
             sleep 30
         else
-            echo "✨ Semua proses selesai!"
+            echo "✨ Semua selesai!"
         fi
         
         line_num=$((line_num + 1))
@@ -161,4 +158,4 @@ do_delayed_process() {
 }
 
 check_root
-do_delayed_process
+do_mass_inject
