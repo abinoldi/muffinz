@@ -119,44 +119,38 @@ function getTopTaskId() {
 function prefsExists(pkg) {
   const prefsFile = `/data/data/${pkg}/shared_prefs/${pkg.replace(/\./g,'_')}_preferences.xml`;
   try {
-    execSync(`su -c "ls ${prefsFile}"`, { stdio: 'ignore' });
-    return prefsFile; // file ada
+    execSync(`su -c "ls ${prefsFile}"`, { stdio: 'ignore' }); // check existence via root
+    return prefsFile;
   } catch {
-    return null;      // file tidak ada
+    return null;
   }
 }
 
+
 // --- LAUNCH AND INSTANT SHRINK ---
 async function launchPackages(pkg, url, LEFT = 20, WIDTH = 200, HEIGHT = 250) {
+  const RIGHT = LEFT + WIDTH;
+  const prefsFile = `/data/data/${pkg}/shared_prefs/${pkg.replace(/\./g,'_')}_preferences.xml`;
+
   try {
-    console.log(`\n🚀 Launching: ${pkg} at LEFT=${LEFT}, WIDTH=${WIDTH}`);
+    console.log(`\n🚀 Launching ${pkg} at LEFT=${LEFT}, WIDTH=${WIDTH}`);
 
-    const RIGHT = LEFT + WIDTH;
-
-    // --- prefs file path (dynamic based on package name) ---
-    const prefsFile = prefsExists(pkg);
-    if (!prefsFile) {
-      console.log(`⚠️ Prefs file not found for ${pkg}`);
-    } else {
-      execSync(`su -c 'sed -i "/app_cloner_current_window_left/c\\\\<int name=\\"app_cloner_current_window_left\\" value=\\"${LEFT}\\" />" ${prefsFile}'`);
-      execSync(`su -c 'sed -i "/app_cloner_current_window_right/c\\\\<int name=\\"app_cloner_current_window_right\\" value=\\"${RIGHT}\\" />" ${prefsFile}'`);
-      execSync(`su -c 'sed -i "/app_cloner_current_window_bottom/c\\\\<int name=\\"app_cloner_current_window_bottom\\" value=\\"${HEIGHT}\\" />" ${prefsFile}'`);
-      console.log(`   ✅ Window positions injected`);
-    }
-
-    // --- force stop before launch ---
-    try { execSync(`su -c "am force-stop ${pkg}"`); } catch(e) {}
-
-    // --- launch Roblox ---
-    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${url}"`;
-    execSync(`su -c "${cmd}"`, { stdio: 'ignore' });
-    console.log(`   ✅ App launched`);
-
-    // optional small delay
-    await new Promise(r => setTimeout(r, 1000));
-
+    // --- inject prefs + force stop + launch via su ---
+    const cmd = `
+      su -c '
+      if [ -f "${prefsFile}" ]; then
+        sed -i "/app_cloner_current_window_left/c\\\\<int name=\\\"app_cloner_current_window_left\\\" value=\\\"${LEFT}\\\" />" "${prefsFile}"
+        sed -i "/app_cloner_current_window_right/c\\\\<int name=\\\"app_cloner_current_window_right\\\" value=\\\"${RIGHT}\\\" />" "${prefsFile}"
+        sed -i "/app_cloner_current_window_bottom/c\\\\<int name=\\\"app_cloner_current_window_bottom\\\" value=\\\"${HEIGHT}\\\" />" "${prefsFile}"
+      fi
+      am force-stop ${pkg}
+      am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${url}"
+      '
+    `;
+    execSync(cmd, { stdio: "inherit" });
+    console.log("   ✅ Launched and prefs injected");
   } catch (e) {
-    console.log(`❌ Error in launchPackage: ${e.message}`);
+    console.log(`❌ Error in launchPackages: ${e.message}`);
   }
 }
 
@@ -275,25 +269,23 @@ async function main() {
 
   console.log("\n🚀 Launching all instances...");
   
-  // Horizontal Auto-Arrange Launch
-  let LEFT = 20;   // starting X
+  const packages = accounts.map(acc => acc.pkg); // array string pkg
+  let LEFT = 20;
   const WIDTH = 200;
   const HEIGHT = 250;
-  const SPACING = 10;
+  const GAP = 10;
   
-  for (const acc of accounts) {
-    await launchPackages(acc.pkg, finalLaunchUrl, LEFT, WIDTH, HEIGHT);
-    
-    // Update states
-    lastRestartMap[acc.pkg] = Date.now();
-    accountStates[acc.pkg].isRunning = true;
-    accountStates[acc.pkg].serverStatus = "Launching...";
-    
-    LEFT += WIDTH + SPACING;  // shift next app to the right
+  for (const pkg of packages) {
+    await launchPackages(pkg, finalLaunchUrl, LEFT, WIDTH, HEIGHT);
+  
+    lastRestartMap[pkg] = Date.now();
+    accountStates[pkg].isRunning = true;
+    accountStates[pkg].serverStatus = "Launching...";
+  
+    LEFT += WIDTH + GAP;
+    await new Promise(r => setTimeout(r, 1000));
   }
-  
-  console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s after arranging...`);
-  await sleep(LOOP_DELAY);
+
 
 
   console.log(`\n💤 Monitor active (Presence: ${CHECK_SERVER_PRESENCE}, Auto-Fix: ${AUTO_RECONNECT})...`);
