@@ -1,0 +1,87 @@
+#!/system/bin/sh
+
+# ==========================================================
+# ROBLOX MASS DOWNLOADER & INSTALLER (STAND-ALONE)
+# ==========================================================
+
+# Konfigurasi Lokasi
+DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
+BASE_URL="http://146.190.147.43:88"
+
+# Fungsi cek Root (Dibutuhkan untuk pm install silent)
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "❌ Script ini MEMBUTUHKAN akses Root!"
+        echo "Silakan jalankan dengan: su -c 'sh $0'"
+        exit 1
+    fi
+}
+
+do_mass_process() {
+    echo "=========================================="
+    echo "    DOWNLOAD & INSTALLER OTOMATIS         "
+    echo "=========================================="
+    
+    # Input Custom Jumlah
+    echo -n "❓ Berapa total APK yang ingin di-download? : "
+    read total_apk
+
+    # Validasi input angka
+    if ! [ "$total_apk" -eq "$total_apk" ] 2>/dev/null; then
+        echo "❌ Error: Masukkan jumlah dalam angka!"
+        return
+    fi
+
+    mkdir -p "$DOWNLOAD_DIR"
+    echo "📂 Folder: $DOWNLOAD_DIR"
+    echo "🚀 Memulai proses untuk $total_apk APK..."
+
+    for i in $(seq 1 "$total_apk"); do
+        echo "------------------------------------------"
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+        URL="$BASE_URL/$APK_NAME"
+
+        # 1. Download menggunakan CURL dengan progres bar
+        if [ ! -f "$SAVE_PATH" ]; then
+            echo "📥 Mengunduh $APK_NAME [$i/$total_apk]"
+            curl -L --progress-bar "$URL" -o "$SAVE_PATH"
+            
+            if [ $? -ne 0 ]; then
+                echo "❌ Gagal mengunduh $APK_NAME. Lewati..."
+                continue
+            fi
+        else
+            echo "✅ $APK_NAME sudah ada, melewati unduhan."
+        fi
+
+        # 2. Install menggunakan Package Manager (PM)
+        if [ -f "$SAVE_PATH" ]; then
+            echo "⏳ Memasang $APK_NAME secara silent..."
+            # Flag -r untuk reinstall/replace jika sudah ada
+            pm install -r "$SAVE_PATH" > /dev/null 2>&1
+            
+            if [ $? -eq 0 ]; then
+                echo "✅ $APK_NAME Berhasil terpasang."
+            else
+                echo "❌ $APK_NAME Gagal dipasang (Cek kompatibilitas APK)."
+            fi
+        fi
+        
+        # Jeda singkat agar sistem tidak overload
+        sleep 1
+    done
+
+    echo "------------------------------------------"
+    echo "✨ PROSES SELESAI!"
+    echo "💡 Apakah ingin menghapus file APK di folder Download? (y/n): "
+    read del_confirm
+    if [ "$del_confirm" = "y" ] || [ "$del_confirm" = "Y" ]; then
+        rm -rf "$DOWNLOAD_DIR"/*.apk
+        echo "🗑️  File APK dibersihkan."
+    fi
+}
+
+# Jalankan skrip
+check_root
+do_mass_process
