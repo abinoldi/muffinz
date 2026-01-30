@@ -600,48 +600,50 @@ function RunAutoTrade()
     if TradingState.IsTrading then return end
     TradingState.IsTrading = true
     
-    print("♻️ [Auto Trade] Dimulai... Target: " .. MasterConfig.TargetUsername)
+    print("♻️ [Auto Trade] Dimulai...")
 
     TradingState.Thread = task.spawn(function()
         while MasterConfig.AutoTrade and TradingState.IsTrading do
-            -- Cek apakah Target ID sudah ada
+            -- 1. Pastikan kita punya Target ID
             if not MasterConfig.TargetId or MasterConfig.TargetId == 0 then
                 pcall(function()
                     MasterConfig.TargetId = Services.Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername)
                 end)
-                if not MasterConfig.TargetId then
-                    warn("⚠️ [Auto Trade] Target User tidak ditemukan! Cek config nama.")
-                    task.wait(5)
-                end
             end
 
-            if MasterConfig.TargetId then
+            -- [LOGIKA BARU] Cek apakah player benar-benar ada di dalam server (Ingame)
+            -- Kita cari object playernya berdasarkan ID
+            local targetPlayerIngame = Services.Players:GetPlayerByUserId(MasterConfig.TargetId)
+
+            if targetPlayerIngame then
+                -- === JIKA PLAYER ADA DI SERVER, BARU KITA SCAN DAN TRADE ===
                 local itemsToTrade = ScanInventoryForTrade()
                 
                 if #itemsToTrade > 0 then
                     local targetItem = itemsToTrade[1]
-                    -- print("♻️ [Trading] Mengirim: " .. targetItem.name .. " (" .. targetItem.rarity .. ")")
-                    
                     pcall(function() 
                         RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, targetItem.uuid) 
                     end)
                     
+                    -- Tunggu item terkirim
                     local start = os.clock()
-                    -- Tunggu sampai item hilang dari tas (maksimal 5 detik)
                     repeat 
                         task.wait(0.5) 
                     until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
                 else
-                    -- Jika tidak ada item yang cocok, tunggu agak lama
-                    -- print("💤 [Auto Trade] Tidak ada item untuk ditrade.")
-                    task.wait(2)
+                    task.wait(2) -- Tidak ada item, tunggu sebentar
                 end
+
+            else
+                -- === JIKA PLAYER TIDAK DITEMUKAN DI SERVER ===
+                -- Kita tunggu saja, jangan spam remote trade
+                -- print("⏳ Target tidak terdeteksi di server, menunggu dia join...")
+                task.wait(3) 
             end
             
             task.wait(MasterConfig.TradeDelay)
         end
         TradingState.IsTrading = false
-        print("🛑 [Auto Trade] Berhenti.")
     end)
 end
 
