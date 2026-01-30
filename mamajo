@@ -275,18 +275,26 @@ async function main() {
 
   console.log("\n🚀 Launching all instances...");
   
-  // --- Horizontal Auto-Arrange Launch ---
-  const launchList = accounts.map(acc => ({ pkg: acc.pkg, url: finalLaunchUrl }));
-  await launchPackages(launchList, 20, 200, 250, 10);
+  // Horizontal Auto-Arrange Launch
+  let LEFT = 20;   // starting X
+  const WIDTH = 200;
+  const HEIGHT = 250;
+  const SPACING = 10;
   
-  // Update states
-  launchList.forEach(acc => {
+  for (const acc of accounts) {
+    await launchPackages(acc.pkg, finalLaunchUrl, LEFT, WIDTH, HEIGHT);
+    
+    // Update states
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-  });
+    
+    LEFT += WIDTH + SPACING;  // shift next app to the right
+  }
+  
   console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s after arranging...`);
   await sleep(LOOP_DELAY);
+
 
   console.log(`\n💤 Monitor active (Presence: ${CHECK_SERVER_PRESENCE}, Auto-Fix: ${AUTO_RECONNECT})...`);
   while (true) {
