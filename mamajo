@@ -269,7 +269,6 @@ async function main() {
 
   console.log("\n🚀 Launching all instances...");
   
-  const packages = accounts.map(acc => acc.pkg); // array string pkg
   let LEFT = 20;
   const WIDTH = 200;
   const HEIGHT = 250;
