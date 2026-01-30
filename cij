@@ -9,7 +9,7 @@ COOKIE_DB="/data/data/$ROBLOX_PACKAGE/app_webview/Default/Cookies"
 REMOTE_SQL_FILE="/data/data/com.termux/files/home/inject_temp.sql"
 
 # Masukkan Cookie .ROBLOSECURITY kamu di sini
-COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_..."
+COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_CAEaAhADIhsKBGR1aWQSEzk5NTYwNDQzMjI2NTQ4MDcyMDEoAw.0X7UmuL9ezbQiDLC6EIhQuFOE8OUPLwDwr5dKIs4qoldSQsCMiOk_Tx0MA7e8ZQsBP2x6rg3KM3rwqmNWUznGf0_Uxxch0l2wyy33MZW6d8tFTryxD_xhyvyvOLCcoPyt7N2XlDYITdLovFNQxpFADR__JsMj3DyuXGGJKCofkbjrXVZW3V3wBOPDY0no4Ad6u094ZBX8Gp5LHySuV30EXMBVh0aHkx5eVAdd5ou3FjeVC1nPB8LTMTYJm5nayYHwA4vZZlZw6V3K5Y0Mg3mN2uY8hHl-NlzpwYVLgIfOiQ4acbfgZAUprZdfWdkDBRIyhRYhThb9kDTwK8zGlJdgDHsthRFmTWf2_7PO-Ge7JSe3HOOZugVuyhZDeGiLNeVJLWQ_EPKjG6NaaMt8UZhQ7cFkN9BJA6uzb3aDFid0bUcEkmPX-F2x_-zbvt6qAEQqGDWA7LpQwbPoxtDk6RS_ZNOwaHxVpgJVJjHXIkptiBiP9Rvb7uJdP90zD_kpwfSgdElU3_zNXXtzdNahitUDLAi-bxNc6Ee6On8OkeRpYdxorsBoiDx-8pDiUFMmgK8t5wDvryKT868lNSdvm7Ag1Ed_YOi5tkIg600a7kLMo_JktmzPWPVy-E9vEsn4g_2mmS-hG6K6YlrD566tPl3e5v2uzdJqkEBln7PCjm95pbKy6SaDSM4epPfZSKXNjLfJfalJWbEPi9pRhZDnoKNQtTUlfyw9VYLbZDkG5Tm-wshOLfmzuRNxQOgwPbf4WZefSEDamyVG8yM67Ia713E27plk5M"
 
 # Colors
 GREEN='\033[0;32m'
