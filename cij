@@ -1,11 +1,12 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX MASS COOKIE INJECTOR v4.0 (MULTI-INPUT & SEQUENTIAL)
+# ROBLOX MASS INJECTOR v4.1 (FILE QUEUE METHOD - STABLE)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
 TMP_SQLITE="/data/local/tmp/sqlite3_inject"
+COOKIE_LIST="/data/local/tmp/rbx_cookie_queue.txt"
 
 # 1. Cek Root
 check_root() {
@@ -32,13 +33,13 @@ prepare_sqlite() {
     fi
 }
 
-# 3. Fungsi Injeksi (Core Logic)
+# 3. Fungsi Injeksi (Logic v3.9 yang SUKSES)
 inject_core() {
     local pkg="$1"
     local cookie="$2"
     local folder="/data/data/$pkg"
     
-    # Tentukan Path
+    # Validasi path
     local cookie_path=""
     [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
     [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
@@ -48,10 +49,10 @@ inject_core() {
         cookie_path="$folder/app_webview/Default/Cookies"
     fi
 
-    # Force Stop
+    # Force Stop App
     am force-stop "$pkg" > /dev/null 2>&1
 
-    # Eksekusi SQL (Dengan fix v3.9)
+    # SQL Injection (Persis v3.9 dengan top_frame_site_key)
     "$SQLITE_BIN" "$cookie_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, top_frame_site_key TEXT NOT NULL DEFAULT '', UNIQUE (host_key, name, path));"
     
     "$SQLITE_BIN" "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
@@ -69,12 +70,15 @@ inject_core() {
     fi
 }
 
-# 4. Main Menu Loop
 do_mass_inject() {
     echo "=========================================="
-    echo "    ROBLOX MASS INJECTOR v4.0 (MULTI)     "
+    echo "    ROBLOX MASS INJECTOR v4.1 (STABLE)    "
     echo "=========================================="
     prepare_sqlite
+    
+    # Bersihkan file antrian lama
+    rm -f "$COOKIE_LIST"
+    touch "$COOKIE_LIST"
     
     # Deteksi Aplikasi
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
@@ -85,65 +89,59 @@ do_mass_inject() {
         return
     fi
 
-    echo "📱 Terdeteksi $total_apps aplikasi clone."
+    echo "📱 Terdeteksi $total_apps aplikasi."
     echo "------------------------------------------"
-    echo "📝 Masukkan Cookie satu per satu."
-    echo "   Ketik 'done' (lalu Enter) jika sudah selesai."
+    echo "📝 Masukkan Cookie. Ketik 'done' jika selesai."
     echo "------------------------------------------"
 
-    # Input Loop
+    # Input Loop (Simpan ke File)
     i=0
     while true; do
-        # Menampilkan prompt [1], [2], dst
         display_num=$((i + 1))
         echo -n "[$display_num] Cookie: "
         read -r input_cookie
 
-        # Cek kondisi berhenti
         if [ "$input_cookie" = "done" ]; then
             break
         fi
 
-        # Cek input kosong
-        if [ -z "$input_cookie" ]; then
-            echo "⚠️  Input kosong, silakan ulangi atau ketik 'done'."
-            continue
+        if [ -n "$input_cookie" ]; then
+            # Simpan cookie ke file baris demi baris
+            echo "$input_cookie" >> "$COOKIE_LIST"
+            i=$((i + 1))
         fi
 
-        # Simpan ke array (Android sh compatible)
-        # Kita menggunakan variabel dinamis karena array bash murni kadang bermasalah di sh minimal
-        eval "COOKIE_$i='$input_cookie'"
-        
-        i=$((i + 1))
-        
-        # Peringatan jika input melebihi jumlah aplikasi
         if [ $i -ge $total_apps ]; then
-            echo "⚠️  Jumlah cookie sudah memenuhi semua aplikasi ($total_apps)."
-            echo "   Otomatis lanjut ke proses injeksi..."
+            echo "⚠️  Slot penuh ($total_apps apps)."
             break
         fi
     done
 
-    total_inputs=$i
     echo "------------------------------------------"
-    echo "🚀 Memulai Injeksi Sequential ($total_inputs Cookie)..."
+    echo "🚀 Memproses injeksi..."
     echo "------------------------------------------"
 
-    # Injection Loop
-    count=0
-    while [ $count -lt $total_inputs ]; do
-        # Ambil cookie dari variabel dinamis
-        eval "current_cookie=\$COOKIE_$count"
-        current_pkg="${pkgs[$count]}"
-
-        echo "➡️  Memproses [$((count+1))]: $current_pkg"
-        inject_core "$current_pkg" "$current_cookie"
+    # Loop membaca file dan mengawinkan dengan paket
+    line_num=1
+    for pkg in "${pkgs[@]}"; do
+        # Ambil baris ke-N dari file cookie
+        current_cookie=$(sed "${line_num}q;d" "$COOKIE_LIST")
         
-        count=$((count + 1))
+        # Jika baris kosong (cookie habis), berhenti
+        if [ -z "$current_cookie" ]; then
+            break
+        fi
+
+        echo "➡️  Injecting [$line_num]: $pkg"
+        inject_core "$pkg" "$current_cookie"
+        
+        line_num=$((line_num + 1))
     done
 
+    # Hapus file sementara (Opsional, demi keamanan)
+    rm -f "$COOKIE_LIST"
     echo "------------------------------------------"
-    echo "✨ SELESAI! $count akun berhasil dipasang."
+    echo "✨ SELESAI!"
 }
 
 check_root
