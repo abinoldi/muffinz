@@ -1,40 +1,31 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ROBLOX Cookie Injector - SU -C Version
-# Target: com.roblox.client
+# ROBLOX Cookie Injector - Direct SU Version
+# Target Package: com.roblox.client
 
-# CONFIGURATION
-ROBLOX_PACKAGE="com.roblox.clienb"
+# --- CONFIGURATION ---
+ROBLOX_PACKAGE="com.roblox.client"
 COOKIE_DB="/data/data/$ROBLOX_PACKAGE/app_webview/Default/Cookies"
 REMOTE_SQL_FILE="/data/data/com.termux/files/home/inject_temp.sql"
 
-# THE COOKIE - Ganti sesuai kebutuhan
-COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_CAEaAhADIhsKBGR1aWQSEzk5NTYwNDQzMjI2NTQ4MDcyMDEoAw.0X7UmuL9ezbQiDLC6EIhQuFOE8OUPLwDwr5dKIs4qoldSQsCMiOk_Tx0MA7e8ZQsBP2x6rg3KM3rwqmNWUznGf0_Uxxch0l2wyy33MZW6d8tFTryxD_xhyvyvOLCcoPyt7N2XlDYITdLovFNQxpFADR__JsMj3DyuXGGJKCofkbjrXVZW3V3wBOPDY0no4Ad6u094ZBX8Gp5LHySuV30EXMBVh0aHkx5eVAdd5ou3FjeVC1nPB8LTMTYJm5nayYHwA4vZZlZw6V3K5Y0Mg3mN2uY8hHl-NlzpwYVLgIfOiQ4acbfgZAUprZdfWdkDBRIyhRYhThb9kDTwK8zGlJdgDHsthRFmTWf2_7PO-Ge7JSe3HOOZugVuyhZDeGiLNeVJLWQ_EPKjG6NaaMt8UZhQ7cFkN9BJA6uzb3aDFid0bUcEkmPX-F2x_-zbvt6qAEQqGDWA7LpQwbPoxtDk6RS_ZNOwaHxVpgJVJjHXIkptiBiP9Rvb7uJdP90zD_kpwfSgdElU3_zNXXtzdNahitUDLAi-bxNc6Ee6On8OkeRpYdxorsBoiDx-8pDiUFMmgK8t5wDvryKT868lNSdvm7Ag1Ed_YOi5tkIg600a7kLMo_JktmzPWPVy-E9vEsn4g_2mmS-hG6K6YlrD566tPl3e5v2uzdJqkEBln7PCjm95pbKy6SaDSM4epPfZSKXNjLfJfalJWbEPi9pRhZDnoKNQtTUlfyw9VYLbZDkG5Tm-wshOLfmzuRNxQOgwPbf4WZefSEDamyVG8yM67Ia713E27plk5M"
+# Masukkan Cookie .ROBLOSECURITY kamu di sini
+COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_..."
 
 # Colors
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-print_status() { echo -e "${YELLOW}➤ $1${NC}"; }
+# --- PREPARE SQL ---
+# Escape single quotes agar tidak merusak perintah SQL
+SAFE_COOKIE=$(echo "$COOKIE_VALUE" | sed "s/'/''/g")
 
-check_deps() {
-    if ! command -v sqlite3 &> /dev/null; then
-        print_status "Menginstal sqlite3..."
-        pkg update -y && pkg install sqlite -y
-    fi
-}
+# Generate Chrome Timestamp
+NOW=$(($(date +%s) * 1000000 + 11644473600000000))
+EXPIRE=$(($NOW + 31536000000000)) # Valid 1 tahun ke depan
 
-create_sql_file() {
-    # Escape single quotes agar tidak error saat eksekusi SQL
-    SAFE_COOKIE=$(echo "$COOKIE_VALUE" | sed "s/'/''/g")
-    
-    # Timestamp Chrome format (Microseconds)
-    NOW=$(($(date +%s) * 1000000 + 11644473600000000))
-    EXPIRE=$(($NOW + 31536000000000)) # Valid untuk 1 tahun
-
-    cat > "$REMOTE_SQL_FILE" << EOF
+cat > "$REMOTE_SQL_FILE" << EOF
 BEGIN TRANSACTION;
 DELETE FROM cookies WHERE name = '.ROBLOSECURITY' AND host_key = '.roblox.com';
 INSERT INTO cookies (
@@ -48,33 +39,21 @@ INSERT INTO cookies (
 );
 COMMIT;
 EOF
-}
 
-main() {
-    echo -e "${GREEN}=== ROBLOX INJECTOR (SU -C MODE) ===${NC}"
-    
-    # 1. Pastikan sqlite3 tersedia
-    check_deps
-    
-    # 2. Buat file SQL instruksi
-    create_sql_file
-    
-    # 3. Jalankan rangkaian perintah sebagai root menggunakan su -c
-    # Perintah: Stop Roblox -> Inject SQL -> Hapus file sementara
-    print_status "Memulai proses injeksi via su -c..."
-    
-    su -c "
-        am force-stop $ROBLOX_PACKAGE && \
-        sqlite3 $COOKIE_DB < $REMOTE_SQL_FILE && \
-        rm $REMOTE_SQL_FILE
-    "
+# --- EXECUTION ---
+echo -e "${YELLOW}➤ Menjalankan injeksi via su -c...${NC}"
 
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ Berhasil! Cookie telah disuntikkan.${NC}"
-        echo -e "${YELLOW}Silakan buka aplikasi Roblox sekarang.${NC}"
-    else
-        echo -e "${RED}✗ Terjadi kesalahan. Pastikan akses root diberikan.${NC}"
-    fi
-}
+# Gabungkan semua perintah sistem dalam satu blok su -c
+su -c "
+    am force-stop $ROBLOX_PACKAGE && \
+    sqlite3 $COOKIE_DB < $REMOTE_SQL_FILE && \
+    rm $REMOTE_SQL_FILE
+"
 
-main
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ Berhasil disuntikkan! Silakan buka Roblox.${NC}"
+else
+    echo -e "${RED}✗ Gagal. Pastikan kamu sudah memberikan izin root (Magisk/KernelSU).${NC}"
+    # Hapus file temp jika su -c gagal di tengah jalan
+    [ -f "$REMOTE_SQL_FILE" ] && rm "$REMOTE_SQL_FILE"
+fi
