@@ -62,10 +62,10 @@ do_inject_cookie() {
         return
     fi
 
-    # 4. Tentukan Path Cookie (Logika Folder Ganda) [cite: 6, 7]
+    # 4. Tentukan Path Cookie (Logika Folder Ganda)
     cookie_path=""
-    [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies" [cite: 6]
-    [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies" [cite: 7]
+    [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
+    [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
 
     if [ -z "$cookie_path" ]; then
         mkdir -p "$folder/app_webview/Default"
