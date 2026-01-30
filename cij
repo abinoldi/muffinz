@@ -1,11 +1,15 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX COOKIE INJECTOR v3.9 (MODERN WEBVIEW FIX)
+# ROBLOX COOKIE GENERATOR & RESTORE v7.0
+# (Metode: Generate DB di Temp -> Restore ke App)
 # ==========================================================
 
+# Konfigurasi Path
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
-TMP_SQLITE="/data/local/tmp/sqlite3_inject"
+TMP_SQLITE="/data/local/tmp/sqlite3_exec"
+TEMP_DB_DIR="/data/local/tmp/rbx_temp_cookies"
+COOKIE_QUEUE="/data/local/tmp/rbx_queue.txt"
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -14,7 +18,9 @@ check_root() {
     fi
 }
 
-prepare_sqlite() {
+# Menyiapkan Binary Sqlite
+prepare_env() {
+    # 1. Siapkan Sqlite
     rm -f "$TMP_SQLITE"
     if [ -f "$TERMUX_SQLITE" ]; then
         cp "$TERMUX_SQLITE" "$TMP_SQLITE"
@@ -25,82 +31,149 @@ prepare_sqlite() {
     fi
 
     if [ -z "$SQLITE_BIN" ] || [ ! -x "$SQLITE_BIN" ]; then
-        echo "❌ sqlite3 tidak ditemukan. Pastikan pkg install sqlite di Termux."
+        echo "❌ sqlite3 tidak ditemukan. Wajib install di Termux."
         exit 1
+    fi
+
+    # 2. Siapkan Folder Temp untuk DB
+    rm -rf "$TEMP_DB_DIR"
+    mkdir -p "$TEMP_DB_DIR"
+    chmod 777 "$TEMP_DB_DIR"
+}
+
+# --- TAHAP 1: MEMBUAT FILE DATABASE DI FOLDER TEMP ---
+generate_db_file() {
+    local index="$1"
+    local raw_cookie="$2"
+    local db_path="$TEMP_DB_DIR/cookie_$index.db"
+
+    # Hapus jika ada sisa
+    rm -f "$db_path"
+
+    # 1. Buat Tabel (Struktur Lengkap v3.9)
+    "$SQLITE_BIN" "$db_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, top_frame_site_key TEXT NOT NULL DEFAULT '', UNIQUE (host_key, name, path));"
+
+    # 2. Isi Cookie
+    "$SQLITE_BIN" "$db_path" "INSERT INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, top_frame_site_key) VALUES ((strftime('%s','now') * 1000000), '.roblox.com', '.ROBLOSECURITY', '$raw_cookie', '/', 253402300799000000, 1, 1, (strftime('%s','now') * 1000000), 1, 1, 1, -1, 0, '');"
+
+    if [ -f "$db_path" ]; then
+        echo "   ✅ Generated DB #$index"
+    else
+        echo "   ❌ Gagal membuat DB #$index"
     fi
 }
 
-do_inject_cookie() {
-    echo "=========================================="
-    echo "    ROBLOX COOKIE INJECTOR v3.9 (FIX)     "
-    echo "=========================================="
-    prepare_sqlite
+# --- TAHAP 2: RESTORE KE APLIKASI (Metode rbx_tulz) ---
+restore_to_app() {
+    local pkg_name="$1"
+    local source_db="$2"
     
-    # 1. Deteksi Aplikasi
+    local target_root="/data/data/$pkg_name"
+    local target_folder="$target_root/app_webview/Default"
+    local target_file="$target_folder/Cookies"
+
+    echo "🔄 Mengirim ke: $pkg_name"
+
+    # 1. Pastikan folder tujuan ada
+    if [ ! -d "$target_folder" ]; then
+        mkdir -p "$target_folder"
+        # Fix owner folder parent dulu agar tidak crash
+        local uid_awal=$(stat -c "%u:%g" "$target_root")
+        chown -R "$uid_awal" "$target_root/app_webview"
+    fi
+
+    # 2. Force Stop
+    am force-stop "$pkg_name" > /dev/null 2>&1
+
+    # 3. COPY FILE (Metode Restore) [cite: 11]
+    cp "$source_db" "$target_file"
+
+    # 4. FIX PERMISSIONS (Metode rbx_tulz) [cite: 12]
+    # Kita ambil UID pemilik asli aplikasi
+    local app_uid=$(stat -c "%u:%g" "$target_root")
+    
+    chown -R "$app_uid" "$target_root/app_webview"
+    chmod 660 "$target_file"
+    
+    echo "   ✨ SUKSES TERPASANG"
+}
+
+do_main_process() {
+    echo "=========================================="
+    echo "   ROBLOX GENERATOR & RESTORE (v7.0)      "
+    echo "=========================================="
+    prepare_env
+    
+    # Deteksi Aplikasi
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    if [ ${#pkgs[@]} -eq 0 ]; then
+    total_apps=${#pkgs[@]}
+    
+    if [ $total_apps -eq 0 ]; then
         echo "❌ Tidak ada aplikasi Roblox Clone."
         return
     fi
 
-    echo "Daftar aplikasi:"
-    for i in "${!pkgs[@]}"; do
-        echo "$((i+1)). ${pkgs[$i]}"
+    # --- LANGKAH 1: INPUT COOKIE ---
+    echo "📱 Terdeteksi $total_apps aplikasi."
+    echo "📝 INPUT COOKIE (Ketik 'done' jika selesai)"
+    echo "------------------------------------------"
+    
+    rm -f "$COOKIE_QUEUE"
+    i=0
+    while true; do
+        display_num=$((i + 1))
+        echo -n "[$display_num] Cookie: "
+        read -r input_cookie
+
+        if [ "$input_cookie" = "done" ]; then break; fi
+        if [ -n "$input_cookie" ]; then
+            echo "$input_cookie" >> "$COOKIE_QUEUE"
+            i=$((i + 1))
+        fi
+        if [ $i -ge $total_apps ]; then echo "⚠️  Slot penuh."; break; fi
     done
+    total_cookies=$i
+
+    # --- LANGKAH 2: GENERATE DB DI TEMP ---
     echo "------------------------------------------"
-
-    # 2. Pilih Target
-    echo -n "❓ Pilih nomor aplikasi (1-${#pkgs[@]}): "
-    read choice
-    index=$((choice-1))
-    [ $index -lt 0 ] || [ $index -ge ${#pkgs[@]} ] && echo "❌ Pilihan salah." && return
-    SELECTED_PKG="${pkgs[$index]}"
-    folder="/data/data/$SELECTED_PKG"
-
-    # 3. Input Cookie
+    echo "🔨 [Phase 1] Membuat Database di Temp..."
+    echo "   Folder: $TEMP_DB_DIR"
     echo "------------------------------------------"
-    echo "📝 Masukkan Cookie ROBLOSECURITY:"
-    read -r CUSTOM_COOKIE
-    [ -z "$CUSTOM_COOKIE" ] && echo "❌ Cookie kosong!" && return
-
-    # 4. Tentukan Path
-    cookie_path=""
-    [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
-    [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
     
-    # Fallback path
-    if [ -z "$cookie_path" ]; then
-        mkdir -p "$folder/app_webview/Default"
-        cookie_path="$folder/app_webview/Default/Cookies"
-    fi
+    line_num=1
+    while [ $line_num -le $total_cookies ]; do
+        current_cookie=$(sed "${line_num}q;d" "$COOKIE_QUEUE")
+        generate_db_file "$line_num" "$current_cookie"
+        line_num=$((line_num + 1))
+    done
 
-    # 5. Force Stop (WAJIB)
-    am force-stop "$SELECTED_PKG"
-
-    # 6. Injeksi SQL (UPDATED v3.9)
-    echo "⏳ Menyuntikkan cookie..."
+    # --- LANGKAH 3: RESTORE KE APP ---
+    echo "------------------------------------------"
+    echo "🚀 [Phase 2] Mendistribusikan ke Aplikasi..."
+    echo "------------------------------------------"
     
-    # Query Hapus Lama
-    "$SQLITE_BIN" "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
+    idx=0
+    # Loop paket aplikasi
+    for pkg in "${pkgs[@]}"; do
+        # Hitung nomor file DB (mulai dari 1)
+        db_num=$((idx + 1))
+        source_db="$TEMP_DB_DIR/cookie_$db_num.db"
 
-    # Query Insert Baru (Ditambahkan top_frame_site_key)
-    # Kita menggunakan format INSERT OR REPLACE untuk keamanan ganda
-    # Kolom top_frame_site_key diisi string kosong ('') untuk menghindari error NOT NULL
-    "$SQLITE_BIN" "$cookie_path" "INSERT OR REPLACE INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, top_frame_site_key) VALUES ((strftime('%s','now') * 1000000), '.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, (strftime('%s','now') * 1000000), 1, 1, 1, -1, 0, '');"
+        # Jika file DB tidak ada (cookie habis), berhenti
+        if [ ! -f "$source_db" ]; then
+            break
+        fi
 
-    if [ $? -eq 0 ]; then
-        # 7. Fix Permissions
-        app_uid=$(stat -c "%u:%g" "$folder")
-        chown -R "$app_uid" "$folder/app_webview"
-        chmod 660 "$cookie_path"
-        echo "------------------------------------------"
-        echo "✨ BERHASIL! Error top_frame_site_key teratasi."
-        echo "📂 Target: $SELECTED_PKG"
-    else
-        echo "❌ Masih Gagal. Coba cek log di atas."
-        echo "💡 Tips: Jika masih error kolom lain, mungkin versi WebView Anda sangat baru."
-    fi
+        restore_to_app "$pkg" "$source_db"
+        idx=$((idx + 1))
+    done
+
+    # Bersihkan
+    rm -rf "$TEMP_DB_DIR"
+    rm -f "$COOKIE_QUEUE"
+    echo "------------------------------------------"
+    echo "✨ SELESAI! $idx akun berhasil diproses."
 }
 
 check_root
-do_inject_cookie
+do_main_process
