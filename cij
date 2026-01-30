@@ -1,27 +1,15 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ROBLOX Cookie Injector - Absolute Path Version
-# Target Package: com.roblox.client
-
-# --- DEFINISI PATH BINARY ---
-# Ini memastikan root menggunakan sqlite3 milik Termux, bukan milik sistem Android
+# Konfigurasi Path Berdasarkan Hasil 'which sqlite3'
 SQLITE_BIN="/data/data/com.termux/files/usr/bin/sqlite3"
-
-# --- CONFIGURATION ---
-ROBLOX_PACKAGE="com.roblox.client"
+ROBLOX_PACKAGE="com.roblox.clienb"
 COOKIE_DB="/data/data/$ROBLOX_PACKAGE/app_webview/Default/Cookies"
 REMOTE_SQL_FILE="/data/data/com.termux/files/home/inject_temp.sql"
 
 # Masukkan Cookie .ROBLOSECURITY kamu di sini
 COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_CAEaAhADIhsKBGR1aWQSEzk5NTYwNDQzMjI2NTQ4MDcyMDEoAw.0X7UmuL9ezbQiDLC6EIhQuFOE8OUPLwDwr5dKIs4qoldSQsCMiOk_Tx0MA7e8ZQsBP2x6rg3KM3rwqmNWUznGf0_Uxxch0l2wyy33MZW6d8tFTryxD_xhyvyvOLCcoPyt7N2XlDYITdLovFNQxpFADR__JsMj3DyuXGGJKCofkbjrXVZW3V3wBOPDY0no4Ad6u094ZBX8Gp5LHySuV30EXMBVh0aHkx5eVAdd5ou3FjeVC1nPB8LTMTYJm5nayYHwA4vZZlZw6V3K5Y0Mg3mN2uY8hHl-NlzpwYVLgIfOiQ4acbfgZAUprZdfWdkDBRIyhRYhThb9kDTwK8zGlJdgDHsthRFmTWf2_7PO-Ge7JSe3HOOZugVuyhZDeGiLNeVJLWQ_EPKjG6NaaMt8UZhQ7cFkN9BJA6uzb3aDFid0bUcEkmPX-F2x_-zbvt6qAEQqGDWA7LpQwbPoxtDk6RS_ZNOwaHxVpgJVJjHXIkptiBiP9Rvb7uJdP90zD_kpwfSgdElU3_zNXXtzdNahitUDLAi-bxNc6Ee6On8OkeRpYdxorsBoiDx-8pDiUFMmgK8t5wDvryKT868lNSdvm7Ag1Ed_YOi5tkIg600a7kLMo_JktmzPWPVy-E9vEsn4g_2mmS-hG6K6YlrD566tPl3e5v2uzdJqkEBln7PCjm95pbKy6SaDSM4epPfZSKXNjLfJfalJWbEPi9pRhZDnoKNQtTUlfyw9VYLbZDkG5Tm-wshOLfmzuRNxQOgwPbf4WZefSEDamyVG8yM67Ia713E27plk5M"
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-# --- PREPARE SQL ---
+# Persiapan SQL (Sesuai skema database Cookies_Salinan.db)
 SAFE_COOKIE=$(echo "$COOKIE_VALUE" | sed "s/'/''/g")
 NOW=$(($(date +%s) * 1000000 + 11644473600000000))
 EXPIRE=$(($NOW + 31536000000000))
@@ -41,11 +29,8 @@ INSERT INTO cookies (
 COMMIT;
 EOF
 
-# --- EXECUTION ---
-echo -e "${YELLOW}➤ Menjalankan injeksi dengan SQLITE_BIN: $SQLITE_BIN${NC}"
-
-# Menjalankan perintah sebagai root
-# Bagian ini menggunakan variable SQLITE_BIN yang sudah didefinisikan di atas
+# Eksekusi langsung menggunakan su -c untuk menghindari error environment tsu
+echo "Menjalankan injeksi..."
 su -c "
     am force-stop $ROBLOX_PACKAGE && \
     $SQLITE_BIN $COOKIE_DB < $REMOTE_SQL_FILE && \
@@ -53,8 +38,8 @@ su -c "
 "
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Berhasil! Cookie telah disuntikkan menggunakan path absolut.${NC}"
+    echo -e "\033[0;32m✓ Berhasil! Cookie telah disuntikkan.\033[0m"
 else
-    echo -e "${RED}✗ Gagal. Pastikan file sqlite3 ada di $SQLITE_BIN dan root aktif.${NC}"
+    echo -e "\033[0;31m✗ Gagal. Pastikan akses root Magisk/KernelSU sudah diberikan.\033[0m"
     [ -f "$REMOTE_SQL_FILE" ] && rm "$REMOTE_SQL_FILE"
 fi
