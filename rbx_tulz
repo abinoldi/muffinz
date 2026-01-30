@@ -1,15 +1,12 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX COOKIE GENERATOR & RESTORE v7.0
-# (Metode: Generate DB di Temp -> Restore ke App)
+# ROBLOX CLONE MANAGER v2.8 (SEQUENTIAL RESTORE)
 # ==========================================================
 
-# Konfigurasi Path
-TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
-TMP_SQLITE="/data/local/tmp/sqlite3_exec"
-TEMP_DB_DIR="/data/local/tmp/rbx_temp_cookies"
-COOKIE_QUEUE="/data/local/tmp/rbx_queue.txt"
+BACKUP_DIR="/sdcard/RobloxBackups"
+DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
+BASE_URL="http://146.190.147.43:88"
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -18,162 +15,140 @@ check_root() {
     fi
 }
 
-# Menyiapkan Binary Sqlite
-prepare_env() {
-    # 1. Siapkan Sqlite
-    rm -f "$TMP_SQLITE"
-    if [ -f "$TERMUX_SQLITE" ]; then
-        cp "$TERMUX_SQLITE" "$TMP_SQLITE"
-        chmod 755 "$TMP_SQLITE"
-        SQLITE_BIN="$TMP_SQLITE"
-    else
-        SQLITE_BIN=$(which sqlite3)
-    fi
-
-    if [ -z "$SQLITE_BIN" ] || [ ! -x "$SQLITE_BIN" ]; then
-        echo "❌ sqlite3 tidak ditemukan. Wajib install di Termux."
-        exit 1
-    fi
-
-    # 2. Siapkan Folder Temp untuk DB
-    rm -rf "$TEMP_DB_DIR"
-    mkdir -p "$TEMP_DB_DIR"
-    chmod 777 "$TEMP_DB_DIR"
-}
-
-# --- TAHAP 1: MEMBUAT FILE DATABASE DI FOLDER TEMP ---
-generate_db_file() {
-    local index="$1"
-    local raw_cookie="$2"
-    local db_path="$TEMP_DB_DIR/cookie_$index.db"
-
-    # Hapus jika ada sisa
-    rm -f "$db_path"
-
-    # 1. Buat Tabel (Struktur Lengkap v3.9)
-    "$SQLITE_BIN" "$db_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, top_frame_site_key TEXT NOT NULL DEFAULT '', UNIQUE (host_key, name, path));"
-
-    # 2. Isi Cookie
-    "$SQLITE_BIN" "$db_path" "INSERT INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, top_frame_site_key) VALUES ((strftime('%s','now') * 1000000), '.roblox.com', '.ROBLOSECURITY', '$raw_cookie', '/', 253402300799000000, 1, 1, (strftime('%s','now') * 1000000), 1, 1, 1, -1, 0, '');"
-
-    if [ -f "$db_path" ]; then
-        echo "   ✅ Generated DB #$index"
-    else
-        echo "   ❌ Gagal membuat DB #$index"
-    fi
-}
-
-# --- TAHAP 2: RESTORE KE APLIKASI (Metode rbx_tulz) ---
-restore_to_app() {
-    local pkg_name="$1"
-    local source_db="$2"
-    
-    local target_root="/data/data/$pkg_name"
-    local target_folder="$target_root/app_webview/Default"
-    local target_file="$target_folder/Cookies"
-
-    echo "🔄 Mengirim ke: $pkg_name"
-
-    # 1. Pastikan folder tujuan ada
-    if [ ! -d "$target_folder" ]; then
-        mkdir -p "$target_folder"
-        # Fix owner folder parent dulu agar tidak crash
-        local uid_awal=$(stat -c "%u:%g" "$target_root")
-        chown -R "$uid_awal" "$target_root/app_webview"
-    fi
-
-    # 2. Force Stop
-    am force-stop "$pkg_name" > /dev/null 2>&1
-
-    # 3. COPY FILE (Metode Restore) [cite: 11]
-    cp "$source_db" "$target_file"
-
-    # 4. FIX PERMISSIONS (Metode rbx_tulz) [cite: 12]
-    # Kita ambil UID pemilik asli aplikasi
-    local app_uid=$(stat -c "%u:%g" "$target_root")
-    
-    chown -R "$app_uid" "$target_root/app_webview"
-    chmod 660 "$target_file"
-    
-    echo "   ✨ SUKSES TERPASANG"
-}
-
-do_main_process() {
+do_backup() {
     echo "=========================================="
-    echo "   ROBLOX GENERATOR & RESTORE (v7.0)      "
+    echo "       MEMULAI PROSES BACKUP...           "
     echo "=========================================="
-    prepare_env
+    mkdir -p "$BACKUP_DIR"
+    count=0
+    for folder in /data/data/com.roblox.clien*; do
+        [ -e "$folder" ] || continue
+        pkg_name=$(basename "$folder")
+        cookie_path=""
+        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
+        [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
+
+        if [ -n "$cookie_path" ]; then
+            cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
+            echo "✅ Backup SUKSES: $pkg_name"
+            count=$((count + 1))
+        fi
+    done
+    echo "------------------------------------------"
+    echo "Selesai! $count database tersimpan."
+}
+
+# Fungsi Restore Berdasarkan Urutan (Tanpa Cek Nama Paket)
+do_restore_sequential() {
+    echo "=========================================="
+    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
+    echo "=========================================="
     
-    # Deteksi Aplikasi
+    # Ambil daftar file backup ke dalam array
+    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    # Ambil daftar aplikasi terinstall ke dalam array
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    total_apps=${#pkgs[@]}
-    
-    if [ $total_apps -eq 0 ]; then
-        echo "❌ Tidak ada aplikasi Roblox Clone."
-        return
+
+    total_backups=${#backups[@]}
+    total_pkgs=${#pkgs[@]}
+
+    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
+        echo "❌ Data backup atau aplikasi tidak ditemukan."
+        return 1
     fi
 
-    # --- LANGKAH 1: INPUT COOKIE ---
-    echo "📱 Terdeteksi $total_apps aplikasi."
-    echo "📝 INPUT COOKIE (Ketik 'done' jika selesai)"
+    echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
     echo "------------------------------------------"
-    
-    rm -f "$COOKIE_QUEUE"
+
+    # Loop menggunakan indeks agar urut
     i=0
-    while true; do
-        display_num=$((i + 1))
-        echo -n "[$display_num] Cookie: "
-        read -r input_cookie
+    while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
+        current_db="${backups[$i]}"
+        current_pkg="${pkgs[$i]}"
+        
+        target_folder="/data/data/$current_pkg"
+        target_dir_parent="$target_folder/app_webview/Default"
+        target_path="$target_dir_parent/Cookies"
 
-        if [ "$input_cookie" = "done" ]; then break; fi
-        if [ -n "$input_cookie" ]; then
-            echo "$input_cookie" >> "$COOKIE_QUEUE"
-            i=$((i + 1))
-        fi
-        if [ $i -ge $total_apps ]; then echo "⚠️  Slot penuh."; break; fi
+        echo "🔄 Merestore [$(basename "$current_db")] ke [$current_pkg]..."
+
+        mkdir -p "$target_dir_parent"
+        cp "$current_db" "$target_path"
+        
+        # Perbaikan Izin Akses
+        app_uid=$(stat -c "%u:%g" "$target_folder")
+        chown -R "$app_uid" "$target_folder/app_webview"
+        chmod 660 "$target_path"
+        
+        echo "✅ Berhasil."
+        i=$((i + 1))
     done
-    total_cookies=$i
-
-    # --- LANGKAH 2: GENERATE DB DI TEMP ---
     echo "------------------------------------------"
-    echo "🔨 [Phase 1] Membuat Database di Temp..."
-    echo "   Folder: $TEMP_DB_DIR"
-    echo "------------------------------------------"
-    
-    line_num=1
-    while [ $line_num -le $total_cookies ]; do
-        current_cookie=$(sed "${line_num}q;d" "$COOKIE_QUEUE")
-        generate_db_file "$line_num" "$current_cookie"
-        line_num=$((line_num + 1))
-    done
-
-    # --- LANGKAH 3: RESTORE KE APP ---
-    echo "------------------------------------------"
-    echo "🚀 [Phase 2] Mendistribusikan ke Aplikasi..."
-    echo "------------------------------------------"
-    
-    idx=0
-    # Loop paket aplikasi
-    for pkg in "${pkgs[@]}"; do
-        # Hitung nomor file DB (mulai dari 1)
-        db_num=$((idx + 1))
-        source_db="$TEMP_DB_DIR/cookie_$db_num.db"
-
-        # Jika file DB tidak ada (cookie habis), berhenti
-        if [ ! -f "$source_db" ]; then
-            break
-        fi
-
-        restore_to_app "$pkg" "$source_db"
-        idx=$((idx + 1))
-    done
-
-    # Bersihkan
-    rm -rf "$TEMP_DB_DIR"
-    rm -f "$COOKIE_QUEUE"
-    echo "------------------------------------------"
-    echo "✨ SELESAI! $idx akun berhasil diproses."
+    echo "Selesai! $i akun dipulihkan."
 }
 
+do_uninstall() {
+    echo "=========================================="
+    echo "       MENGHAPUS APLIKASI CLONE...        "
+    echo "=========================================="
+    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+    [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
+    
+    echo -n "❓ Yakin hapus SEMUA? (y/n): "
+    read confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        for pkg in $pkgs; do
+            pm uninstall "$pkg" > /dev/null 2>&1 && echo "✅ $pkg Terhapus."
+        done
+    fi
+}
+
+do_auto_process() {
+    echo "=========================================="
+    echo "       PROSES OTOMATIS BERJALAN           "
+    echo "=========================================="
+    total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
+    [ "$total_backup" -eq 0 ] && echo "❌ Tidak ada backup." && return
+
+    mkdir -p "$DOWNLOAD_DIR"
+    for i in $(seq 1 "$total_backup"); do
+        echo "------------------------------------------"
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+        [ ! -f "$SAVE_PATH" ] && curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
+        
+        if [ -f "$SAVE_PATH" ]; then
+            echo "⏳ Memasang $APK_NAME..."
+            pm install -r "$SAVE_PATH" > /dev/null 2>&1
+            sleep 3
+        fi
+    done
+
+    do_restore_sequential
+    echo "✨ SEMUA PROSES SELESAI!"
+}
+
+# --- MAIN MENU ---
 check_root
-do_main_process
+while true; do
+    echo ""
+    echo "=========================================="
+    echo "    ROBLOX CLONE MANAGER v2.8 (ROOT)      "
+    echo "=========================================="
+    echo "1. Backup Akun"
+    echo "2. Restore Akun (Urutan Sequential)"
+    echo "3. Hapus Semua Aplikasi Clone"
+    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
+    echo "5. Keluar"
+    echo "------------------------------------------"
+    echo -n "Pilih menu [1-5]: "
+    read choice
+    case $choice in
+        1) do_backup ;;
+        2) do_restore_sequential ;;
+        3) do_uninstall ;;
+        4) do_auto_process ;;
+        5) exit 0 ;;
+        *) echo "⚠️ Pilihan salah." ;;
+    esac
+done
