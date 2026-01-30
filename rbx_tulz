@@ -138,89 +138,74 @@ uninstall_apps() {
 download_apk() {
     local count="$1"
     echo "Download $count APK dari server..."
-    
+
     # Validasi
-    if [ -z "$count" ]; then
-        echo "Error: Jumlah kosong"
-        return 1
-    fi
-    
-    if [ "$count" -lt 1 ] || [ "$count" -gt 8 ]; then
+    if [ -z "$count" ] || [ "$count" -lt 1 ] || [ "$count" -gt 8 ]; then
         echo "Error: Jumlah harus 1-8"
         return 1
     fi
-    
+
     # Buat folder
     mkdir -p "$DOWNLOAD_DIR"
-    cd "$DOWNLOAD_DIR" || {
-        echo "Error: Tidak bisa masuk folder"
-        return 1
-    }
-    
-    # Hapus lama
-    rm -f *.apk 2>/dev/null
-    
+    cd "$DOWNLOAD_DIR" || { echo "Error: Tidak bisa masuk folder"; return 1; }
+
     local downloaded=0
-    
-    # Download loop
+
     echo "Memulai download..."
     i=1
     while [ "$i" -le "$count" ]; do
         local apk_file="$i.apk"
         local url="$SERVER_URL/$apk_file"
-        
+
         echo "Download $i/$count: $apk_file"
         log_msg "Download: $apk_file"
-        
-        # Coba wget
-        if command -v wget >/dev/null 2>&1; then
-            if wget --timeout=30 --tries=2 --quiet "$url" -O "$apk_file" 2>/dev/null; then
-                if [ -f "$apk_file" ] && [ -s "$apk_file" ]; then
-                    downloaded=$((downloaded + 1))
-                    echo "  Berhasil: $apk_file"
-                    log_msg "Berhasil: $apk_file"
-                else
-                    echo "  Gagal: $apk_file"
-                    log_msg "Gagal: $apk_file"
-                fi
+
+        # Retry sampai 3x
+        local attempt=1
+        local success=0
+        while [ "$attempt" -le 3 ]; do
+            if command -v wget >/dev/null 2>&1; then
+                wget --timeout=30 --tries=2 "$url" -O "$apk_file"
+            elif command -v curl >/dev/null 2>&1; then
+                curl -L --connect-timeout 30 --max-time 60 --retry 2 -o "$apk_file" "$url"
             else
-                echo "  Gagal download: $apk_file"
-                log_msg "Gagal download: $apk_file"
+                echo "Error: wget/curl tidak ada"
+                log_msg "Error: wget/curl tidak ada"
+                return 1
             fi
-        # Coba curl
-        elif command -v curl >/dev/null 2>&1; then
-            if curl -L --connect-timeout 30 --max-time 60 --retry 2 --silent "$url" -o "$apk_file" 2>/dev/null; then
-                if [ -f "$apk_file" ] && [ -s "$apk_file" ]; then
-                    downloaded=$((downloaded + 1))
-                    echo "  Berhasil: $apk_file"
-                    log_msg "Berhasil: $apk_file"
-                else
-                    echo "  Gagal: $apk_file"
-                    log_msg "Gagal: $apk_file"
-                fi
+
+            # Cek file berhasil
+            if [ -f "$apk_file" ] && [ -s "$apk_file" ]; then
+                echo "  Berhasil: $apk_file"
+                log_msg "Berhasil: $apk_file"
+                downloaded=$((downloaded + 1))
+                success=1
+                break
             else
-                echo "  Gagal download: $apk_file"
-                log_msg "Gagal download: $apk_file"
+                echo "  Gagal download (attempt $attempt): $apk_file"
+                log_msg "Gagal download (attempt $attempt): $apk_file"
+                attempt=$((attempt + 1))
+                sleep 2
             fi
-        else
-            echo "Error: wget/curl tidak ada"
-            log_msg "Error: wget/curl tidak ada"
-            return 1
+        done
+
+        if [ "$success" -eq 0 ]; then
+            echo "  Error: Tidak berhasil download $apk_file setelah 3 percobaan"
+            log_msg "Tidak berhasil download $apk_file"
         fi
-        
+
         i=$((i + 1))
-        sleep 1
     done
-    
+
     echo "Download selesai: $downloaded/$count berhasil"
     log_msg "Download selesai: $downloaded/$count"
-    
+
     if [ "$downloaded" -eq 0 ]; then
-        echo "Error: Tidak ada file didownload"
-        log_msg "Error: Tidak ada file didownload"
+        echo "Error: Tidak ada file berhasil didownload"
+        log_msg "Error: Tidak ada file berhasil didownload"
         return 1
     fi
-    
+
     return 0
 }
 
