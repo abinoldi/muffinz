@@ -1,12 +1,12 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX COOKIE INJECTOR v3.7 (FIXED TERMUX & SQL ERROR)
+# ROBLOX COOKIE INJECTOR v3.7 (FIXED SQL & TERMUX PATH)
 # ==========================================================
 
-# Path binary sqlite di Termux
+# Path binary sqlite di Termux Anda
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
-# Lokasi sementara agar bisa dijalankan oleh Root
+# Lokasi sementara agar bisa dijalankan oleh Root dengan lancar
 TMP_SQLITE="/data/local/tmp/sqlite3"
 
 check_root() {
@@ -18,17 +18,17 @@ check_root() {
 
 prepare_sqlite() {
     if [ -f "$TERMUX_SQLITE" ]; then
-        # Salin ke tmp agar Root punya akses eksekusi penuh
+        # Salin ke folder tmp agar Root punya izin eksekusi penuh
         cp "$TERMUX_SQLITE" "$TMP_SQLITE"
         chmod 777 "$TMP_SQLITE"
         SQLITE_BIN="$TMP_SQLITE"
     else
-        # Cari di system jika tidak ada di Termux
+        # Jika tidak ada di Termux, coba cari di sistem
         SQLITE_BIN=$(which sqlite3)
     fi
 
     if [ -z "$SQLITE_BIN" ]; then
-        echo "❌ sqlite3 tidak ditemukan. Silakan install di Termux: pkg install sqlite"
+        echo "❌ sqlite3 tidak ditemukan. Pastikan sudah 'pkg install sqlite' di Termux."
         exit 1
     fi
 }
@@ -38,7 +38,7 @@ do_inject_cookie() {
     echo "    ROBLOX COOKIE INJECTOR v3.7 (ROOT)    "
     echo "=========================================="
     prepare_sqlite
-    echo "✅ Menggunakan: $SQLITE_BIN"
+    echo "✅ Menggunakan sqlite3: $SQLITE_BIN"
 
     # 1. Deteksi Aplikasi
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
@@ -80,16 +80,16 @@ do_inject_cookie() {
     # 5. Force Stop
     am force-stop "$SELECTED_PKG"
 
-    # 6. Injeksi SQL (Fixed NOT NULL constraint failed)
+    # 6. Injeksi SQL (FIXED: Penambahan creation_utc)
     echo "⏳ Menyuntikkan cookie ke database..."
     
-    # Menambahkan nilai default (0 atau date) untuk kolom NOT NULL agar tidak error
-    NOW=$(date +%s)
+    # Ambil waktu sekarang dalam format UTC (microsecond simulation)
+    NOW=$(date +%s)000000
     
-    # Query untuk membuat tabel jika belum ada
+    # Buat tabel jika belum ada (Struktur Chrome/WebView terbaru)
     "$SQLITE_BIN" "$cookie_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, UNIQUE (host_key, name, path));"
 
-    # Query Insert dengan kolom lengkap untuk menghindari constraint error
+    # Hapus lama & Masukkan baru (Lengkap dengan creation_utc, samesite, dan source_scheme)
     "$SQLITE_BIN" "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
     "$SQLITE_BIN" "$cookie_path" "INSERT INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme) VALUES ($NOW, '.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, $NOW, 1, 1, 1, -1, 0);"
 
