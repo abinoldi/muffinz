@@ -329,30 +329,32 @@ restore_cookies() {
 get_app_count() {
     local installed=$(count_apps)
     local backup=$(count_backups)
-    
+
     echo "App terinstall: $installed"
     echo "File backup: $backup"
     log_msg "App terinstall: $installed"
     log_msg "File backup: $backup"
-    
+
+    local result=1
+
     if [ "$installed" -gt 0 ]; then
         echo "Gunakan app terinstall: $installed"
         log_msg "Gunakan app terinstall: $installed"
-        echo "$installed"
-        return
-    fi
-    
-    if [ "$backup" -gt 0 ]; then
+        result="$installed"
+    elif [ "$backup" -gt 0 ]; then
         echo "Gunakan jumlah backup: $backup"
         log_msg "Gunakan jumlah backup: $backup"
-        echo "$backup"
-        return
+        result="$backup"
+    else
+        echo "Gunakan default: 1"
+        log_msg "Gunakan default: 1"
+        result=1
     fi
-    
-    echo "Gunakan default: 1"
-    log_msg "Gunakan default: 1"
-    echo "1"
+
+    # PRINT ANGKA SAJA UNTUK ASSIGNMENT
+    echo "$result"
 }
+
 
 # Proses utama
 auto_process() {
