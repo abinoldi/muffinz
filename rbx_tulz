@@ -15,205 +15,209 @@ log_message() {
 
 # Fungsi cek Root
 check_root() {
-    if [ "$(id -u)" -ne 0 ]; then
+    if [ "$(id -u)" != "0" ]; then
         log_message "❌ Script ini MEMBUTUHKAN akses Root!"
         echo "Silakan jalankan dengan: su -c 'sh $0'"
         exit 1
     fi
 }
 
-# Set PATH untuk root (Termux specific)
+# Set PATH untuk root
 export PATH=/data/data/com.termux/files/usr/bin:$PATH
 
-# Fungsi untuk menghitung jumlah cookies dalam database
+# Fungsi untuk menghitung jumlah cookies
 count_cookies_in_db() {
     local db_file="$1"
     local count=0
     
     if [ ! -f "$db_file" ]; then
-        echo 0
+        echo "0"
         return
     fi
     
     if command -v sqlite3 >/dev/null 2>&1; then
-        count=$(sqlite3 "$db_file" "SELECT COUNT(*) FROM cookies;" 2>/dev/null || echo 0)
+        count=$(sqlite3 "$db_file" "SELECT COUNT(*) FROM cookies;" 2>/dev/null || echo "0")
     fi
     
     echo "$count"
 }
 
-# Fungsi untuk menghitung jumlah file backup
+# Fungsi untuk menghitung file backup
 count_backup_files() {
     if [ ! -d "$BACKUP_DIR" ]; then
-        echo 0
+        echo "0"
         return 0
     fi
     
-    # Hitung file .db yang ada di backup folder
-    local count=$(ls "$BACKUP_DIR"/*.db 2>/dev/null | wc -l)
-    echo $count
+    local count=$(ls "$BACKUP_DIR"/*.db 2>/dev/null | wc -l 2>/dev/null)
+    echo "$count"
 }
 
-# Fungsi 1: Hitung jumlah aplikasi Roblox yang terinstall
+# Fungsi 1: Hitung app terinstall
 count_installed_apps() {
     echo "=========================================="
-    echo "   STEP 1: MENGHITUNG APLIKASI TERINSTALL"
+    echo "   STEP 1: MENGHITUNG APLIKASI"
     echo "=========================================="
     
-    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    app_count=$(echo "$pkgs" | wc -l)
+    local pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+    local app_count=$(echo "$pkgs" | wc -l)
     
-    log_message "🔍 Mencari aplikasi Roblox..."
+    log_message "Mencari aplikasi Roblox..."
     
     if [ -z "$pkgs" ]; then
-        log_message "ℹ️ Tidak ada aplikasi Roblox yang terinstall!"
-        echo 0
+        log_message "Tidak ada aplikasi Roblox terinstall"
+        echo "0"
         return 0
     fi
     
-    log_message "✅ Ditemukan $app_count aplikasi Roblox:"
-    counter=1
+    log_message "Ditemukan $app_count aplikasi Roblox"
+    
+    local counter=1
     for pkg in $pkgs; do
         log_message "   $counter. $pkg"
         counter=$((counter + 1))
     done
     
-    echo $app_count
+    echo "$app_count"
 }
 
-# Fungsi 2: Backup semua cookies
+# Fungsi 2: Backup cookies
 backup_all_cookies() {
     echo "=========================================="
-    echo "   STEP 2: BACKUP SEMUA COOKIES"
+    echo "   STEP 2: BACKUP COOKIES"
     echo "=========================================="
     
     mkdir -p "$BACKUP_DIR"
-    total_apps=0
-    total_cookies=0
-    backup_count=0
+    local total_apps=0
+    local total_cookies=0
+    local backup_count=0
     
-    log_message "🔍 Mencari aplikasi Roblox untuk backup..."
+    log_message "Mencari cookies untuk backup..."
     
     for folder in /data/data/com.roblox.clien*; do
-        [ -e "$folder" ] || continue
+        if [ ! -e "$folder" ]; then
+            continue
+        fi
+        
         total_apps=$((total_apps + 1))
+        local pkg_name=$(basename "$folder")
+        local cookie_path=""
         
-        pkg_name=$(basename "$folder")
-        cookie_path=""
-        
-        # Cari file cookies
         if [ -f "$folder/app_webview/Default/Cookies" ]; then
             cookie_path="$folder/app_webview/Default/Cookies"
-            log_message "📍 $pkg_name: app_webview/Default/Cookies"
         elif [ -f "$folder/app_webview/Cookies" ]; then
             cookie_path="$folder/app_webview/Cookies"
-            log_message "📍 $pkg_name: app_webview/Cookies"
-        else
-            log_message "⚠️ $pkg_name: Cookies tidak ditemukan"
         fi
 
         if [ -n "$cookie_path" ]; then
-            backup_file="$BACKUP_DIR/${pkg_name}.db"
+            local backup_file="$BACKUP_DIR/${pkg_name}.db"
             
-            # Backup file
             cp "$cookie_path" "$backup_file"
             
-            # Hitung jumlah cookies
-            cookie_count=$(count_cookies_in_db "$backup_file")
+            local cookie_count=$(count_cookies_in_db "$backup_file")
             total_cookies=$((total_cookies + cookie_count))
             
-            log_message "✅ Backup: $pkg_name ($cookie_count cookies)"
+            log_message "Backup: $pkg_name ($cookie_count cookies)"
             backup_count=$((backup_count + 1))
+        else
+            log_message "Tidak ada cookies: $pkg_name"
         fi
     done
     
     if [ $backup_count -eq 0 ]; then
-        log_message "❌ Tidak ada cookies yang berhasil dibackup!"
-        echo 0
+        log_message "Tidak ada cookies yang dibackup"
+        echo "0"
         return 0
     fi
     
-    log_message "📊 BACKUP SELESAI: $backup_count/$total_apps apps, $total_cookies cookies"
-    
-    # Simpan jumlah backup ke file untuk referensi
-    echo $backup_count > "$BACKUP_DIR/.backup_count"
-    
-    echo $backup_count
+    log_message "BACKUP SELESAI: $backup_count/$total_apps apps, $total_cookies cookies"
+    echo "$backup_count"
 }
 
-# Fungsi 3: Uninstall semua aplikasi
+# Fungsi 3: Uninstall semua app
 uninstall_all_apps() {
     echo "=========================================="
-    echo "   STEP 3: UNINSTALL SEMUA APLIKASI"
+    echo "   STEP 3: UNINSTALL APPS"
     echo "=========================================="
     
-    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    total=$(echo "$pkgs" | wc -l)
+    local pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+    local total=$(echo "$pkgs" | wc -l)
     
     if [ -z "$pkgs" ]; then 
-        log_message "ℹ️ Tidak ada app yang perlu diuninstall"
-        echo 0
+        log_message "Tidak ada app untuk diuninstall"
+        echo "0"
         return 0
     fi
     
-    log_message "🗑️ Menghapus $total aplikasi..."
+    log_message "Menghapus $total aplikasi..."
     
-    uninstall_count=0
+    local uninstall_count=0
     for pkg in $pkgs; do
-        log_message "   ⏳ Menghapus $pkg..."
+        log_message "   Menghapus $pkg..."
         if pm uninstall "$pkg" > /dev/null 2>&1; then
-            log_message "   ✅ Berhasil dihapus"
+            log_message "   Berhasil"
             uninstall_count=$((uninstall_count + 1))
         else
-            log_message "   ❌ Gagal menghapus $pkg"
+            log_message "   Gagal"
         fi
         sleep 0.5
     done
     
-    log_message "✨ UNINSTALL SELESAI: $uninstall_count/$total apps dihapus"
-    echo $uninstall_count
+    log_message "UNINSTALL SELESAI: $uninstall_count/$total apps"
+    echo "$uninstall_count"
 }
 
-# Fungsi 4: Download APK dari server berdasarkan jumlah backup
+# Fungsi 4: Download APK dari server
 download_apk_from_server() {
     local app_count=$1
     echo "=========================================="
-    echo "   STEP 4: DOWNLOAD APK DARI SERVER"
+    echo "   STEP 4: DOWNLOAD APK"
     echo "=========================================="
     
     # Validasi input
-    if [ -z "$app_count" ] || ! [[ "$app_count" =~ ^[0-9]+$ ]] || [ "$app_count" -lt 1 ] || [ "$app_count" -gt 8 ]; then
-        log_message "❌ ERROR: Jumlah app tidak valid: '$app_count' (harus 1-8)"
+    if [ -z "$app_count" ]; then
+        log_message "ERROR: Jumlah app kosong"
         return 1
     fi
     
-    # Buat folder download jika belum ada
+    if ! echo "$app_count" | grep -q "^[0-9]\+$"; then
+        log_message "ERROR: Jumlah app bukan angka: $app_count"
+        return 1
+    fi
+    
+    if [ "$app_count" -lt 1 ] || [ "$app_count" -gt 8 ]; then
+        log_message "ERROR: Jumlah app harus 1-8: $app_count"
+        return 1
+    fi
+    
+    # Buat folder
     mkdir -p "$DOWNLOAD_DIR"
     cd "$DOWNLOAD_DIR" || {
-        log_message "❌ ERROR: Tidak bisa masuk ke folder $DOWNLOAD_DIR"
+        log_message "ERROR: Tidak bisa masuk ke $DOWNLOAD_DIR"
         return 1
     }
     
-    # Hapus file APK lama jika ada
+    # Hapus file lama
     rm -f *.apk 2>/dev/null
     
-    log_message "📁 Folder download: $DOWNLOAD_DIR"
-    log_message "📡 Server: $SERVER_URL"
-    log_message "📥 Mendownload $app_count APK files..."
+    log_message "Folder: $DOWNLOAD_DIR"
+    log_message "Server: $SERVER_URL"
+    log_message "Download $app_count APK..."
     
-    downloaded_count=0
-    failed_count=0
+    local downloaded_count=0
+    local failed_count=0
     
-    for i in $(seq 1 $app_count); do
-        apk_file="$i.apk"
-        url="$SERVER_URL/$apk_file"
+    for i in $(seq 1 "$app_count"); do
+        local apk_file="$i.apk"
+        local url="$SERVER_URL/$apk_file"
         
         echo ""
-        echo "⬇️  [$i/$app_count] Downloading $apk_file..."
-        log_message "Downloading: $apk_file"
+        echo "⬇️  [$i/$app_count] $apk_file"
+        log_message "Download: $apk_file"
         
-        # Coba download dengan wget atau curl
-        download_success=false
+        # Download dengan wget atau curl
+        local download_success=false
+        
         if command -v wget >/dev/null 2>&1; then
             if wget --timeout=30 --tries=3 --quiet "$url" -O "$apk_file" 2>/dev/null; then
                 download_success=true
@@ -223,173 +227,183 @@ download_apk_from_server() {
                 download_success=true
             fi
         else
-            log_message "❌ ERROR: Tidak ada wget atau curl!"
+            log_message "ERROR: wget/curl tidak ada"
             return 1
         fi
         
-        # Cek jika download berhasil
         if [ "$download_success" = true ] && [ -f "$apk_file" ] && [ -s "$apk_file" ]; then
-            file_size=$(du -h "$apk_file" 2>/dev/null | cut -f1 || echo "?KB")
-            log_message "✅ Berhasil: $apk_file ($file_size)"
+            local file_size=$(du -h "$apk_file" 2>/dev/null | cut -f1 || echo "?")
+            log_message "Berhasil: $apk_file ($file_size)"
             downloaded_count=$((downloaded_count + 1))
         else
-            log_message "❌ Gagal: $apk_file"
+            log_message "Gagal: $apk_file"
             rm -f "$apk_file" 2>/dev/null
             failed_count=$((failed_count + 1))
         fi
         
-        # Jeda sebentar antar download
         sleep 1
     done
     
     echo ""
-    log_message "📊 DOWNLOAD SELESAI: $downloaded_count berhasil, $failed_count gagal"
+    log_message "DOWNLOAD: $downloaded_count berhasil, $failed_count gagal"
     
     if [ $downloaded_count -eq 0 ]; then
-        log_message "❌ ERROR: Tidak ada file yang berhasil didownload!"
+        log_message "ERROR: Tidak ada file yang didownload"
         return 1
     fi
     
-    # Tampilkan file yang berhasil didownload
+    # Tampilkan file
     echo ""
-    echo "📋 File yang berhasil didownload:"
-    ls -la *.apk 2>/dev/null || echo "   Tidak ada file .apk"
+    echo "📋 File yang didownload:"
+    ls -la *.apk 2>/dev/null || echo "   Tidak ada"
     
     return 0
 }
 
-# Fungsi 5: Install semua APK yang didownload
+# Fungsi 5: Install APK
 install_all_downloaded_apps() {
     local app_count=$1
     echo "=========================================="
-    echo "   STEP 5: INSTALL SEMUA APK"
+    echo "   STEP 5: INSTALL APK"
     echo "=========================================="
     
-    # Validasi input
-    if [ -z "$app_count" ] || ! [[ "$app_count" =~ ^[0-9]+$ ]] || [ "$app_count" -lt 1 ] || [ "$app_count" -gt 8 ]; then
-        log_message "❌ ERROR: Jumlah app tidak valid: '$app_count'"
+    # Validasi
+    if [ -z "$app_count" ]; then
+        log_message "ERROR: Jumlah app kosong"
+        return 1
+    fi
+    
+    if ! echo "$app_count" | grep -q "^[0-9]\+$"; then
+        log_message "ERROR: Jumlah app bukan angka: $app_count"
+        return 1
+    fi
+    
+    if [ "$app_count" -lt 1 ] || [ "$app_count" -gt 8 ]; then
+        log_message "ERROR: Jumlah app harus 1-8: $app_count"
         return 1
     fi
     
     if [ ! -d "$DOWNLOAD_DIR" ]; then
-        log_message "❌ ERROR: Folder download tidak ditemukan: $DOWNLOAD_DIR"
+        log_message "ERROR: Folder tidak ditemukan: $DOWNLOAD_DIR"
         return 1
     fi
     
     cd "$DOWNLOAD_DIR" || {
-        log_message "❌ ERROR: Tidak bisa masuk ke folder $DOWNLOAD_DIR"
+        log_message "ERROR: Tidak bisa masuk ke $DOWNLOAD_DIR"
         return 1
     }
     
-    log_message "🔧 Memulai instalasi $app_count aplikasi..."
+    log_message "Instalasi $app_count app..."
     
-    installed_count=0
-    failed_count=0
+    local installed_count=0
+    local failed_count=0
     
-    for i in $(seq 1 $app_count); do
-        apk_file="$i.apk"
+    for i in $(seq 1 "$app_count"); do
+        local apk_file="$i.apk"
         
         if [ ! -f "$apk_file" ]; then
-            log_message "⚠️ File tidak ditemukan: $apk_file"
+            log_message "File tidak ada: $apk_file"
             failed_count=$((failed_count + 1))
             continue
         fi
         
-        # Tentukan nama package
-        if [ $i -eq 1 ]; then
+        # Nama package
+        local pkg_name=""
+        if [ "$i" -eq 1 ]; then
             pkg_name="com.roblox.client"
         else
             pkg_name="com.roblox.clien$i"
         fi
         
         echo ""
-        echo "📦 [$i/$app_count] Menginstall $apk_file..."
-        log_message "Installing: $apk_file -> $pkg_name"
+        echo "📦 [$i/$app_count] $apk_file"
+        log_message "Install: $apk_file -> $pkg_name"
         
-        # Cek apakah sudah terinstall
+        # Cek sudah install
         if pm list packages | grep -q "$pkg_name" 2>/dev/null; then
-            log_message "ℹ️ Sudah terinstall: $pkg_name"
+            log_message "Sudah terinstall: $pkg_name"
             installed_count=$((installed_count + 1))
             continue
         fi
         
-        # Install APK
+        # Install
         if pm install "$apk_file" 2>/dev/null; then
-            log_message "✅ Berhasil: $pkg_name"
+            log_message "Berhasil: $pkg_name"
             installed_count=$((installed_count + 1))
             sleep 1
         else
-            log_message "❌ Gagal: $apk_file"
+            log_message "Gagal: $apk_file"
             failed_count=$((failed_count + 1))
         fi
     done
     
-    log_message "📊 INSTALASI SELESAI: $installed_count berhasil, $failed_count gagal"
-    echo $installed_count
+    log_message "INSTALASI: $installed_count berhasil, $failed_count gagal"
+    echo "$installed_count"
 }
 
-# Fungsi 6: Restore semua cookies
+# Fungsi 6: Restore cookies
 restore_all_cookies() {
     echo "=========================================="
-    echo "   STEP 6: RESTORE SEMUA COOKIES"
+    echo "   STEP 6: RESTORE COOKIES"
     echo "=========================================="
     
     if [ ! -d "$BACKUP_DIR" ]; then
-        log_message "❌ ERROR: Folder backup tidak ditemukan!"
+        log_message "ERROR: Folder backup tidak ada"
         return 1
     fi
     
-    log_message "🔍 Mencari file backup..."
+    log_message "Mencari backup..."
     
-    restore_count=0
-    total_cookies_restored=0
-    failed_count=0
+    local restore_count=0
+    local total_cookies=0
+    local failed_count=0
     
     for db_file in "$BACKUP_DIR"/com.roblox.clien*.db; do
-        [ -e "$db_file" ] || continue
+        if [ ! -e "$db_file" ]; then
+            continue
+        fi
         
-        pkg_name=$(basename "$db_file" .db)
-        target_folder="/data/data/$pkg_name"
-        target_path="$target_folder/app_webview/Default/Cookies"
+        local pkg_name=$(basename "$db_file" .db)
+        local target_folder="/data/data/$pkg_name"
+        local target_path="$target_folder/app_webview/Default/Cookies"
         
-        # Hitung cookies sebelum restore
-        cookie_count=$(count_cookies_in_db "$db_file")
+        local cookie_count=$(count_cookies_in_db "$db_file")
         
         if [ -d "$target_folder" ]; then
             mkdir -p "$(dirname "$target_path")"
             
-            # Backup file asli jika ada
+            # Backup asli jika ada
             if [ -f "$target_path" ]; then
-                backup_original="$BACKUP_DIR/${pkg_name}_original_$(date +%s).db"
+                local backup_original="$BACKUP_DIR/${pkg_name}_original.db"
                 cp "$target_path" "$backup_original"
-                log_message "💾 Backup original: $backup_original"
+                log_message "Backup original: $backup_original"
             fi
             
-            # Restore file
+            # Restore
             cp "$db_file" "$target_path"
             
-            # Set permission
+            # Permission
             if app_uid=$(stat -c "%u:%g" "$target_folder" 2>/dev/null); then
                 chown "$app_uid" "$target_path"
                 chmod 660 "$target_path"
-                log_message "✅ Restore: $pkg_name ($cookie_count cookies)"
+                log_message "Restore: $pkg_name ($cookie_count cookies)"
                 restore_count=$((restore_count + 1))
-                total_cookies_restored=$((total_cookies_restored + cookie_count))
+                total_cookies=$((total_cookies + cookie_count))
             else
-                log_message "❌ Gagal set permission: $pkg_name"
+                log_message "Gagal permission: $pkg_name"
                 failed_count=$((failed_count + 1))
             fi
         else
-            log_message "⚠️ Aplikasi tidak ditemukan: $pkg_name"
+            log_message "App tidak ada: $pkg_name"
             failed_count=$((failed_count + 1))
         fi
     done
     
-    log_message "📊 RESTORE SELESAI: $restore_count berhasil, $failed_count gagal, $total_cookies_restored cookies"
-    echo $total_cookies_restored
+    log_message "RESTORE: $restore_count berhasil, $failed_count gagal, $total_cookies cookies"
+    echo "$total_cookies"
 }
 
-# Fungsi untuk menentukan jumlah app yang harus didownload
+# Fungsi menentukan jumlah app
 determine_app_count() {
     echo "=========================================="
     echo "   MENENTUKAN JUMLAH APP"
@@ -398,259 +412,216 @@ determine_app_count() {
     local installed_count=$(count_installed_apps)
     local backup_count=$(count_backup_files)
     
-    log_message "📊 Status saat ini:"
-    log_message "   📱 App terinstall: $installed_count"
-    log_message "   💾 File backup: $backup_count"
+    log_message "Status:"
+    log_message "   App terinstall: $installed_count"
+    log_message "   File backup: $backup_count"
     
-    # Jika ada app terinstall, gunakan jumlah itu
+    # Prioritaskan app terinstall
     if [ "$installed_count" -gt 0 ]; then
-        log_message "✅ Menggunakan jumlah app terinstall: $installed_count"
-        echo $installed_count
+        log_message "Gunakan app terinstall: $installed_count"
+        echo "$installed_count"
         return 0
     fi
     
-    # Jika tidak ada app terinstall, cek backup
+    # Jika ada backup, gunakan jumlah backup
     if [ "$backup_count" -gt 0 ]; then
-        log_message "✅ Tidak ada app terinstall, menggunakan jumlah backup: $backup_count"
-        echo $backup_count
+        log_message "Gunakan jumlah backup: $backup_count"
+        echo "$backup_count"
         return 0
     fi
     
-    # Jika tidak ada keduanya, gunakan default
-    log_message "⚠️ Tidak ada app terinstall dan tidak ada backup, menggunakan default: 1"
-    echo 1
+    # Default
+    log_message "Gunakan default: 1"
+    echo "1"
 }
 
-# Fungsi utama: Jalankan semua step otomatis
+# Fungsi utama: Proses otomatis
 run_automated_process() {
     echo "=========================================="
-    echo "   ROBOX AUTOMATED PROCESS"
+    echo "   PROSES OTOMATIS"
     echo "=========================================="
-    echo "🔄 Proses akan berjalan otomatis..."
-    echo "   Log: $LOG_FILE"
+    echo "Log: $LOG_FILE"
     echo ""
     
-    # Reset log file
-    echo "=== ROBOX AUTOMATED PROCESS START ===" > "$LOG_FILE"
-    log_message "Memulai proses otomatis..."
+    # Reset log
+    echo "=== START ===" > "$LOG_FILE"
+    log_message "Memulai proses..."
     
-    # Step 1: Tentukan jumlah app yang akan diproses
-    log_message "=== STEP 1: MENENTUKAN JUMLAH APP ==="
+    # Step 1: Tentukan jumlah app
+    log_message "=== STEP 1: TENTUKAN APP ==="
     APP_COUNT=$(determine_app_count)
-    log_message "📱 Jumlah app yang akan diproses: $APP_COUNT"
+    log_message "Jumlah app: $APP_COUNT"
     echo "📱 Jumlah app: $APP_COUNT"
     echo ""
     
-    # Step 2: Backup cookies
-    log_message "=== STEP 2: BACKUP COOKIES ==="
-    echo "💾 Backup semua cookies..."
-    BACKUP_COOKIES=$(backup_all_cookies)
-    echo "🍪 Cookies yang dibackup: $BACKUP_COOKIES"
+    # Step 2: Backup
+    log_message "=== STEP 2: BACKUP ==="
+    echo "💾 Backup..."
+    BACKUP_RESULT=$(backup_all_cookies)
+    echo "Cookies: $BACKUP_RESULT"
     
-    # Jika backup gagal atau tidak ada cookies, tetap lanjutkan dengan APP_COUNT
-    if [ "$BACKUP_COOKIES" -eq 0 ]; then
-        log_message "⚠️ Tidak ada cookies yang dibackup, menggunakan APP_COUNT: $APP_COUNT"
-    else
-        # Update APP_COUNT berdasarkan jumlah backup yang berhasil
-        APP_COUNT=$BACKUP_COOKIES
-        log_message "🔄 Update jumlah app berdasarkan backup: $APP_COUNT"
+    # Update app count berdasarkan backup
+    if [ "$BACKUP_RESULT" -gt 0 ]; then
+        APP_COUNT="$BACKUP_RESULT"
+        log_message "Update jumlah app: $APP_COUNT"
     fi
     echo ""
     
-    # Step 3: Uninstall semua apps
-    log_message "=== STEP 3: UNINSTALL APPS ==="
-    echo "🗑️ Uninstall semua apps..."
-    UNINSTALLED=$(uninstall_all_apps)
-    echo "📱 Apps diuninstall: $UNINSTALLED"
+    # Step 3: Uninstall
+    log_message "=== STEP 3: UNINSTALL ==="
+    echo "🗑️ Uninstall..."
+    UNINSTALL_RESULT=$(uninstall_all_apps)
+    echo "Diuninstall: $UNINSTALL_RESULT"
     echo ""
     
-    # Step 4: Download APK dari server
-    log_message "=== STEP 4: DOWNLOAD APKS ==="
-    echo "⬇️ Download APK dari server ($APP_COUNT app)..."
+    # Step 4: Download
+    log_message "=== STEP 4: DOWNLOAD ==="
+    echo "⬇️ Download $APP_COUNT app..."
     
     if ! download_apk_from_server "$APP_COUNT"; then
-        log_message "❌ Gagal download APK files!"
-        echo "❌ Gagal download APK files!"
+        log_message "Gagal download"
+        echo "❌ Gagal download"
         return 1
     fi
     echo ""
     
-    # Step 5: Install semua APK
-    log_message "=== STEP 5: INSTALL APKS ==="
-    echo "🔧 Install semua APK ($APP_COUNT app)..."
-    INSTALLED=$(install_all_downloaded_apps "$APP_COUNT")
-    echo "📱 Apps terinstall: $INSTALLED"
+    # Step 5: Install
+    log_message "=== STEP 5: INSTALL ==="
+    echo "🔧 Install..."
+    INSTALL_RESULT=$(install_all_downloaded_apps "$APP_COUNT")
+    echo "Terinstall: $INSTALL_RESULT"
     echo ""
     
-    # Step 6: Restore cookies
-    log_message "=== STEP 6: RESTORE COOKIES ==="
-    echo "🔄 Restore semua cookies..."
-    RESTORED_COOKIES=$(restore_all_cookies)
-    echo "🍪 Cookies dipulihkan: $RESTORED_COOKIES"
+    # Step 6: Restore
+    log_message "=== STEP 6: RESTORE ==="
+    echo "🔄 Restore..."
+    RESTORE_RESULT=$(restore_all_cookies)
+    echo "Cookies: $RESTORE_RESULT"
     echo ""
     
-    # Tampilkan summary
+    # Summary
     echo "=========================================="
-    echo "   PROSES SELESAI - SUMMARY"
+    echo "   SELESAI"
     echo "=========================================="
-    log_message "=== PROCESS COMPLETE ==="
+    log_message "=== SELESAI ==="
     
-    echo "📊 HASIL PROSES:"
-    echo "   1. Jumlah app diproses: $APP_COUNT"
-    echo "   2. Cookies dibackup: $BACKUP_COOKIES"
-    echo "   3. Aplikasi diuninstall: $UNINSTALLED"
-    echo "   4. Aplikasi diinstall ulang: $INSTALLED"
-    echo "   5. Cookies dipulihkan: $RESTORED_COOKIES"
+    echo "📊 Hasil:"
+    echo "   Jumlah app: $APP_COUNT"
+    echo "   Backup: $BACKUP_RESULT cookies"
+    echo "   Uninstall: $UNINSTALL_RESULT apps"
+    echo "   Install: $INSTALL_RESULT apps"
+    echo "   Restore: $RESTORE_RESULT cookies"
     echo ""
-    echo "📁 Backup folder: $BACKUP_DIR"
-    echo "📁 Download folder: $DOWNLOAD_DIR"
-    echo "📋 Log file: $LOG_FILE"
+    echo "📁 Backup: $BACKUP_DIR"
+    echo "📁 Download: $DOWNLOAD_DIR"
+    echo "📋 Log: $LOG_FILE"
     
-    log_message "Summary: $APP_COUNT apps diproses, $BACKUP_COOKIES cookies backed up, $UNINSTALLED uninstalled, $INSTALLED reinstalled, $RESTORED_COOKIES cookies restored"
-    
-    # Tampilkan aplikasi yang sekarang terinstall
+    # Cek app sekarang
     echo ""
-    echo "📱 APLIKASI TERINSTALL SEKARANG:"
-    pm list packages | grep "roblox" || echo "   Tidak ada app Roblox"
+    echo "📱 App terinstall sekarang:"
+    pm list packages | grep "roblox" || echo "   Tidak ada"
 }
 
-# Fungsi manual (menu lama)
+# Menu manual
 manual_menu() {
     echo "=========================================="
-    echo "   MANUAL MENU"
+    echo "   MENU MANUAL"
     echo "=========================================="
     
     while true; do 
         echo ""
-        echo "📱 MENU UTAMA:"
-        echo "   1. Download & Install Clones (pilih jumlah)"
-        echo "   2. Backup Cookies"
-        echo "   3. Restore Cookies" 
-        echo "   4. HAPUS SEMUA APP"
-        echo "   5. Kembali ke menu utama"
-        echo "   6. Keluar"
-        printf "Pilih menu [1-6]: " 
+        echo "1. Download & Install"
+        echo "2. Backup Cookies"
+        echo "3. Restore Cookies" 
+        echo "4. Hapus Semua App"
+        echo "5. Kembali"
+        echo "6. Keluar"
+        printf "Pilih [1-6]: " 
         read choice
 
         case $choice in
             1) 
-                echo "=========================================="
-                echo "   DOWNLOAD & INSTALL MANUAL"
-                echo "=========================================="
-                
                 echo ""
-                echo "📱 Pilih jumlah app yang ingin diinstall:"
-                for i in {1..8}; do
-                    echo "   $i. $i app$( [ $i -gt 1 ] && echo "s" )"
+                echo "Pilih jumlah app:"
+                for i in 1 2 3 4 5 6 7 8; do
+                    echo "   $i. $i app"
                 done
                 printf "Pilih [1-8]: "
                 read app_count
                 
-                if [[ "$app_count" =~ ^[1-8]$ ]]; then
-                    echo "📥 Download $app_count APK dari server..."
-                    if download_apk_from_server "$app_count"; then
-                        echo "🔧 Install $app_count APK..."
-                        install_all_downloaded_apps "$app_count"
-                    fi
+                if echo "$app_count" | grep -q "^[1-8]$"; then
+                    download_apk_from_server "$app_count"
+                    install_all_downloaded_apps "$app_count"
                 else
-                    echo "❌ Pilihan tidak valid! Harus 1-8"
+                    echo "❌ Pilihan salah"
                 fi
                 ;;
-            2) 
-                echo "=========================================="
-                echo "   BACKUP COOKIES MANUAL"
-                echo "=========================================="
-                backup_all_cookies
-                ;;
-            3) 
-                echo "=========================================="
-                echo "   RESTORE COOKIES MANUAL"
-                echo "=========================================="
-                restore_all_cookies
-                ;;
-            4) 
-                echo "=========================================="
-                echo "   UNINSTALL ALL APPS MANUAL"
-                echo "=========================================="
-                uninstall_all_apps
-                ;;
+            2) backup_all_cookies ;;
+            3) restore_all_cookies ;;
+            4) uninstall_all_apps ;;
             5) return ;;
             6) 
-                echo "👋 Selamat tinggal!"
+                echo "👋 Bye"
                 exit 0 
                 ;;
-            *) echo "❌ Pilihan salah. Coba lagi." ;;
+            *) echo "❌ Pilihan salah" ;;
         esac
     done
 }
 
-# --- MAIN MENU ---
+# --- MAIN ---
 check_root 
 
 echo "=========================================="
-echo "       ROBOX MULTI-CLONE MANAGER          "
+echo "   ROBOX MANAGER"
 echo "=========================================="
-echo "📡 Server APK: $SERVER_URL"
-echo "📁 Download: $DOWNLOAD_DIR"
-echo "💾 Backup: $BACKUP_DIR"
-echo "📋 Log: $LOG_FILE"
+echo "Server: $SERVER_URL"
 echo ""
 
-# Cek aplikasi yang terinstall
-CURRENT_APPS=$(pm list packages | grep "com.roblox.clien" | wc -l)
-echo "📱 Aplikasi terinstall saat ini: $CURRENT_APPS"
+# Cek status
+APPS_NOW=$(pm list packages | grep "com.roblox.clien" | wc -l)
+echo "📱 App terinstall: $APPS_NOW"
 
-# Cek backup yang tersedia
-BACKUP_FILES=$(count_backup_files)
-if [ "$BACKUP_FILES" -gt 0 ]; then
-    echo "💾 Backup tersedia: $BACKUP_FILES file"
-    
-    # Hitung total cookies di backup
-    TOTAL_COOKIES=0
-    for db_file in "$BACKUP_DIR"/*.db; do
-        [ -e "$db_file" ] || continue
-        count=$(count_cookies_in_db "$db_file")
-        TOTAL_COOKIES=$((TOTAL_COOKIES + count))
-    done
-    echo "🍪 Total cookies di backup: $TOTAL_COOKIES"
+BACKUP_NOW=$(count_backup_files)
+if [ "$BACKUP_NOW" -gt 0 ]; then
+    echo "💾 Backup ada: $BACKUP_NOW file"
 fi
 
 while true; do 
     echo ""
-    echo "🎯 PILIH MODE:"
-    echo "   1. AUTOMATIC PROCESS (Semua step otomatis)"
-    echo "   2. MANUAL MENU (Pilih step manual)"
-    echo "   3. KELUAR"
-    printf "Pilih mode [1-3]: " 
+    echo "PILIH MODE:"
+    echo "1. OTOMATIS (Semua step)"
+    echo "2. MANUAL (Pilih sendiri)"
+    echo "3. KELUAR"
+    printf "Pilih [1-3]: " 
     read mode
 
     case $mode in
         1) 
             echo ""
-            echo "⚠️  PERINGATAN: Proses otomatis akan:"
-            echo "   1. Cek app terinstall / backup"
-            echo "   2. Backup semua cookies"
-            echo "   3. Uninstall semua aplikasi"
-            echo "   4. Download APK dari server"
-            echo "   5. Install semua APK"
-            echo "   6. Restore semua cookies"
+            echo "Proses otomatis akan:"
+            echo "1. Cek app/backup"
+            echo "2. Backup cookies"
+            echo "3. Uninstall app"
+            echo "4. Download APK"
+            echo "5. Install app"
+            echo "6. Restore cookies"
             echo ""
-            echo "❓ Lanjutkan? (y/n)"
-            printf "Pilih [y/n]: "
+            echo "Lanjut? (y/n)"
+            printf "Pilih: "
             read confirm
             
-            confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
-            if [ "$confirm" = "y" ] || [ "$confirm" = "ya" ] || [ "$confirm" = "yes" ]; then
+            if echo "$confirm" | grep -qi "^y"; then
                 run_automated_process
             else
-                echo "❌ Dibatalkan."
+                echo "❌ Batal"
             fi
             ;;
         2) manual_menu ;;
         3) 
-            echo "👋 Selamat tinggal!"
+            echo "👋 Bye"
             exit 0 
             ;;
-        *) echo "❌ Pilihan salah. Coba lagi." ;;
+        *) echo "❌ Pilihan salah" ;;
     esac
 done
