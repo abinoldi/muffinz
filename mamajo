@@ -118,28 +118,44 @@ function getTopTaskId() {
 }
 
 // --- LAUNCH AND INSTANT SHRINK ---
-async function launchPackage(pkg, url) {
-  try {
-    console.log(`\n🚀 Launching: ${pkg}`);
+async function launchPackages(accounts, START_X = 20, WIDTH = 200, HEIGHT = 250, SPACING = 10) {
+  for (let idx = 0; idx < accounts.length; idx++) {
+    const acc = accounts[idx];
+    const left = START_X + idx * (WIDTH + SPACING);
+    const right = left + WIDTH;
 
-    const prefsFile = `/data/data/${pkg}/shared_prefs/com.roblox.clienb_preferences.xml`;
+    try {
+      console.log(`\n🚀 Launching: ${acc.pkg} at LEFT=${left}, WIDTH=${WIDTH}`);
 
-    // 1️⃣ Force-stop
-    execSync(`su -c "am force-stop ${pkg}"`);
+      // --- FORCE STOP ---
+      try {
+        execSync(`su -c "am force-stop ${acc.pkg}"`);
+      } catch(e) {
+        console.log(`⚠️ Could not force-stop ${acc.pkg}, maybe not running yet.`);
+      }
 
-    // 2️⃣ Inject small window
-    execSync(`su -c 'sed -i "s/app_cloner_current_window_left\\\" value=\\\"[0-9]\\+/app_cloner_current_window_left\\\" value=20/" ${prefsFile}'`);
-    execSync(`su -c 'sed -i "s/app_cloner_current_window_right\\\" value=\\\"[0-9]\\+/app_cloner_current_window_right\\\" value=220/" ${prefsFile}'`);
-    execSync(`su -c 'sed -i "s/app_cloner_current_window_bottom\\\" value=\\\"[0-9]\\+/app_cloner_current_window_bottom\\\" value=250/" ${prefsFile}'`);
+      // --- PREFS FILE PATH (dynamic) ---
+      const prefsFile = `/data/data/${acc.pkg}/shared_prefs/${acc.pkg.replace(/\./g,'_')}_preferences.xml`;
 
-    // 3️⃣ Launch app
-    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${url}"`;
-    execSync(`su -c "${cmd}"`, { stdio: 'ignore' });
+      // --- INJECT WINDOW SETTINGS ---
+      execSync(`su -c "sed -i '/app_cloner_current_window_left/c\\\\<int name=\\\"app_cloner_current_window_left\\\" value=\\\"${left}\\\" />' ${prefsFile}"`);
+      execSync(`su -c "sed -i '/app_cloner_current_window_right/c\\\\<int name=\\\"app_cloner_current_window_right\\\" value=\\\"${right}\\\" />' ${prefsFile}"`);
+      execSync(`su -c "sed -i '/app_cloner_current_window_bottom/c\\\\<int name=\\\"app_cloner_current_window_bottom\\\" value=\\\"${HEIGHT}\\\" />' ${prefsFile}"`);
 
-    console.log(`   ✅ Launched small window at LEFT=20, WIDTH=200, HEIGHT=250`);
+      console.log(`   ✅ Window settings injected`);
 
-  } catch (e) {
-    console.log(`❌ Error in launchPackage: ${e.message}`);
+      // --- LAUNCH APP ---
+      const cmd = `am start -n ${acc.pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${acc.url}"`;
+      execSync(`su -c "${cmd}"`, { stdio: 'ignore' });
+
+      console.log(`   ✅ App launched successfully`);
+
+      // Optional cooldown between launches (avoid overlapping)
+      await sleep(1000);
+
+    } catch (e) {
+      console.log(`❌ Error launching ${acc.pkg}: ${e.message}`);
+    }
   }
 }
 
@@ -258,17 +274,18 @@ async function main() {
 
   console.log("\n🚀 Launching all instances...");
   
-  for (const acc of accounts) {
-    stopPackage(acc.pkg);
-    // Launch and Shrink immediately
-    await launchPackage(acc.pkg, finalLaunchUrl);
-    
+  // --- Horizontal Auto-Arrange Launch ---
+  const launchList = accounts.map(acc => ({ pkg: acc.pkg, url: finalLaunchUrl }));
+  await launchPackages(launchList, 20, 200, 250, 10);
+  
+  // Update states
+  launchList.forEach(acc => {
     lastRestartMap[acc.pkg] = Date.now();
     accountStates[acc.pkg].isRunning = true;
     accountStates[acc.pkg].serverStatus = "Launching...";
-    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s (Arrange now!)...`);
-    await sleep(LOOP_DELAY); 
-  }
+  });
+  console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s after arranging...`);
+  await sleep(LOOP_DELAY);
 
   console.log(`\n💤 Monitor active (Presence: ${CHECK_SERVER_PRESENCE}, Auto-Fix: ${AUTO_RECONNECT})...`);
   while (true) {
