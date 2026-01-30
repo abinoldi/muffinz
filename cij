@@ -1,36 +1,44 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX COOKIE INJECTOR v3.6 (FIXED TERMUX PATH)
+# ROBLOX COOKIE INJECTOR v3.7 (FIXED TERMUX & SQL ERROR)
 # ==========================================================
 
-# Path yang Anda temukan
-SQLITE_BIN="/data/data/com.termux/files/usr/bin/sqlite3"
+# Path binary sqlite di Termux
+TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
+# Lokasi sementara agar bisa dijalankan oleh Root
+TMP_SQLITE="/data/local/tmp/sqlite3"
 
-# Fungsi cek Root
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "❌ Script ini MEMBUTUHKAN akses Root!"
-        echo "Silakan jalankan dengan: su -c 'sh $0'"
         exit 1
     fi
 }
 
-# Fungsi cek keberadaan binary sqlite3
-check_binary() {
-    if [ ! -f "$SQLITE_BIN" ]; then
-        echo "❌ Binary tidak ditemukan di: $SQLITE_BIN"
-        echo "Pastikan Anda sudah menjalankan 'pkg install sqlite' di Termux."
+prepare_sqlite() {
+    if [ -f "$TERMUX_SQLITE" ]; then
+        # Salin ke tmp agar Root punya akses eksekusi penuh
+        cp "$TERMUX_SQLITE" "$TMP_SQLITE"
+        chmod 777 "$TMP_SQLITE"
+        SQLITE_BIN="$TMP_SQLITE"
+    else
+        # Cari di system jika tidak ada di Termux
+        SQLITE_BIN=$(which sqlite3)
+    fi
+
+    if [ -z "$SQLITE_BIN" ]; then
+        echo "❌ sqlite3 tidak ditemukan. Silakan install di Termux: pkg install sqlite"
         exit 1
     fi
-    # Memberikan izin eksekusi agar root bisa memanggilnya
-    chmod 755 "$SQLITE_BIN"
 }
 
 do_inject_cookie() {
     echo "=========================================="
-    echo "    ROBLOX COOKIE INJECTOR (SQLITE3)      "
+    echo "    ROBLOX COOKIE INJECTOR v3.7 (ROOT)    "
     echo "=========================================="
+    prepare_sqlite
+    echo "✅ Menggunakan: $SQLITE_BIN"
 
     # 1. Deteksi Aplikasi
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
@@ -55,14 +63,11 @@ do_inject_cookie() {
 
     # 3. Input Cookie
     echo "------------------------------------------"
-    echo "📝 Masukkan/Tempel Cookie ROBLOSECURITY:"
+    echo "📝 Masukkan Cookie ROBLOSECURITY:"
     read -r CUSTOM_COOKIE
-    if [ -z "$CUSTOM_COOKIE" ]; then
-        echo "❌ Cookie tidak boleh kosong!"
-        return
-    fi
+    [ -z "$CUSTOM_COOKIE" ] && echo "❌ Cookie tidak boleh kosong!" && return
 
-    # 4. Tentukan Path Cookie (Logika Folder Ganda)
+    # 4. Tentukan Path Cookie
     cookie_path=""
     [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
     [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
@@ -72,29 +77,31 @@ do_inject_cookie() {
         cookie_path="$folder/app_webview/Default/Cookies"
     fi
 
-    # 5. Force Stop App agar sinkronisasi berhasil
+    # 5. Force Stop
     am force-stop "$SELECTED_PKG"
 
-    # 6. Proses Injeksi SQL
+    # 6. Injeksi SQL (Fixed NOT NULL constraint failed)
     echo "⏳ Menyuntikkan cookie ke database..."
     
-    # Buat tabel jika aplikasi baru saja diinstall
+    # Menambahkan nilai default (0 atau date) untuk kolom NOT NULL agar tidak error
+    NOW=$(date +%s)
+    
+    # Query untuk membuat tabel jika belum ada
     "$SQLITE_BIN" "$cookie_path" "CREATE TABLE IF NOT EXISTS cookies (creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, encrypted_value BLOB DEFAULT '', samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, UNIQUE (host_key, name, path));"
 
-    # Hapus data lama dan masukkan cookie baru
+    # Query Insert dengan kolom lengkap untuk menghindari constraint error
     "$SQLITE_BIN" "$cookie_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';"
-    "$SQLITE_BIN" "$cookie_path" "INSERT INTO cookies (host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc) VALUES ('.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, $(date +%s));"
+    "$SQLITE_BIN" "$cookie_path" "INSERT INTO cookies (creation_utc, host_key, name, value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme) VALUES ($NOW, '.roblox.com', '.ROBLOSECURITY', '$CUSTOM_COOKIE', '/', 253402300799000000, 1, 1, $NOW, 1, 1, 1, -1, 0);"
 
-    # 7. Fix Permissions & Ownership 
+    # 7. Fix Permissions
     echo "⏳ Memperbaiki izin akses..."
-    app_uid=$(stat -c "%u:%g" "$folder") 
-    chown -R "$app_uid" "$folder/app_webview" 
-    chmod 660 "$cookie_path" 
+    app_uid=$(stat -c "%u:%g" "$folder")
+    chown -R "$app_uid" "$folder/app_webview"
+    chmod 660 "$cookie_path"
 
     echo "------------------------------------------"
     echo "✨ BERHASIL! Akun dipasang ke $SELECTED_PKG"
 }
 
 check_root
-check_binary
 do_inject_cookie
