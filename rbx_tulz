@@ -3,8 +3,8 @@
 # Konfigurasi Lokasi
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="uwNahlh"
-GOFILE_URL="https://gofile.io/d/uwNalh"
 GIT_REPO="https://github.com/ltsdw/gofile-downloader"
+SCRIPT_DIR="/data/data/com.termux/files/home"
 
 # Fungsi cek Root
 check_root() {
@@ -14,6 +14,9 @@ check_root() {
         exit 1
     fi
 }
+
+# Set PATH untuk root (Termux specific)
+export PATH=/data/data/com.termux/files/usr/bin:$PATH
 
 # Fungsi 1: Backup
 do_backup() {
@@ -65,59 +68,247 @@ do_restore() {
             count=$((count + 1))
         fi
     done
+    echo "✅ Restore selesai: $count app dipulihkan."
 }
 
-# Fungsi 3: Download & Auto-Install
+# Fungsi 3: Download & Auto-Install dengan pilihan jumlah
 do_download_install() {
-    echo "⏳ Cloning downloader..."
-    [ -d "gofile-downloader" ] || git clone "$GIT_REPO"
-    cd gofile-downloader || exit
-    pip3 install -r requirements.txt
-    python3 gofile-downloader.py "$GOFILE_URL"
+    echo "=========================================="
+    echo "       DOWNLOAD & INSTALL CLONES          "
     
-    echo "⏳ Starting Python Auto-Installer..."
-    python3 <<EOF
-import os, subprocess
-pkgs = subprocess.getoutput('pm list packages com.roblox.clien').split('\n')
-installed_count = len([p for p in pkgs if p.strip()])
-print(f"Found {installed_count} clones installed.")
-
-for i in range(installed_count + 1, 9):
-    apk = f"../$DOWNLOAD_DIR/{i}.apk"
-    if os.path.exists(apk):
-        print(f"Installing {apk}...")
-        os.system(f"pm install {apk}")
-    else:
-        print(f"File {apk} not found, skipping.")
-EOF
-    cd ..
+    # Tanya berapa banyak app yang ingin diinstall
+    echo ""
+    echo "📱 Pilih jumlah app yang ingin diinstall:"
+    echo "   1. 1 app (utama saja)"
+    echo "   2. 2 apps"
+    echo "   3. 3 apps" 
+    echo "   4. 4 apps"
+    echo "   5. 5 apps"
+    echo "   6. 6 apps"
+    echo "   7. 7 apps"
+    echo "   8. 8 apps (semua)"
+    echo "   0. Kembali"
+    
+    printf "Pilih [0-8]: "
+    read app_count
+    
+    case $app_count in
+        0) return ;;
+        1|2|3|4|5|6|7|8)
+            echo "⏳ Menginstall $app_count app..."
+            ;;
+        *)
+            echo "❌ Pilihan tidak valid!"
+            return 1
+            ;;
+    esac
+    
+    # Cek apakah sudah ada app yang terinstall
+    installed_pkgs=$(pm list packages | grep "com.roblox.clien" | wc -l)
+    echo "📊 Saat ini ada $installed_pkgs app terinstall."
+    
+    if [ $installed_pkgs -ge $app_count ]; then
+        echo "ℹ️  Jumlah app yang diminta ($app_count) sudah terinstall."
+        echo "   Tidak perlu download/install tambahan."
+        return 0
+    fi
+    
+    # Hitung berapa banyak yang perlu diinstall
+    need_to_install=$((app_count - installed_pkgs))
+    echo "📥 Perlu install $need_to_install app tambahan."
+    
+    # Tanya apakah ingin download
+    echo ""
+    echo "⬇️  Download APK files dari internet?"
+    echo "   y = Ya, download dulu"
+    echo "   n = Tidak, lanjut install dari file yang sudah ada"
+    printf "Pilih [y/n]: "
+    read download_choice
+    
+    if [ "$download_choice" = "y" ] || [ "$download_choice" = "Y" ]; then
+        echo "⏳ Cloning downloader..."
+        
+        # Change to home directory first
+        cd "$SCRIPT_DIR" || {
+            echo "❌ Tidak bisa pindah ke direktori: $SCRIPT_DIR"
+            return 1
+        }
+        
+        # Check if git exists
+        if ! command -v git >/dev/null 2>&1; then
+            echo "❌ Git tidak ditemukan! Instal dulu di Termux: pkg install git"
+            echo "   Jalankan di Termux (bukan sebagai root): pkg install git"
+            return 1
+        fi
+        
+        if [ ! -d "gofile-downloader" ]; then
+            echo "📦 Cloning repository..."
+            git clone "$GIT_REPO" || {
+                echo "❌ Gagal clone repository!"
+                return 1
+            }
+        fi
+        
+        cd gofile-downloader || {
+            echo "❌ Tidak bisa masuk ke folder gofile-downloader"
+            return 1
+        }
+        
+        # Check if python3 exists
+        if ! command -v python3 >/dev/null 2>&1; then
+            echo "❌ Python3 tidak ditemukan! Instal dulu: pkg install python"
+            return 1
+        fi
+        
+        # Check if pip3 exists
+        if command -v pip3 >/dev/null 2>&1; then
+            echo "📦 Menginstall requirements..."
+            pip3 install -r requirements.txt 2>/dev/null || echo "⚠️ Gagal install requirements (mungkin sudah terinstall)"
+        else
+            echo "⚠️ pip3 tidak ditemukan, skip install requirements"
+        fi
+        
+        if [ -f "gofile-downloader.py" ]; then
+            echo "🌐 Downloading APK files..."
+            python3 gofile-downloader.py || echo "⚠️ Gagal download dari gofile"
+        else
+            echo "❌ File gofile-downloader.py tidak ditemukan!"
+        fi
+        
+        cd ..
+    fi
+    
+    # Proses instalasi
+    echo ""
+    echo "🔧 Memulai proses instalasi..."
+    
+    # Cek apakah folder download ada
+    if [ ! -d "$DOWNLOAD_DIR" ]; then
+        echo "❌ Folder $DOWNLOAD_DIR tidak ditemukan!"
+        echo "   Silakan download manual atau pilih 'y' untuk download otomatis."
+        return 1
+    fi
+    
+    cd "$DOWNLOAD_DIR" || {
+        echo "❌ Tidak bisa masuk ke folder $DOWNLOAD_DIR"
+        return 1
+    }
+    
+    installed_count=0
+    start_number=$((installed_pkgs + 1))
+    end_number=$app_count
+    
+    echo "📁 Mencari APK files dari $start_number.apk sampai $end_number.apk..."
+    
+    for i in $(seq $start_number $end_number); do
+        apk_file="$i.apk"
+        if [ -f "$apk_file" ]; then
+            # Tentukan nama package
+            if [ $i -eq 1 ]; then
+                pkg_name="com.roblox.client"
+            else
+                pkg_name="com.roblox.clien$i"
+            fi
+            
+            echo ""
+            echo "📦 [$i/$end_number] Menginstall $apk_file..."
+            echo "   Package name: $pkg_name"
+            
+            # Cek apakah sudah terinstall
+            if pm list packages | grep -q "$pkg_name" 2>/dev/null; then
+                echo "   ⚠️  Sudah terinstall, skip..."
+                installed_count=$((installed_count + 1))
+                continue
+            fi
+            
+            # Install APK
+            if pm install "$apk_file" 2>/dev/null; then
+                echo "   ✅ Berhasil diinstall!"
+                installed_count=$((installed_count + 1))
+                
+                # Tunggu sebentar agar package terdaftar
+                sleep 1
+            else
+                echo "   ❌ Gagal menginstall $apk_file"
+            fi
+        else
+            echo "❌ File $apk_file tidak ditemukan!"
+        fi
+    done
+    
+    cd "$SCRIPT_DIR"
+    
+    echo ""
+    echo "=========================================="
+    echo "🎯 INSTALASI SELESAI"
+    echo "   Diminta: $app_count app"
+    echo "   Berhasil: $installed_count app"
+    
+    if [ $installed_count -lt $app_count ]; then
+        echo "   ❌ Ada $(($app_count - $installed_count)) app yang gagal diinstall"
+    else
+        echo "   ✅ Semua app berhasil diinstall!"
+    fi
 }
 
 # Fungsi 4: Uninstall
 do_uninstall() {
-    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    if [ -z "$pkgs" ]; then echo "❌ No clones found."; return; fi
+    echo "=========================================="
+    echo "       UNINSTALL SEMUA APP                "
     
-    echo "⚠️ Yakin hapus SEMUA? (y/n)"
+    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+    total=$(echo "$pkgs" | wc -l)
+    
+    if [ -z "$pkgs" ]; then 
+        echo "❌ Tidak ada app ditemukan."
+        return
+    fi
+    
+    echo "📱 Ditemukan $total app:"
+    for pkg in $pkgs; do
+        echo "   📦 $pkg"
+    done
+    
+    echo ""
+    echo "⚠️  PERINGATAN: Ini akan menghapus SEMUA app di atas!"
+    echo "   Yakin ingin menghapus? (y/n)"
+    printf "Pilih [y/n]: "
     read confirm
+    
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        echo ""
+        echo "🗑️  Menghapus app..."
+        count=0
         for pkg in $pkgs; do
-            echo "⏳ Menghapus $pkg..."
-            pm uninstall "$pkg" > /dev/null 2>&1
+            echo "   ⏳ Menghapus $pkg..."
+            if pm uninstall "$pkg" > /dev/null 2>&1; then
+                echo "   ✅ Berhasil dihapus"
+                count=$((count + 1))
+            else
+                echo "   ❌ Gagal menghapus $pkg"
+            fi
         done
-        echo "✨ Selesai."
+        echo ""
+        echo "✨ Selesai! $count app berhasil dihapus."
+    else
+        echo "❌ Dibatalkan."
     fi
 }
 
 # --- MAIN MENU ---
 check_root 
+echo "=========================================="
+echo "       ROBOX MULTI-CLONE MANAGER          "
+echo "=========================================="
+
 while true; do 
     echo ""
-    echo "1. Download & Install Clones (1-8)"
-    echo "2. Backup Cookies"
-    echo "3. Restore Cookies"
-    echo "4. HAPUS SEMUA APP"
-    echo "5. Keluar"
+    echo "📱 MENU UTAMA:"
+    echo "   1. Download & Install Clones (pilih jumlah)"
+    echo "   2. Backup Cookies"
+    echo "   3. Restore Cookies" 
+    echo "   4. HAPUS SEMUA APP"
+    echo "   5. Keluar"
     printf "Pilih menu [1-5]: " 
     read choice
 
@@ -126,7 +317,10 @@ while true; do
         2) do_backup ;;
         3) do_restore ;;
         4) do_uninstall ;;
-        5) exit 0 ;;
-        *) echo "Pilihan salah." ;;
+        5) 
+            echo "👋 Selamat tinggal!"
+            exit 0 
+            ;;
+        *) echo "❌ Pilihan salah. Coba lagi." ;;
     esac
 done
