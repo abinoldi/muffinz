@@ -1,125 +1,132 @@
 #!/system/bin/sh
 
-# Configuration
+# Konfigurasi Lokasi
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="uwNahlh"
 GOFILE_URL="https://gofile.io/d/uwNalh"
 GIT_REPO="https://github.com/ltsdw/gofile-downloader"
 
+# Fungsi cek Root
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        echo "❌ Script ini MEMBUTUHKAN akses Root!" [cite: 2]
+        echo "❌ Script ini MEMBUTUHKAN akses Root!"
+        echo "Silakan jalankan dengan: su -c 'sh $0'"
         exit 1
     fi
 }
 
-# --- New Function: Setup & Download ---
-setup_and_download() {
-    echo "=========================================="
-    echo "    SETTING UP DOWNLOADER & APKS          "
-    echo "=========================================="
-    
-    # Clone and Install Requirements
-    if [ ! -d "gofile-downloader" ]; then
-        git clone "$GIT_REPO"
-    fi
-    cd gofile-downloader || exit
-    pip3 install -r requirements.txt
-    
-    # Run Downloader
-    python3 gofile-downloader.py "$GOFILE_URL"
-    cd ..
-    echo "✅ Download complete in $DOWNLOAD_DIR"
-}
-
-# --- New Function: Python-based Installer ---
-run_installer() {
-    echo "=========================================="
-    echo "       INSTALLING MISSING APKS            "
-    echo "=========================================="
-    
-    # We use a python one-liner to check missing instances and install
-    python3 -c "
-import os, subprocess
-current_pkgs = subprocess.getoutput('pm list packages com.roblox.clien').split('\n')
-installed_count = len([p for p in current_pkgs if p.strip()])
-print(f'Detected {installed_count} installed instances.')
-
-target_dir = '$DOWNLOAD_DIR'
-if not os.path.exists(target_dir):
-    print(f'❌ Directory {target_dir} not found!')
-    exit()
-
-# If you have 3 installed and want 8, install 4.apk through 8.apk
-for i in range(installed_count + 1, 9):
-    apk_path = os.path.join(target_dir, f'{i}.apk')
-    if os.path.exists(apk_path):
-        print(f'⏳ Installing {apk_path}...')
-        os.system(f'pm install {apk_path}')
-    else:
-        print(f'⚠️  {apk_path} not found.')
-"
-}
-
-# --- Original Functions ---
+# Fungsi 1: Backup
 do_backup() {
+    echo "=========================================="
+    echo "       MEMULAI PROSES BACKUP...           "
     mkdir -p "$BACKUP_DIR"
     count=0
     for folder in /data/data/com.roblox.clien*; do
-        [ -e "$folder" ] || continue [cite: 4, 5]
+        [ -e "$folder" ] || continue
         pkg_name=$(basename "$folder")
         cookie_path=""
-        if [ -f "$folder/app_webview/Default/Cookies" ]; then [cite: 6]
+        if [ -f "$folder/app_webview/Default/Cookies" ]; then
             cookie_path="$folder/app_webview/Default/Cookies"
-        elif [ -f "$folder/app_webview/Cookies" ]; then [cite: 7]
+        elif [ -f "$folder/app_webview/Cookies" ]; then
             cookie_path="$folder/app_webview/Cookies"
         fi
-        if [ -n "$cookie_path" ]; then [cite: 8]
+
+        if [ -n "$cookie_path" ]; then
             cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
+            echo "✅ Backup SUKSES: $pkg_name"
             count=$((count + 1))
         fi
     done
-    echo "✅ Backup Selesai: $count file."
+    echo "Selesai! $count database tersimpan."
 }
 
+# Fungsi 2: Restore
 do_restore() {
-    [ -d "$BACKUP_DIR" ] || return [cite: 10]
+    echo "=========================================="
+    echo "       MEMULAI PROSES RESTORE...          "
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo "❌ Folder backup tidak ditemukan!"
+        return 1
+    fi
+    count=0
     for db_file in "$BACKUP_DIR"/com.roblox.clien*.db; do
-        [ -e "$db_file" ] || continue [cite: 12, 13]
+        [ -e "$db_file" ] || continue
         pkg_name=$(basename "$db_file" .db)
-        target_path="/data/data/$pkg_name/app_webview/Default/Cookies"
-        cp "$db_file" "$target_path" [cite: 16]
-        app_uid=$(stat -c "%u:%g" "/data/data/$pkg_name")
-        chown "$app_uid" "$target_path" [cite: 16]
-        chmod 660 "$target_path" [cite: 16]
+        target_folder="/data/data/$pkg_name"
+        target_path="$target_folder/app_webview/Default/Cookies"
+        
+        if [ -d "$target_folder" ]; then
+            mkdir -p "$(dirname "$target_path")"
+            cp "$db_file" "$target_path"
+            app_uid=$(stat -c "%u:%g" "$target_folder")
+            chown "$app_uid" "$target_path"
+            chmod 660 "$target_path"
+            echo "✅ Restore SUKSES: $pkg_name"
+            count=$((count + 1))
+        fi
     done
 }
 
+# Fungsi 3: Download & Auto-Install
+do_download_install() {
+    echo "⏳ Cloning downloader..."
+    [ -d "gofile-downloader" ] || git clone "$GIT_REPO"
+    cd gofile-downloader || exit
+    pip3 install -r requirements.txt
+    python3 gofile-downloader.py "$GOFILE_URL"
+    
+    echo "⏳ Starting Python Auto-Installer..."
+    python3 <<EOF
+import os, subprocess
+pkgs = subprocess.getoutput('pm list packages com.roblox.clien').split('\n')
+installed_count = len([p for p in pkgs if p.strip()])
+print(f"Found {installed_count} clones installed.")
+
+for i in range(installed_count + 1, 9):
+    apk = f"../$DOWNLOAD_DIR/{i}.apk"
+    if os.path.exists(apk):
+        print(f"Installing {apk}...")
+        os.system(f"pm install {apk}")
+    else:
+        print(f"File {apk} not found, skipping.")
+EOF
+    cd ..
+}
+
+# Fungsi 4: Uninstall
 do_uninstall() {
     pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    [ -z "$pkgs" ] && return [cite: 20, 21]
-    for pkg in $pkgs; do
-        pm uninstall "$pkg" > /dev/null 2>&1 [cite: 23]
-    done
-    echo "✨ Cleaned all clones." [cite: 26]
+    if [ -z "$pkgs" ]; then echo "❌ No clones found."; return; fi
+    
+    echo "⚠️ Yakin hapus SEMUA? (y/n)"
+    read confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        for pkg in $pkgs; do
+            echo "⏳ Menghapus $pkg..."
+            pm uninstall "$pkg" > /dev/null 2>&1
+        done
+        echo "✨ Selesai."
+    fi
 }
 
 # --- MAIN MENU ---
-check_root
-while true; do
-    echo "1. Download APKS (Gofile)"
-    echo "2. Install Missing APKS (1-8)"
-    echo "3. Backup Cookies"
-    echo "4. Restore Cookies"
-    echo "5. Uninstall All Clones"
-    echo "6. Exit"
-    read -p "Pilih: " choice
+check_root 
+while true; do 
+    echo ""
+    echo "1. Download & Install Clones (1-8)"
+    echo "2. Backup Cookies"
+    echo "3. Restore Cookies"
+    echo "4. HAPUS SEMUA APP"
+    echo "5. Keluar"
+    printf "Pilih menu [1-5]: " 
+    read choice
+
     case $choice in
-        1) setup_and_download ;;
-        2) run_installer ;;
-        3) do_backup ;;
-        4) do_restore ;;
-        5) do_uninstall ;;
-        6) exit 0 ;;
+        1) do_download_install ;;
+        2) do_backup ;;
+        3) do_restore ;;
+        4) do_uninstall ;;
+        5) exit 0 ;;
+        *) echo "Pilihan salah." ;;
     esac
 done
