@@ -116,41 +116,37 @@ function getTopTaskId() {
     } catch (e) {}
     return null;
 }
-function prefsExists(pkg) {
-  const prefsFile = `/data/data/${pkg}/shared_prefs/${pkg.replace(/\./g,'_')}_preferences.xml`;
-  try {
-    execSync(`su -c "ls ${prefsFile}"`, { stdio: 'ignore' }); // check existence via root
-    return prefsFile;
-  } catch {
-    return null;
-  }
-}
-
 
 // --- LAUNCH AND INSTANT SHRINK ---
-async function launchPackages(pkg, url, LEFT = 20, WIDTH = 200, HEIGHT = 250) {
-  const RIGHT = LEFT + WIDTH;
-  const prefsFile = `/data/data/${pkg}/shared_prefs/${pkg.replace(/\./g,'_')}_preferences.xml`;
-
+async function launchPackage(pkg, url) {
   try {
-    console.log(`\n🚀 Launching ${pkg} at LEFT=${LEFT}, WIDTH=${WIDTH}`);
+    console.log(`\n🚀 Launching: ${pkg}`);
+    // 1. Launch (Without bounds, because it crashes your phone)
+    const cmd = `am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch ` +
+                `-a android.intent.action.VIEW -d "${url}"`;
+    execSync(cmd, { stdio: 'ignore' });
 
-    // --- inject prefs + force stop + launch via su ---
-    const cmd = `
-      su -c '
-      if [ -f "${prefsFile}" ]; then
-        sed -i "/app_cloner_current_window_left/c\\\\<int name=\\\"app_cloner_current_window_left\\\" value=\\\"${LEFT}\\\" />" "${prefsFile}"
-        sed -i "/app_cloner_current_window_right/c\\\\<int name=\\\"app_cloner_current_window_right\\\" value=\\\"${RIGHT}\\\" />" "${prefsFile}"
-        sed -i "/app_cloner_current_window_bottom/c\\\\<int name=\\\"app_cloner_current_window_bottom\\\" value=\\\"${HEIGHT}\\\" />" "${prefsFile}"
-      fi
-      am force-stop ${pkg}
-      am start -n ${pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "${url}"
-      '
-    `;
-    execSync(cmd, { stdio: "inherit" });
-    console.log("   ✅ Launched and prefs injected");
+    // 2. Wait 2 seconds (Absolute minimum for window to exist)
+    await sleep(2000);
+    
+    // 3. Force Resize "Top App" Immediately
+    const taskId = getTopTaskId();
+    if (taskId) {
+        try {
+            // Attempt standard resize
+            execSync(`am task resize ${taskId} ${START_X} ${START_Y} ${START_X + WIDTH} ${START_Y + HEIGHT}`, { stdio: 'ignore' });
+            console.log(`   ✅ Shrunk to ${WIDTH}x${HEIGHT}`);
+        } catch(e) {
+            // Attempt legacy resize (common for older Androids)
+            try { execSync(`am stack resize ${taskId} ${START_X} ${START_Y} ${START_X + WIDTH} ${START_Y + HEIGHT}`, { stdio: 'ignore' });
+            } catch(e2) {}
+        }
+    } else {
+        console.log("   ⚠️ App started, but not ready to resize yet.");
+    }
+
   } catch (e) {
-    console.log(`❌ Error in launchPackages: ${e.message}`);
+      console.log(`❌ Error: ${e.message}`);
   }
 }
 
@@ -267,25 +263,19 @@ async function main() {
   if(cleanCode.includes("linkCode=")) cleanCode = cleanCode.split("linkCode=")[1].split("&")[0];
   const finalLaunchUrl = `roblox://placeID=${PLACE_ID}&linkCode=${cleanCode}`;
 
-  console.log("\n🚀 Launching all instances ....");
+  console.log("\n🚀 Launching all instances...");
   
-  let LEFT = 20;
-  const WIDTH = 200;
-  const HEIGHT = 250;
-  const GAP = 10;
-  
-  for (const pkg of packages) {
-    await launchPackages(pkg, finalLaunchUrl, LEFT, WIDTH, HEIGHT);
-  
-    lastRestartMap[pkg] = Date.now();
-    accountStates[pkg].isRunning = true;
-    accountStates[pkg].serverStatus = "Launching...";
-  
-    LEFT += WIDTH + GAP;
-    await new Promise(r => setTimeout(r, 1000));
+  for (const acc of accounts) {
+    stopPackage(acc.pkg);
+    // Launch and Shrink immediately
+    await launchPackage(acc.pkg, finalLaunchUrl);
+    
+    lastRestartMap[acc.pkg] = Date.now();
+    accountStates[acc.pkg].isRunning = true;
+    accountStates[acc.pkg].serverStatus = "Launching...";
+    console.log(`⏳ Cooldown ${LOOP_DELAY/1000}s (Arrange now!)...`);
+    await sleep(LOOP_DELAY); 
   }
-
-
 
   console.log(`\n💤 Monitor active (Presence: ${CHECK_SERVER_PRESENCE}, Auto-Fix: ${AUTO_RECONNECT})...`);
   while (true) {
