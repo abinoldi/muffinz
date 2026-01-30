@@ -18,6 +18,25 @@ check_root() {
 # Set PATH untuk root (Termux specific)
 export PATH=/data/data/com.termux/files/usr/bin:$PATH
 
+# Fungsi untuk menghitung jumlah cookies dalam database
+count_cookies_in_db() {
+    local db_file="$1"
+    local count=0
+    
+    # Cek apakah file database ada
+    if [ ! -f "$db_file" ]; then
+        echo 0
+        return
+    fi
+    
+    # Coba hitung cookies dengan sqlite3 jika tersedia
+    if command -v sqlite3 >/dev/null 2>&1; then
+        count=$(sqlite3 "$db_file" "SELECT COUNT(*) FROM cookies;" 2>/dev/null || echo 0)
+    fi
+    
+    echo "$count"
+}
+
 # Fungsi untuk download APK dari server
 download_apk_files() {
     local app_count=$1
@@ -39,7 +58,8 @@ download_apk_files() {
         
         # Cek apakah file sudah ada
         if [ -f "$apk_file" ]; then
-            echo "📦 File $apk_file sudah ada, skip download..."
+            file_size=$(du -h "$apk_file" | cut -f1)
+            echo "📦 File $apk_file sudah ada ($file_size), skip download..."
             downloaded_count=$((downloaded_count + 1))
             continue
         fi
@@ -88,57 +108,147 @@ download_apk_files() {
     return 0
 }
 
-# Fungsi 1: Backup
+# Fungsi 1: Backup dengan penghitung cookies
 do_backup() {
     echo "=========================================="
     echo "       MEMULAI PROSES BACKUP...           "
+    echo "=========================================="
+    
     mkdir -p "$BACKUP_DIR"
-    count=0
+    total_apps=0
+    total_cookies=0
+    backup_count=0
+    
+    echo "🔍 Mencari aplikasi Roblox..."
+    
     for folder in /data/data/com.roblox.clien*; do
         [ -e "$folder" ] || continue
+        total_apps=$((total_apps + 1))
+        
         pkg_name=$(basename "$folder")
         cookie_path=""
+        
+        echo ""
+        echo "📦 Aplikasi: $pkg_name"
+        
+        # Cari file cookies
         if [ -f "$folder/app_webview/Default/Cookies" ]; then
             cookie_path="$folder/app_webview/Default/Cookies"
+            echo "   📍 Lokasi: app_webview/Default/Cookies"
         elif [ -f "$folder/app_webview/Cookies" ]; then
             cookie_path="$folder/app_webview/Cookies"
+            echo "   📍 Lokasi: app_webview/Cookies"
+        else
+            echo "   ❌ Cookies tidak ditemukan"
+            continue
         fi
 
         if [ -n "$cookie_path" ]; then
-            cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
-            echo "✅ Backup SUKSES: $pkg_name"
-            count=$((count + 1))
+            backup_file="$BACKUP_DIR/${pkg_name}.db"
+            
+            # Backup file
+            cp "$cookie_path" "$backup_file"
+            
+            # Hitung jumlah cookies
+            cookie_count=$(count_cookies_in_db "$backup_file")
+            total_cookies=$((total_cookies + cookie_count))
+            
+            # Tampilkan informasi
+            file_size=$(du -h "$backup_file" | cut -f1)
+            echo "   ✅ Backup SUKSES"
+            echo "   📊 Cookies: $cookie_count"
+            echo "   💾 Size: $file_size"
+            echo "   📁 Tersimpan: $backup_file"
+            
+            backup_count=$((backup_count + 1))
         fi
     done
-    echo "Selesai! $count database tersimpan."
+    
+    echo ""
+    echo "=========================================="
+    echo "           BACKUP SELESAI                 "
+    echo "=========================================="
+    echo "📱 Aplikasi ditemukan: $total_apps"
+    echo "✅ Berhasil dibackup: $backup_count"
+    echo "🍪 Total cookies: $total_cookies"
+    echo "📁 Lokasi backup: $BACKUP_DIR"
+    
+    if [ $backup_count -gt 0 ]; then
+        echo ""
+        echo "📋 Daftar file backup:"
+        ls -la "$BACKUP_DIR"/*.db 2>/dev/null | while read line; do
+            file=$(echo "$line" | awk '{print $9}')
+            size=$(echo "$line" | awk '{print $5}')
+            if [ -f "$file" ]; then
+                file_name=$(basename "$file")
+                count=$(count_cookies_in_db "$file")
+                echo "   📦 $file_name ($count cookies, $size bytes)"
+            fi
+        done
+    fi
 }
 
-# Fungsi 2: Restore
+# Fungsi 2: Restore dengan informasi cookies
 do_restore() {
     echo "=========================================="
     echo "       MEMULAI PROSES RESTORE...          "
+    
     if [ ! -d "$BACKUP_DIR" ]; then
         echo "❌ Folder backup tidak ditemukan!"
+        echo "   Lokasi: $BACKUP_DIR"
         return 1
     fi
-    count=0
+    
+    echo "📁 Folder backup: $BACKUP_DIR"
+    echo "🔍 Mencari file backup..."
+    
+    restore_count=0
+    total_cookies_restored=0
+    
     for db_file in "$BACKUP_DIR"/com.roblox.clien*.db; do
         [ -e "$db_file" ] || continue
+        
         pkg_name=$(basename "$db_file" .db)
         target_folder="/data/data/$pkg_name"
         target_path="$target_folder/app_webview/Default/Cookies"
         
+        # Hitung cookies sebelum restore
+        cookie_count=$(count_cookies_in_db "$db_file")
+        
         if [ -d "$target_folder" ]; then
             mkdir -p "$(dirname "$target_path")"
+            
+            # Backup file asli jika ada
+            if [ -f "$target_path" ]; then
+                backup_original="$BACKUP_DIR/${pkg_name}_original.db"
+                cp "$target_path" "$backup_original"
+                echo "   💾 Backup original disimpan: $backup_original"
+            fi
+            
+            # Restore file
             cp "$db_file" "$target_path"
+            
+            # Set permission
             app_uid=$(stat -c "%u:%g" "$target_folder")
             chown "$app_uid" "$target_path"
             chmod 660 "$target_path"
+            
+            echo ""
             echo "✅ Restore SUKSES: $pkg_name"
-            count=$((count + 1))
+            echo "   🍪 Cookies: $cookie_count"
+            restore_count=$((restore_count + 1))
+            total_cookies_restored=$((total_cookies_restored + cookie_count))
+        else
+            echo "⚠️  Aplikasi $pkg_name tidak ditemukan, skip..."
         fi
     done
-    echo "✅ Restore selesai: $count app dipulihkan."
+    
+    echo ""
+    echo "=========================================="
+    echo "           RESTORE SELESAI                "
+    echo "=========================================="
+    echo "✅ Aplikasi dipulihkan: $restore_count"
+    echo "🍪 Total cookies dipulihkan: $total_cookies_restored"
 }
 
 # Fungsi 3: Download & Install dengan pilihan jumlah
@@ -352,6 +462,24 @@ echo "       ROBOX MULTI-CLONE MANAGER          "
 echo "=========================================="
 echo "📡 Server APK: $SERVER_URL"
 echo "📁 Folder: $DOWNLOAD_DIR"
+echo "💾 Backup: $BACKUP_DIR"
+
+# Cek apakah ada backup sebelumnya
+if [ -d "$BACKUP_DIR" ]; then
+    backup_files=$(ls "$BACKUP_DIR"/*.db 2>/dev/null | wc -l)
+    if [ $backup_files -gt 0 ]; then
+        echo "📊 Backup tersedia: $backup_files file"
+        
+        # Hitung total cookies di backup
+        total_backup_cookies=0
+        for db_file in "$BACKUP_DIR"/*.db; do
+            [ -e "$db_file" ] || continue
+            count=$(count_cookies_in_db "$db_file")
+            total_backup_cookies=$((total_backup_cookies + count))
+        done
+        echo "🍪 Cookies tersimpan: $total_backup_cookies"
+    fi
+fi
 
 while true; do 
     echo ""
