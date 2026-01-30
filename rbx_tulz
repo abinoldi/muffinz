@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v2.4 (CURL + PROGRESS)
+# ROBLOX CLONE MANAGER v2.6 (STABLE & CLEAN)
 # ==========================================================
 
 # Konfigurasi Lokasi
@@ -30,6 +30,7 @@ do_backup() {
         [ -e "$folder" ] || continue
         pkg_name=$(basename "$folder")
         
+        # Deteksi lokasi cookie (Default vs Root WebView)
         cookie_path=""
         if [ -f "$folder/app_webview/Default/Cookies" ]; then
             cookie_path="$folder/app_webview/Default/Cookies"
@@ -46,10 +47,10 @@ do_backup() {
         fi
     done
     echo "------------------------------------------"
-    echo "Selesai! $count database tersimpan di $BACKUP_DIR"
+    echo "Selesai! $count database tersimpan."
 }
 
-# Fungsi 2: Restore Akun (Fix Permissions)
+# Fungsi 2: Restore Akun (Dengan Pengecekan Direktori)
 do_restore() {
     echo "=========================================="
     echo "       MEMULAI PROSES RESTORE...          "
@@ -64,30 +65,31 @@ do_restore() {
         [ -e "$db_file" ] || continue
         pkg_name=$(basename "$db_file" .db)
         target_folder="/data/data/$pkg_name"
-        target_path="$target_folder/app_webview/Default/Cookies"
-        target_dir_parent="$target_folder/app_webview/Default"
 
+        # Cek apakah aplikasi sudah terinstall
         if [ -d "$target_folder" ]; then
-            if [ ! -d "$target_dir_parent" ]; then
-                mkdir -p "$target_dir_parent"
-                app_uid_folder=$(stat -c "%u:%g" "$target_folder")
-                chown -R "$app_uid_folder" "$target_folder/app_webview"
-            fi
+            target_dir_parent="$target_folder/app_webview/Default"
+            target_path="$target_dir_parent/Cookies"
 
+            # Buat folder jika belum ada (biasanya pada instalasi baru)
+            mkdir -p "$target_dir_parent"
+            
+            # Copy database backup
             cp "$db_file" "$target_path"
-            # Perbaikan Izin Akses agar aplikasi bisa membaca database
+            
+            # PERBAIKAN IZIN AKSES (PENTING agar game tidak logout/crash)
             app_uid=$(stat -c "%u:%g" "$target_folder")
-            chown "$app_uid" "$target_path"
+            chown -R "$app_uid" "$target_folder/app_webview"
             chmod 660 "$target_path"
             
             echo "✅ Restore SUKSES: $pkg_name"
             count=$((count + 1))
         else
-            echo "❌ GAGAL: $pkg_name belum terinstall."
+            echo "❌ GAGAL: $pkg_name belum terinstall (Folder data tidak ada)."
         fi
     done
     echo "------------------------------------------"
-    echo "Selesai! $count database dikembalikan."
+    echo "Selesai! $count akun berhasil dipulihkan."
 }
 
 # Fungsi 3: Hapus Semua Aplikasi Clone
@@ -102,10 +104,7 @@ do_uninstall() {
         return
     fi
 
-    echo "⚠️  Daftar aplikasi terdeteksi:"
-    echo "$pkgs"
-    echo "------------------------------------------"
-    echo -n "❓ Yakin hapus SEMUA? (y/n): "
+    echo -n "❓ Yakin hapus SEMUA aplikasi clone? (y/n): "
     read confirm
 
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
@@ -120,63 +119,51 @@ do_uninstall() {
     fi
 }
 
-# Fungsi 4: AUTO PROCESS (CURL Download -> Install -> Restore)
+# Fungsi 4: AUTO PROCESS (Download -> Install -> Restore)
 do_auto_process() {
     echo "=========================================="
     echo "       PROSES OTOMATIS BERJALAN           "
     echo "=========================================="
 
     if [ ! -d "$BACKUP_DIR" ]; then
-        echo "❌ Folder backup tidak ditemukan!"
+        echo "❌ Backup tidak ditemukan! Lakukan backup dulu."
         return
     fi
 
-    # Cek jumlah backup
     total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
-
     if [ "$total_backup" -eq 0 ]; then
-        echo "❌ Tidak ada data backup yang tersedia."
+        echo "❌ Tidak ada data akun di $BACKUP_DIR."
         return
     fi
 
-    echo "📦 Total: $total_backup akun. Menyiapkan instalasi..."
+    echo "📦 Menyiapkan $total_backup akun untuk dipasang..."
     mkdir -p "$DOWNLOAD_DIR"
 
     for i in $(seq 1 "$total_backup"); do
         echo "------------------------------------------"
         APK_NAME="$i.apk"
-        TARGET_URL="$BASE_URL/$APK_NAME"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
 
-        # Step 1: Download dengan Curl (Menampilkan Persentase)
+        # 1. Download menggunakan CURL dengan Bar Progres
         if [ ! -f "$SAVE_PATH" ]; then
             echo "📥 Mengunduh $APK_NAME [$i/$total_backup]"
-            # -L mengikuti redirect, --progress-bar menampilkan grafik progres & %
-            curl -L --progress-bar "$TARGET_URL" -o "$SAVE_PATH"
-            
-            if [ $? -ne 0 ]; then
-                echo "❌ Gagal mengunduh $APK_NAME"
-                continue
-            fi
+            curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
         else
-            echo "✅ $APK_NAME sudah tersedia di lokal."
+            echo "✅ $APK_NAME sudah tersedia."
         fi
 
-        # Step 2: Install
+        # 2. Install Silent
         if [ -f "$SAVE_PATH" ]; then
             echo "⏳ Memasang $APK_NAME..."
             pm install -r "$SAVE_PATH" > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                echo "✅ Install Berhasil."
-            else
-                echo "❌ Gagal install."
-            fi
+            
+            # JEDA PENTING: Memberi waktu sistem membuat folder /data/data/
+            echo "⏳ Sinkronisasi sistem (tunggu 3 detik)..."
+            sleep 3
         fi
     done
 
-    # Step 3: Restore Data
-    echo "------------------------------------------"
-    echo "🔧 Sinkronisasi Cookies ke aplikasi baru..."
+    # 3. Jalankan Restore Masal
     do_restore
     echo "✨ SEMUA PROSES OTOMATIS SELESAI!"
 }
@@ -187,12 +174,12 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX CLONE MANAGER v2.4 (ROOT)      "
+    echo "    ROBLOX CLONE MANAGER v2.6 (ROOT)      "
     echo "=========================================="
-    echo "1. Backup Akun (Sekarang)"
+    echo "1. Backup Akun"
     echo "2. Restore Akun (Manual)"
     echo "3. Hapus Semua Aplikasi Clone"
-    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
+    echo "4. PROSES OTOMATIS (Sangat Disarankan)"
     echo "5. Keluar"
     echo "------------------------------------------"
     echo -n "Pilih menu [1-5]: "
@@ -204,6 +191,6 @@ while true; do
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) echo "Keluar."; exit 0 ;;
-        *) echo "⚠️ Pilihan tidak valid." ;;
+        *) echo "⚠️ Pilihan salah." ;;
     esac
 done
