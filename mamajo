@@ -127,7 +127,7 @@ function prefsExists(pkg) {
 }
 
 // --- LAUNCH AND INSTANT SHRINK ---
-async function launchPackage(pkg, url, LEFT = 20, WIDTH = 200, HEIGHT = 250) {
+async function launchPackages(pkg, url, LEFT = 20, WIDTH = 200, HEIGHT = 250) {
   try {
     console.log(`\n🚀 Launching: ${pkg} at LEFT=${LEFT}, WIDTH=${WIDTH}`);
 
