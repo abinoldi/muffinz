@@ -1,0 +1,103 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# ROBLOX Cookie Injector - Auto Dependency Version
+# Target: com.roblox.client
+
+# CONFIGURATION
+ROBLOX_PACKAGE="com.roblox.client"
+COOKIE_DB="/data/data/$ROBLOX_PACKAGE/app_webview/Default/Cookies"
+REMOTE_SQL_FILE="/data/data/com.termux/files/home/inject_temp.sql"
+
+# THE COOKIE
+COOKIE_VALUE="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_CAEaAhADIhsKBGR1aWQSEzk5NTYwNDQzMjI2NTQ4MDcyMDEoAw.0X7UmuL9ezbQiDLC6EIhQuFOE8OUPLwDwr5dKIs4qoldSQsCMiOk_Tx0MA7e8ZQsBP2x6rg3KM3rwqmNWUznGf0_Uxxch0l2wyy33MZW6d8tFTryxD_xhyvyvOLCcoPyt7N2XlDYITdLovFNQxpFADR__JsMj3DyuXGGJKCofkbjrXVZW3V3wBOPDY0no4Ad6u094ZBX8Gp5LHySuV30EXMBVh0aHkx5eVAdd5ou3FjeVC1nPB8LTMTYJm5nayYHwA4vZZlZw6V3K5Y0Mg3mN2uY8hHl-NlzpwYVLgIfOiQ4acbfgZAUprZdfWdkDBRIyhRYhThb9kDTwK8zGlJdgDHsthRFmTWf2_7PO-Ge7JSe3HOOZugVuyhZDeGiLNeVJLWQ_EPKjG6NaaMt8UZhQ7cFkN9BJA6uzb3aDFid0bUcEkmPX-F2x_-zbvt6qAEQqGDWA7LpQwbPoxtDk6RS_ZNOwaHxVpgJVJjHXIkptiBiP9Rvb7uJdP90zD_kpwfSgdElU3_zNXXtzdNahitUDLAi-bxNc6Ee6On8OkeRpYdxorsBoiDx-8pDiUFMmgK8t5wDvryKT868lNSdvm7Ag1Ed_YOi5tkIg600a7kLMo_JktmzPWPVy-E9vEsn4g_2mmS-hG6K6YlrD566tPl3e5v2uzdJqkEBln7PCjm95pbKy6SaDSM4epPfZSKXNjLfJfalJWbEPi9pRhZDnoKNQtTUlfyw9VYLbZDkG5Tm-wshOLfmzuRNxQOgwPbf4WZefSEDamyVG8yM67Ia713E27plk5M"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+print_status() {
+    echo -e "${YELLOW}➤ $1${NC}"
+}
+
+# --- BAGIAN AUTO-INSTALL ---
+check_and_install_deps() {
+    print_status "Mengecek dependensi..."
+    
+    # List tools yang dibutuhkan
+    deps=("sqlite" "tsu")
+    
+    for tool in "${deps[@]}"; do
+        if ! command -v "$tool" &> /dev/null; then
+            echo -e "${RED}✗ $tool tidak ditemukan. Menginstal...${NC}"
+            pkg update -y && pkg install "$tool" -y
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✓ $tool berhasil diinstal.${NC}"
+            else
+                echo -e "${RED}✗ Gagal menginstal $tool. Periksa koneksi internet.${NC}"
+                exit 1
+            fi
+        fi
+    done
+}
+
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${RED}✗ Script tidak berjalan sebagai root.${NC}"
+        echo -e "${YELLOW}Mencoba mendapatkan akses root via tsu...${NC}"
+        tsu -c "bash $0"
+        exit $?
+    fi
+}
+
+# --- BAGIAN INJEKSI ---
+create_sql_file() {
+    # Berdasarkan struktur database Cookies_Salinan.db 
+    SAFE_COOKIE=$(echo "$COOKIE_VALUE" | sed "s/'/''/g")
+    NOW=$(($(date +%s) * 1000000 + 11644473600000000))
+    EXPIRE=$(($NOW + 31536000000000))
+
+    cat > "$REMOTE_SQL_FILE" << EOF
+BEGIN TRANSACTION;
+DELETE FROM cookies WHERE name = '.ROBLOSECURITY' AND host_key = '.roblox.com';
+INSERT INTO cookies (
+    creation_utc, top_frame_site_key, host_key, name, value, 
+    encrypted_value, path, expires_utc, is_secure, is_httponly, 
+    last_access_utc, has_expires, is_persistent, priority, 
+    samesite, source_scheme, source_port, is_same_party
+) VALUES (
+    $NOW, '', '.roblox.com', '.ROBLOSECURITY', '$SAFE_COOKIE', 
+    X'', '/', $EXPIRE, 1, 1, $NOW, 1, 1, 1, -1, 2, 443, 0
+);
+COMMIT;
+EOF
+}
+
+main() {
+    echo -e "${GREEN}=== ROBLOX INJECTOR PRO ===${NC}"
+    
+    # 1. Install apa yang kurang
+    check_and_install_deps
+    
+    # 2. Pastikan Root (menggunakan tsu yang baru diinstall jika perlu)
+    check_root
+
+    # 3. Jalankan Injeksi
+    print_status "Menghentikan $ROBLOX_PACKAGE..."
+    am force-stop "$ROBLOX_PACKAGE"
+    
+    create_sql_file
+    
+    print_status "Menyuntikkan cookie ke database..."
+    if sqlite3 "$COOKIE_DB" < "$REMOTE_SQL_FILE"; then
+        echo -e "${GREEN}✓ Injeksi Berhasil!${NC}"
+    else
+        echo -e "${RED}✗ Gagal. Pastikan Roblox terinstall dan path database benar.${NC}"
+    fi
+
+    # Cleanup
+    [ -f "$REMOTE_SQL_FILE" ] && rm "$REMOTE_SQL_FILE"
+}
+
+main
