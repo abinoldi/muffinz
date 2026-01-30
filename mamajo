@@ -116,6 +116,15 @@ function getTopTaskId() {
     } catch (e) {}
     return null;
 }
+function prefsExists(pkg) {
+  const prefsFile = `/data/data/${pkg}/shared_prefs/${pkg.replace(/\./g,'_')}_preferences.xml`;
+  try {
+    execSync(`su -c "ls ${prefsFile}"`, { stdio: 'ignore' });
+    return prefsFile; // file ada
+  } catch {
+    return null;      // file tidak ada
+  }
+}
 
 // --- LAUNCH AND INSTANT SHRINK ---
 async function launchPackage(pkg, url, LEFT = 20, WIDTH = 200, HEIGHT = 250) {
@@ -125,11 +134,10 @@ async function launchPackage(pkg, url, LEFT = 20, WIDTH = 200, HEIGHT = 250) {
     const RIGHT = LEFT + WIDTH;
 
     // --- prefs file path (dynamic based on package name) ---
-    const prefsFile = `/data/data/${pkg}/shared_prefs/${pkg.replace(/\./g,'_')}_preferences.xml`;
-    if (!fs.existsSync(prefsFile)) {
-      console.log(`⚠️ Prefs file not found: ${prefsFile}`);
+    const prefsFile = prefsExists(pkg);
+    if (!prefsFile) {
+      console.log(`⚠️ Prefs file not found for ${pkg}`);
     } else {
-      // --- inject window positions safely ---
       execSync(`su -c 'sed -i "/app_cloner_current_window_left/c\\\\<int name=\\"app_cloner_current_window_left\\" value=\\"${LEFT}\\" />" ${prefsFile}'`);
       execSync(`su -c 'sed -i "/app_cloner_current_window_right/c\\\\<int name=\\"app_cloner_current_window_right\\" value=\\"${RIGHT}\\" />" ${prefsFile}'`);
       execSync(`su -c 'sed -i "/app_cloner_current_window_bottom/c\\\\<int name=\\"app_cloner_current_window_bottom\\" value=\\"${HEIGHT}\\" />" ${prefsFile}'`);
