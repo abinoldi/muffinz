@@ -4,7 +4,7 @@
 # Target: com.roblox.client
 
 # CONFIGURATION
-ROBLOX_PACKAGE="com.roblox.client"
+ROBLOX_PACKAGE="com.roblox.clienb"
 COOKIE_DB="/data/data/$ROBLOX_PACKAGE/app_webview/Default/Cookies"
 REMOTE_SQL_FILE="/data/data/com.termux/files/home/inject_temp.sql"
 
