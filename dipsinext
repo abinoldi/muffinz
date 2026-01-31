@@ -1,35 +1,73 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.3 (Custom: Anti-Stuck + Smart Equip + Potato Audio/3D)
+-- VERSION: v1.3.5 (Instant Potato + Smart Equip + Auto Restart)
 -- ======================================================
 
 -- [[ CONFIGURATION ]] --
-local STUCK_TIMEOUT = 30         -- Waktu (detik) sebelum dianggap stuck & reset
-local DISABLE_3D_RENDER = true   -- True = Layar hitam (Hemat CPU/GPU)
-local DISABLE_AUDIO = true       -- True = Mematikan suara game
-local DEBUG_MODE = true          -- Tampilkan print status
+local STUCK_TIMEOUT = 30         -- Waktu (detik) tanpa ikan sebelum restart
+local DISABLE_3D_RENDER = true   -- True = Layar Hitam (Super Ringan)
+local DISABLE_AUDIO = true       -- True = Mute semua suara game
+local DEBUG_MODE = true          
 
+-- Tunggu Game Load
 repeat task.wait() until game:IsLoaded()
-local Plrs = game:GetService("Players")
+
+-- ===============================
+-- 1. INSTANT POTATO MODE (FIRST PRIORITY)
+-- ===============================
 local RunService = game:GetService("RunService")
+local Plrs = game:GetService("Players")
 local VirtualUser = game:GetService("VirtualUser")
 local MyLp = Plrs.LocalPlayer
 
+local function EnablePotatoMode()
+    -- Langsung matikan 3D Render
+    if DISABLE_3D_RENDER then
+        RunService:Set3dRenderingEnabled(false)
+    else
+        RunService:Set3dRenderingEnabled(true)
+    end
+
+    task.spawn(function()
+        while task.wait(3) do
+            pcall(function()
+                game.Lighting.GlobalShadows = false
+                game.Lighting.Brightness = 0
+                for _, v in ipairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") then 
+                        v.Transparency = 1; v.CastShadow = false
+                    elseif v:IsA("Decal") or v:IsA("Texture") then 
+                        v.Transparency = 1 
+                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then 
+                        v.Enabled = false
+                    elseif DISABLE_AUDIO and (v:IsA("Sound") or v:IsA("SoundGroup")) then
+                        if v:IsA("Sound") then v.Playing = false; v.Volume = 0 end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AKTIFKAN SEKARANG JUGA!
+task.spawn(EnablePotatoMode)
+print("🥔 Potato Mode Activated Immediately!")
+
 -- ===============================
--- GLOBAL VARS
+-- 2. GLOBAL VARS & SETUP
 -- ===============================
 local IsChangingRod = false      -- Semaphore untuk mencegah konflik equip
-local LastCatchTime = os.time()  -- Timer untuk deteksi stuck
+local LastCatchTime = os.time()  -- Timer deteksi stuck
 
--- 1. Lakukan Respawn Awal (Reset Character)
+-- Lakukan Respawn Awal (Reset Character)
 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
     MyLp.Character.Humanoid.Health = 0 
 end
 
--- 2. Tunggu sampai karakter muncul kembali sepenuhnya
+-- Tunggu Respawn
 MyLp.CharacterAdded:Wait()
 MyLp.Character:WaitForChild("HumanoidRootPart", 10)
-task.wait(10)
+task.wait(5)
 
 -- ===============================
 -- ANTI-AFK
@@ -54,34 +92,6 @@ local STATE = {
 }
 
 -- ===============================
--- SAFE POTATO MODE (UPDATED)
--- ===============================
-local function EnablePotatoMode()
-    -- 1. 3D Render Logic
-    RunService:Set3dRenderingEnabled(not DISABLE_3D_RENDER)
-
-    task.spawn(function()
-        while task.wait(5) do
-            pcall(function()
-                game.Lighting.GlobalShadows = false
-                game.Lighting.Brightness = 0
-                for _, v in ipairs(workspace:GetDescendants()) do
-                    if v:IsA("BasePart") then 
-                        v.Transparency = 1; v.CastShadow = false
-                    elseif v:IsA("Decal") or v:IsA("Texture") then 
-                        v.Transparency = 1 
-                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then 
-                        v.Enabled = false
-                    elseif DISABLE_AUDIO and (v:IsA("Sound") or v:IsA("SoundGroup")) then
-                        if v:IsA("Sound") then v.Playing = false; v.Volume = 0 end
-                    end
-                end
-            end)
-        end
-    end)
-end
-
--- ===============================
 -- REMOTES & DATA
 -- ===============================
 local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
@@ -101,7 +111,7 @@ local RF_PurchaseFishingRod = GetRemote(RPath, "RF/PurchaseFishingRod")
 local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 local RF_PlaceLeverItem = GetRemote(RPath, "RE/PlaceLeverItem")
 
--- NEW REMOTES
+-- INSTANT FISH REMOTES
 local RF_ChargeFishingRod = GetRemote(RPath, "RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote(RPath, "RF/RequestFishingMinigameStarted")
 local RE_FishingCompleted = GetRemote(RPath, "RE/FishingCompleted")
@@ -112,7 +122,7 @@ local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
--- ROD DATA & DELAY
+-- DATA TABLES
 -- ===============================
 local ROD_DELAYS = {
     [79] = 4.6, [76] = 4.35, [85] = 4.35, [77] = 4.35, [78] = 4.35,
@@ -182,7 +192,7 @@ end
 local function EquipRod(nameID)
     if not PlayerDataReplion then return end
     
-    IsChangingRod = true -- PAUSE thread spam agar tidak bentrok
+    IsChangingRod = true -- PAUSE thread spam
     task.wait(0.1)
 
     local inv = PlayerDataReplion:GetExpect("Inventory")
@@ -210,7 +220,7 @@ local function EquipRod(nameID)
         end
     end
 
-    -- Fallback: Jika "Best" tidak ketemu (misal cuma punya Starter Rod)
+    -- Fallback: Jika "Best" tidak ketemu (Untuk Starter Rod)
     if nameID == "Best" and not targetRod then
         for _, r in pairs(rods) do
             targetRod = r
@@ -443,9 +453,10 @@ task.spawn(function()
     end
 end)
 
--- [THREAD: BACKGROUND EQUIP (ANTI-STUCK)]
+-- [THREAD: BACKGROUND EQUIP (SMART ANTI-STUCK)]
 task.spawn(function()
     while task.wait(0.15) do
+        -- Hanya spam equip slot 1 jika TIDAK sedang ganti rod (biar tidak flicker)
         if AutoActive and not IsChangingRod then
             if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") and MyLp.Character.Humanoid.Health > 0 then
                 pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
@@ -454,21 +465,25 @@ task.spawn(function()
     end
 end)
 
--- [THREAD: STUCK DETECTION]
+-- [THREAD: STUCK DETECTION (AUTO RESTART)]
 task.spawn(function()
     while task.wait(5) do
         if (os.time() - LastCatchTime > STUCK_TIMEOUT) and not STATE.Teleporting then
             warn("⚠️ STUCK DETECTED! Restarting...")
             STATE.Status = "STUCK! RESPAWNING..."
             
+            -- Matikan Character
             if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
                 MyLp.Character.Humanoid.Health = 0
             end
+            
+            -- Tunggu Respawn
             MyLp.CharacterAdded:Wait()
             MyLp.Character:WaitForChild("HumanoidRootPart")
             
+            -- Reset Logic
             LastCatchTime = os.time()
-            STATE.CurrentArea = "None"
+            STATE.CurrentArea = "None" -- Force Re-Teleport
             STATE.Teleporting = false
             task.wait(5)
         end
@@ -519,7 +534,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.3"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.5"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
@@ -546,11 +561,10 @@ local function CreateDashboard()
     end)
 end
 
-task.spawn(EnablePotatoMode)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub Full Auto (v1.3.3 Custom) Started!")
+print("🚀 EnochHub Full Auto (v1.3.5) Started!")
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
 task.spawn(function()
