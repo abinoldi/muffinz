@@ -97,6 +97,19 @@ local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
+-- FIRST EQUIP ROD WHEN START
+-- ===============================
+-- 2. Lakukan Loop 3 Kali
+for i = 1, 3 do
+    -- Kirim sinyal equip slot 1
+    RE_EquipToolFromHotbar:FireServer(1)
+    
+    print("Mencoba equip ke-" .. i)
+    
+    -- Jeda 0.1 detik setiap kali aksi (Bisa diubah, misal 0.1 agar lebih cepat)
+    task.wait(0.1) 
+end
+-- ===============================
 -- INSTANT FISHING DELAY
 -- ===============================
 -- [DATA DELAY ROD]
