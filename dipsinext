@@ -466,30 +466,34 @@ task.spawn(function()
 end)
 
 -- [THREAD: STUCK DETECTION (AUTO RESTART)]
+-- [THREAD: STUCK DETECTION (AUTO RESTART) - FIX HANG]
 task.spawn(function()
     while task.wait(5) do
+        -- Cek apakah waktu stuck terlampaui DAN tidak sedang OTW teleport
         if (os.time() - LastCatchTime > STUCK_TIMEOUT) and not STATE.Teleporting then
-            warn("⚠️ STUCK DETECTED! Restarting...")
+            
+            warn("⚠️ STUCK DETECTED! Force Resetting...")
             STATE.Status = "STUCK! RESPAWNING..."
             
-            -- Matikan Character
+            -- 1. Matikan Karakter
             if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
                 MyLp.Character.Humanoid.Health = 0
             end
             
-            -- Tunggu Respawn
-            MyLp.CharacterAdded:Wait()
-            MyLp.Character:WaitForChild("HumanoidRootPart")
+            -- 2. JANGAN GUNAKAN CharacterAdded:Wait() KARENA BISA MACET/HANG
+            -- Gunakan delay manual 8 detik (Waktu rata-rata respawn)
+            task.wait(8) 
             
-            -- Reset Logic
-            LastCatchTime = os.time()
-            STATE.CurrentArea = "None" -- Force Re-Teleport
+            -- 3. Reset Variabel (Paksa script jalan lagi)
+            LastCatchTime = os.time() -- Reset timer stuck
+            STATE.CurrentArea = "None" -- Paksa script sadar lokasi salah
             STATE.Teleporting = false
-            task.wait(5)
+            STATE.Status = "Recovered." -- Update status agar user tahu script jalan lagi
+            
+            print("✅ System Reset Complete.")
         end
     end
 end)
-
 -- [THREAD: MAIN LOGIC]
 task.spawn(function()
     while task.wait(0.5) do
