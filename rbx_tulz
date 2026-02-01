@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v5.0 (PURE BASH)
+# ROBLOX MANAGER v5.1 (BASH + FIX JSON PARSING)
 # ==========================================================
 
-# --- KONFIGURASI MANAGER ---
+# --- KONFIGURASI ---
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-GOFILE_URL="https://gofile.io/d/ewZLec"  # Ganti dengan link kamu
-TOKEN="" # Biarkan kosong untuk guest
+GOFILE_URL="https://gofile.io/d/ewZLec"
+TOKEN=""
 
 # --- WARNA OUTPUT ---
 GREEN='\033[0;32m'
@@ -19,18 +19,20 @@ NC='\033[0m'
 _print() { echo -e "$1"; }
 
 # ==========================================================
-# BAGIAN 1: GOFILE DOWNLOADER ENGINE (BASH)
+# BAGIAN 1: GOFILE DOWNLOADER ENGINE
 # ==========================================================
 
 parse_json() {
     local key=$1
     local json=$2
+    # Mengambil value dari key JSON sederhana
     echo "$json" | sed -n 's/.*"'"$key"'":"\([^"]*\)".*/\1/p' | head -n 1
 }
 
 parse_children_ids() {
-    # Menggunakan grep -oP butuh grep versi penuh (biasanya ada di Termux)
-    echo "$1" | grep -oP '"id":"\K[^"]+' | tail -n +2
+    # [FIX] Pecah baris panjang dengan sed agar grep tidak cut-off
+    # Mengubah setiap koma (,) menjadi baris baru (\n) sebelum di-grep
+    echo "$1" | sed 's/,/\n/g' | grep -oP '"id":"\K[^"]+' | tail -n +2
 }
 
 setup_token() {
@@ -50,14 +52,15 @@ download_file() {
     local output_path="$2"
     local filename=$(basename "$output_path")
     
-    if [ -f "$output_path" ]; then
+    # Cek apakah file sudah ada dan ukurannya > 0
+    if [ -s "$output_path" ]; then
         _print "⏩ Skip (Sudah ada): $filename"
         return
     fi
 
     _print "⬇️ Download: ${GREEN}$filename${NC}"
     
-    # Retry 3 kali, progress bar sederhana
+    # Download dengan progress bar simple (-#)
     curl -L -# --retry 3 \
          -H "Authorization: Bearer $TOKEN" \
          -o "$output_path" \
@@ -69,7 +72,6 @@ fetch_contents() {
     local current_dir="$2"
     local password="$3"
 
-    # API Request
     local api_url="https://api.gofile.io/contents/$content_id?cache=true"
     [ -n "$password" ] && api_url+="&password=$(echo -n $password | sha256sum | awk '{print $1}')"
 
@@ -84,7 +86,7 @@ fetch_contents() {
     local type=$(parse_json "type" "$response")
     local name=$(parse_json "name" "$response")
     
-    # Jika root folder dari link, jangan buat subfolder lagi agar rapi
+    # Atur path folder download
     if [[ "$current_dir" == "$DOWNLOAD_DIR" ]] && [[ "$type" == "folder" ]]; then
          local target_path="$current_dir"
     else
@@ -93,12 +95,12 @@ fetch_contents() {
 
     if [ "$type" == "folder" ]; then
         mkdir -p "$target_path"
-        _print "${YELLOW}📂 Memindai Folder: $name${NC}"
+        _print "${YELLOW}📂 Scan Folder: $name${NC}"
         
-        # Parsing ID anak (child ids)
-        local ids=$(echo "$response" | grep -oP '"id":"\K[^"]+' | tail -n +2)
+        # [FIX] Menggunakan fungsi parse baru
+        local ids=$(parse_children_ids "$response")
         
-        # Loop download (Sequential agar tidak crash di HP kentang)
+        # Loop download rekursif
         for id in $ids; do
             fetch_contents "$id" "$target_path" "$password"
         done
@@ -115,7 +117,7 @@ fetch_contents() {
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         _print "${RED}❌ Script ini MEMBUTUHKAN akses Root!${NC}"
-        _print "👉 Jalankan dengan: ${YELLOW}tsu${NC} atau ${YELLOW}sudo bash namafile.sh${NC}"
+        _print "👉 Ketik ${YELLOW}tsu${NC} dulu, baru jalankan script."
         exit 1
     fi
 }
@@ -129,7 +131,6 @@ do_backup() {
         pkg_name=$(basename "$folder")
         cookie_path=""
         
-        # Cek berbagai kemungkinan lokasi cookies
         if [ -f "$folder/app_webview/Default/Cookies" ]; then
             cookie_path="$folder/app_webview/Default/Cookies"
         elif [ -f "$folder/app_webview/Cookies" ]; then
@@ -148,8 +149,8 @@ do_backup() {
 do_restore_sequential() {
     _print "\n=== RESTORE SEQUENTIAL ==="
     
-    # Ambil list backup dan aplikasi
-    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    # Ambil list backup dan urutkan
+    backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
@@ -174,7 +175,7 @@ do_restore_sequential() {
         mkdir -p "$target_dir_parent"
         cp "$current_db" "$target_path"
         
-        # Perbaikan Izin Akses (PENTING)
+        # Fix Permissions
         app_uid=$(stat -c "%u:%g" "$target_folder")
         if [ -n "$app_uid" ]; then
             chown -R "$app_uid" "$target_folder/app_webview"
@@ -207,36 +208,44 @@ do_uninstall() {
 
 do_auto_process() {
     _print "\n=========================================="
-    _print "   PROSES OTOMATIS (BASH NATIVE)          "
+    _print "   PROSES OTOMATIS (DOWNLOAD & INSTALL)   "
     _print "=========================================="
     
     mkdir -p "$DOWNLOAD_DIR"
 
-    # 1. Jalankan Downloader
+    # 1. Download
     local content_id=$(echo "$GOFILE_URL" | grep -oE '[a-zA-Z0-9]+$' | tail -n 1)
-    
     setup_token
-    _print "🚀 Memulai download dari Gofile ID: $content_id"
+    _print "🚀 Memindai URL Gofile: $content_id"
     fetch_contents "$content_id" "$DOWNLOAD_DIR" ""
     
     _print "\n✅ Download Selesai. Memulai Instalasi..."
-    
-    # 2. Install APK (Looping semua .apk di folder download)
-    count_install=0
-    
-    # Atasi spasi pada nama file dengan while read
-    find "$DOWNLOAD_DIR" -maxdepth 2 -name "*.apk" | while read apk_file; do
-        _print "⏳ Memasang: $(basename "$apk_file")..."
+    sleep 2
+
+    # 2. Install (Menggunakan sort -V agar urutan 1.apk, 2.apk... 10.apk benar)
+    # Pindah ke direktori download agar mudah diloop
+    cd "$DOWNLOAD_DIR" || return
+
+    # Cek apakah ada file apk
+    if ! ls *.apk 1> /dev/null 2>&1; then
+        _print "${RED}❌ Tidak ada file .apk di $DOWNLOAD_DIR${NC}"
+        return
+    fi
+
+    for apk_file in $(ls *.apk | sort -V); do
+        _print "⏳ Memasang: ${GREEN}$apk_file${NC}..."
         pm install -r "$apk_file" > /dev/null 2>&1
-        # Kita tidak bisa increment variabel di dalam pipe subshell dengan mudah di sh,
-        # jadi kita biarkan log saja.
+        if [ $? -eq 0 ]; then
+             _print "   └─ Sukses."
+        else
+             _print "   └─ ${RED}Gagal install!${NC}"
+        fi
     done
 
     # 3. Restore
     do_restore_sequential
     _print "✨ SEMUA PROSES SELESAI!"
 }
-
 
 # ==========================================================
 # MAIN LOOP
@@ -245,7 +254,7 @@ check_root
 
 while true; do
     echo ""
-    _print "${GREEN}=== ROBLOX MANAGER v5.0 (BASH) ===${NC}"
+    _print "${GREEN}=== ROBLOX MANAGER v5.1 (FIXED) ===${NC}"
     echo "1. Backup Akun"
     echo "2. Restore Akun (Urutan Sequential)"
     echo "3. Hapus Semua Aplikasi Clone"
