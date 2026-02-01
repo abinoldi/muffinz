@@ -293,7 +293,6 @@ local function EnsureLegitFishingActive()
 end
 
 -- [THREAD: DUAL WATCHDOG ANTI-STUCK]
--- [THREAD: DUAL WATCHDOG ANTI-STUCK]
 task.spawn(function()
     while task.wait(1) do
         if AutoActive then
@@ -301,50 +300,63 @@ task.spawn(function()
             local isStuck = false
             local stuckReason = "None"
             
-            -- CHECK 1: Stuck di Casting (Tidak melempar > 8 detik)
+            -- CHECK 1: Stuck Casting (> 8 detik)
             if STATE.Status == "Casting (Waiting)" and timeSinceLastAction > 8 then
                 isStuck = true; stuckReason = "Cast Lag"
             end
             
-            -- CHECK 2: Stuck di Monitoring (Tidak ada ikan > 25 detik)
+            -- CHECK 2: Stuck Monitoring (> 25 detik)
             if STATE.Status == "Monitoring (Native)" and timeSinceLastAction > 25 then
                 isStuck = true; stuckReason = "No Bite Timeout"
             end
 
-            -- CHECK 3: Stuck di Reeling (Mini-game macet > 15 detik)
+            -- CHECK 3: Stuck Reeling (> 15 detik)
             if (STATE.Status == "Reeling (Mini-Game)" or LegitState.Status == "Reeling") and timeSinceLastAction > 15 then
                 isStuck = true; stuckReason = "Reeling Stuck"
             end
 
-            -- ACTION: HARD RESET (FORCE UNEQUIP)
+            -- ACTION: HARD RESET (CLICK EXIT BUTTON + UNEQUIP)
             if isStuck then
                 STATE.Status = "⚠️ HARD RESET: " .. stuckReason
                 
-                -- 1. Matikan paksa loop klik di client
+                -- 1. Matikan loop klik lokal
                 LegitState.Status = "Idle" 
                 if LegitClickThread then 
                     task.cancel(LegitClickThread)
                     LegitClickThread = nil
                 end
 
-                -- 2. Cancel Input ke Server
+                -- [BARU] 2. TEMBAK TOMBOL EXIT (Sesuai Foto)
+                pcall(function()
+                    local pGui = MyLp:FindFirstChild("PlayerGui")
+                    if pGui then
+                        local mainGui = pGui:FindFirstChild("Fishing") and pGui.Fishing:FindFirstChild("Main")
+                        local exitBtn = mainGui and mainGui:FindFirstChild("Exit")
+                        
+                        if exitBtn and exitBtn.Visible then
+                            -- Coba trigger event klik tombol Exit
+                            for _, conn in pairs(getconnections(exitBtn.MouseButton1Click)) do conn:Fire() end
+                            for _, conn in pairs(getconnections(exitBtn.Activated)) do conn:Fire() end
+                        end
+                    end
+                end)
+                task.wait(0.5) -- Beri waktu tombol Exit diproses game
+
+                -- 3. Cancel Input Server & State
                 pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-                
-                -- 3. Matikan Auto State Sementara
                 pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
 
-                -- 4. FORCE UNEQUIP (Lepas pancingan dari tangan -> KUNCI RESET)
+                -- 4. Force Unequip (Pembersihan akhir)
                 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
                     pcall(function() MyLp.Character.Humanoid:UnequipTools() end)
                 end
                 
-                task.wait(1.5) -- Tunggu animasi unequip selesai
+                task.wait(2) -- Tunggu animasi & UI hilang sepenuhnya
 
-                -- 5. Nyalakan lagi & Equip Ulang
+                -- 5. Mulai Ulang
                 pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
                 pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
                 
-                -- 6. Lempar ulang
                 task.wait(1) 
                 pcall(function() RF_ChargeFishingRod:InvokeServer(os.time()) end)
                 
