@@ -1,154 +1,294 @@
-#!/system/bin/sh
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+const crypto = require('crypto');
+const axios = require('axios');
+const readline = require('readline');
 
-# ==========================================================
-# ROBLOX CLONE MANAGER v2.8 (SEQUENTIAL RESTORE)
-# ==========================================================
+// ==========================================
+// KONFIGURASI
+// ==========================================
+const CONFIG = {
+    backupDir: '/sdcard/RobloxBackups',
+    downloadDir: '/sdcard/Download/RobloxAPKs',
+    gofileUrl: 'https://gofile.io/d/ewZLec', // URL Gofile Anda
+    baseUrl: 'http://146.190.147.43:88' // URL Fallback dari script lama (opsional)
+};
 
-BACKUP_DIR="/sdcard/RobloxBackups"
-DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-BASE_URL="http://146.190.147.43:88"
+// ==========================================
+// UTILITIES
+// ==========================================
+const runCmd = (cmd) => {
+    try {
+        return execSync(cmd, { encoding: 'utf8', stdio: 'pipe' }).trim();
+    } catch (e) {
+        return '';
+    }
+};
 
-check_root() {
-    if [ "$(id -u)" -ne 0 ]; then
-        echo "❌ Script ini MEMBUTUHKAN akses Root!"
-        exit 1
-    fi
+const checkRoot = () => {
+    const uid = runCmd('id -u');
+    if (uid !== '0') {
+        console.log("❌ Script ini MEMBUTUHKAN akses Root! Jalankan dengan 'sudo node ...' atau 'tsu'");
+        process.exit(1);
+    }
+};
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
+
+// ==========================================
+// MODULE: GOFILE DOWNLOADER
+// ==========================================
+class Downloader {
+    constructor(root_dir, url) {
+        this.root_dir = root_dir;
+        this.url = url;
+        this.files_info = new Map();
+        this.session = axios.create();
+    }
+
+    async run() {
+        console.log("🚀 Menghubungkan ke Gofile...");
+        try {
+            const urlParts = this.url.split("/");
+            const contentId = urlParts[urlParts.length - 1];
+
+            // Get Guest Token
+            try {
+                const tokenRes = await axios.post("https://api.gofile.io/accounts");
+                this.session.defaults.headers.common['Authorization'] = `Bearer ${tokenRes.data.data.token}`;
+            } catch (e) {}
+
+            const contentDir = path.join(this.root_dir, contentId);
+            await this._buildTree(contentDir, contentId);
+
+            if (this.files_info.size === 0) {
+                console.log("⚠️ Tidak ada file ditemukan di URL tersebut.");
+                return null;
+            }
+
+            await this._downloadFiles();
+            return contentDir; // Return folder tempat download
+        } catch (err) {
+            console.log(`❌ Error Downloader: ${err.message}`);
+            return null;
+        }
+    }
+
+    async _buildTree(parentDir, contentId) {
+        let apiUrl = `https://api.gofile.io/contents/${contentId}?cache=true`;
+        try {
+            const res = await this.session.get(apiUrl, { headers: { "X-Website-Token": "4fd6sg89d7s6" } });
+            const data = res.data.data;
+            if (res.data.status !== "ok") return;
+
+            if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+
+            const children = Object.values(data.children || {});
+            for (const child of children) {
+                if (child.type === "folder") {
+                    await this._buildTree(path.join(parentDir, child.name), child.id);
+                } else {
+                    this.files_info.set(child.id, { path: parentDir, filename: child.name, link: child.link });
+                }
+            }
+        } catch (e) { console.log("⚠️ Gagal mengambil metadata folder."); }
+    }
+
+    async _downloadFiles() {
+        console.log(`📂 Total file ditemukan: ${this.files_info.size}`);
+        for (const [id, file] of this.files_info) {
+            const filePath = path.join(file.path, file.filename);
+            if (fs.existsSync(filePath)) {
+                console.log(`⏩ Lewati (Sudah ada): ${file.filename}`);
+                continue;
+            }
+            
+            process.stdout.write(`⬇️ Mengunduh: ${file.filename} ... `);
+            try {
+                const writer = fs.createWriteStream(filePath);
+                const response = await this.session.get(file.link, { responseType: 'stream' });
+                response.data.pipe(writer);
+
+                await new Promise((resolve, reject) => {
+                    writer.on('finish', resolve);
+                    writer.on('error', reject);
+                });
+                console.log("✅");
+            } catch (e) {
+                console.log("❌ Gagal");
+            }
+        }
+    }
 }
 
-do_backup() {
-    echo "=========================================="
-    echo "       MEMULAI PROSES BACKUP...           "
-    echo "=========================================="
-    mkdir -p "$BACKUP_DIR"
-    count=0
-    for folder in /data/data/com.roblox.clien*; do
-        [ -e "$folder" ] || continue
-        pkg_name=$(basename "$folder")
-        cookie_path=""
-        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
-        [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
+// ==========================================
+// MODULE: ROBLOX MANAGER
+// ==========================================
+const Manager = {
+    doBackup: () => {
+        console.log("\n==========================================");
+        console.log("       MEMULAI PROSES BACKUP...           ");
+        console.log("==========================================");
+        
+        if (!fs.existsSync(CONFIG.backupDir)) fs.mkdirSync(CONFIG.backupDir, { recursive: true });
 
-        if [ -n "$cookie_path" ]; then
-            cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
-            echo "✅ Backup SUKSES: $pkg_name"
-            count=$((count + 1))
-        fi
-    done
-    echo "------------------------------------------"
-    echo "Selesai! $count database tersimpan."
-}
+        // Menggunakan ls via shell karena akses /data/data butuh root permission yang kadang fs.readdir gagal baca direct
+        const folders = runCmd('ls -d /data/data/com.roblox.clien* 2>/dev/null').split('\n').filter(Boolean);
+        
+        let count = 0;
+        folders.forEach(folder => {
+            const pkgName = path.basename(folder);
+            let cookiePath = path.join(folder, 'app_webview/Default/Cookies');
+            
+            // Cek path alternatif
+            if (!runCmd(`ls "${cookiePath}" 2>/dev/null`)) {
+                const altPath = path.join(folder, 'app_webview/Cookies');
+                if (runCmd(`ls "${altPath}" 2>/dev/null`)) cookiePath = altPath;
+                else cookiePath = null;
+            }
 
-# Fungsi Restore Berdasarkan Urutan (Tanpa Cek Nama Paket)
-do_restore_sequential() {
-    echo "=========================================="
-    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
-    echo "=========================================="
+            if (cookiePath) {
+                const dest = path.join(CONFIG.backupDir, `${pkgName}.db`);
+                runCmd(`cp "${cookiePath}" "${dest}"`);
+                console.log(`✅ Backup SUKSES: ${pkgName}`);
+                count++;
+            }
+        });
+        console.log(`------------------------------------------`);
+        console.log(`Selesai! ${count} database tersimpan.`);
+    },
+
+    doRestoreSequential: () => {
+        console.log("\n==========================================");
+        console.log("    RESTORE BERDASARKAN URUTAN (SEQ)      ");
+        console.log("==========================================");
+
+        const backups = runCmd(`ls "${CONFIG.backupDir}"/com.roblox.clien*.db 2>/dev/null`).split('\n').filter(Boolean);
+        const pkgs = runCmd('pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"').split('\n').filter(Boolean);
+
+        if (backups.length === 0 || pkgs.length === 0) {
+            console.log("❌ Data backup atau aplikasi tidak ditemukan.");
+            return;
+        }
+
+        let i = 0;
+        while (i < backups.length && i < pkgs.length) {
+            const currentDb = backups[i];
+            const currentPkg = pkgs[i];
+            const targetFolder = `/data/data/${currentPkg}`;
+            const targetDirParent = `${targetFolder}/app_webview/Default`;
+            const targetPath = `${targetDirParent}/Cookies`;
+
+            console.log(`🔄 Restore [${path.basename(currentDb)}] -> [${currentPkg}]`);
+
+            runCmd(`mkdir -p "${targetDirParent}"`);
+            runCmd(`cp "${currentDb}" "${targetPath}"`);
+
+            // Fix Permissions
+            const uidInfo = runCmd(`stat -c "%u:%g" "${targetFolder}"`);
+            if (uidInfo) {
+                runCmd(`chown -R "${uidInfo}" "${targetFolder}/app_webview"`);
+                runCmd(`chmod 660 "${targetPath}"`);
+            }
+
+            i++;
+        }
+        console.log("------------------------------------------");
+        console.log(`✅ Selesai! ${i} akun dipulihkan.`);
+    },
+
+    doUninstall: async () => {
+        console.log("\n==========================================");
+        console.log("       MENGHAPUS APLIKASI CLONE...        ");
+        console.log("==========================================");
+        
+        const pkgs = runCmd('pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"').split('\n').filter(Boolean);
+        
+        if (pkgs.length === 0) {
+            console.log("❌ Tidak ada aplikasi Roblox clone.");
+            return;
+        }
+
+        const answer = await askQuestion("❓ Yakin hapus SEMUA? (y/n): ");
+        if (answer.toLowerCase() === 'y') {
+            for (const pkg of pkgs) {
+                runCmd(`pm uninstall "${pkg}"`);
+                console.log(`🗑️ ${pkg} Terhapus.`);
+            }
+        }
+    },
+
+    doAutoProcess: async () => {
+        console.log("\n==========================================");
+        console.log("       PROSES OTOMATIS BERJALAN           ");
+        console.log("==========================================");
+
+        // 1. Download Files
+        const dl = new Downloader(CONFIG.downloadDir, CONFIG.gofileUrl);
+        const downloadLocation = await dl.run();
+
+        if (!downloadLocation) return;
+
+        // 2. Install APKs
+        console.log("\n⚙️ Memulai Instalasi...");
+        const files = fs.readdirSync(downloadLocation).filter(f => f.endsWith('.apk'));
+        
+        if (files.length === 0) {
+            console.log("❌ Tidak ada file .apk di folder download.");
+            return;
+        }
+
+        // Sort numeric jika nama file angka (1.apk, 2.apk)
+        files.sort((a, b) => parseInt(a) - parseInt(b));
+
+        for (const apk of files) {
+            const fullPath = path.join(downloadLocation, apk);
+            process.stdout.write(`⏳ Memasang ${apk}... `);
+            runCmd(`pm install -r "${fullPath}"`);
+            console.log("✅");
+            await new Promise(r => setTimeout(r, 2000)); // Sleep 2 detik
+        }
+
+        // 3. Restore
+        Manager.doRestoreSequential();
+        console.log("✨ SEMUA PROSES SELESAI!");
+    }
+};
+
+// ==========================================
+// MAIN LOOP
+// ==========================================
+const main = async () => {
+    checkRoot();
     
-    # Ambil daftar file backup ke dalam array
-    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
-    # Ambil daftar aplikasi terinstall ke dalam array
-    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-
-    total_backups=${#backups[@]}
-    total_pkgs=${#pkgs[@]}
-
-    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
-        echo "❌ Data backup atau aplikasi tidak ditemukan."
-        return 1
-    fi
-
-    echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
-    echo "------------------------------------------"
-
-    # Loop menggunakan indeks agar urut
-    i=0
-    while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
-        current_db="${backups[$i]}"
-        current_pkg="${pkgs[$i]}"
+    while (true) {
+        console.log("\n==========================================");
+        console.log("   ROBLOX MANAGER v4.0 (JS EDITION)       ");
+        console.log("==========================================");
+        console.log("1. Backup Akun");
+        console.log("2. Restore Akun (Urutan Sequential)");
+        console.log("3. Hapus Semua Aplikasi Clone");
+        console.log("4. PROSES OTOMATIS (Download -> Install -> Restore)");
+        console.log("5. Keluar");
+        console.log("------------------------------------------");
         
-        target_folder="/data/data/$current_pkg"
-        target_dir_parent="$target_folder/app_webview/Default"
-        target_path="$target_dir_parent/Cookies"
+        const choice = await askQuestion("Pilih menu [1-5]: ");
 
-        echo "🔄 Merestore [$(basename "$current_db")] ke [$current_pkg]..."
+        switch (choice.trim()) {
+            case '1': Manager.doBackup(); break;
+            case '2': Manager.doRestoreSequential(); break;
+            case '3': await Manager.doUninstall(); break;
+            case '4': await Manager.doAutoProcess(); break;
+            case '5': process.exit(0); break;
+            default: console.log("⚠️ Pilihan salah.");
+        }
+    }
+};
 
-        mkdir -p "$target_dir_parent"
-        cp "$current_db" "$target_path"
-        
-        # Perbaikan Izin Akses
-        app_uid=$(stat -c "%u:%g" "$target_folder")
-        chown -R "$app_uid" "$target_folder/app_webview"
-        chmod 660 "$target_path"
-        
-        echo "✅ Berhasil."
-        i=$((i + 1))
-    done
-    echo "------------------------------------------"
-    echo "Selesai! $i akun dipulihkan."
-}
-
-do_uninstall() {
-    echo "=========================================="
-    echo "       MENGHAPUS APLIKASI CLONE...        "
-    echo "=========================================="
-    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
-    
-    echo -n "❓ Yakin hapus SEMUA? (y/n): "
-    read confirm
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        for pkg in $pkgs; do
-            pm uninstall "$pkg" > /dev/null 2>&1 && echo "✅ $pkg Terhapus."
-        done
-    fi
-}
-
-do_auto_process() {
-    echo "=========================================="
-    echo "       PROSES OTOMATIS BERJALAN           "
-    echo "=========================================="
-    total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
-    [ "$total_backup" -eq 0 ] && echo "❌ Tidak ada backup." && return
-
-    mkdir -p "$DOWNLOAD_DIR"
-    for i in $(seq 1 "$total_backup"); do
-        echo "------------------------------------------"
-        APK_NAME="$i.apk"
-        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
-        [ ! -f "$SAVE_PATH" ] && curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
-        
-        if [ -f "$SAVE_PATH" ]; then
-            echo "⏳ Memasang $APK_NAME..."
-            pm install -r "$SAVE_PATH" > /dev/null 2>&1
-            sleep 3
-        fi
-    done
-
-    do_restore_sequential
-    echo "✨ SEMUA PROSES SELESAI!"
-}
-
-# --- MAIN MENU ---
-check_root
-while true; do
-    echo ""
-    echo "=========================================="
-    echo "    ROBLOX CLONE MANAGER v2.8 (ROOT)      "
-    echo "=========================================="
-    echo "1. Backup Akun"
-    echo "2. Restore Akun (Urutan Sequential)"
-    echo "3. Hapus Semua Aplikasi Clone"
-    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
-    echo "5. Keluar"
-    echo "------------------------------------------"
-    echo -n "Pilih menu [1-5]: "
-    read choice
-    case $choice in
-        1) do_backup ;;
-        2) do_restore_sequential ;;
-        3) do_uninstall ;;
-        4) do_auto_process ;;
-        5) exit 0 ;;
-        *) echo "⚠️ Pilihan salah." ;;
-    esac
-done
+main();
