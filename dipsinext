@@ -1,20 +1,20 @@
 -- ======================================================
--- ENOCHHUB | FULL AUTO: LEGIT EDITION (ANTI-FREEZE FIX)
--- VERSION: v1.4.3 (Optimized CPU Usage)
+-- ENOCHHUB | FULL AUTO: LEGIT EDITION (TELEPORT FIX)
+-- VERSION: v1.4.4 (Smart Distance Verification)
 -- ======================================================
 
 -- [[ CONFIGURATION ]] --
-local DISABLE_3D_RENDER = false  -- Set FALSE agar game terlihat (tidak layar hitam)
+local DISABLE_3D_RENDER = false   -- Set FALSE agar game terlihat
 local DISABLE_AUDIO = true       -- True = Mute Audio
-local LIMIT_FPS = true           -- True = Batasi FPS agar PC adem
-local FPS_CAP = 20               -- [FIX] Dinaikkan ke 30 agar tidak terasa freeze
+local LIMIT_FPS = true           -- True = 30 FPS
+local FPS_CAP = 30               
 local LEGIT_SPEED = 0.1          -- Click Speed
 
 -- Wait for Game Load
 repeat task.wait() until game:IsLoaded()
 
 -- ===============================
--- 1. OPTIMIZED POTATO MODE (NO LAG LOOP)
+-- 1. OPTIMIZED POTATO MODE
 -- ===============================
 local RunService = game:GetService("RunService")
 local Plrs = game:GetService("Players")
@@ -24,29 +24,19 @@ local Lighting = game:GetService("Lighting")
 local Terrain = workspace:WaitForChild("Terrain")
 
 local function EnablePotatoMode()
-    -- 1. FPS CAP (Agar tidak makan resource berlebih, tapi tetap smooth)
-    if LIMIT_FPS and setfpscap then 
-        setfpscap(FPS_CAP) 
-    end
-
-    -- 2. 3D RENDER (Hanya matikan jika user benar-benar minta)
+    if LIMIT_FPS and setfpscap then setfpscap(FPS_CAP) end
     RunService:Set3dRenderingEnabled(not DISABLE_3D_RENDER)
     
-    -- 3. LIGHT WEIGHT VISUAL REMOVAL (Hanya sekali jalan, tidak looping berat)
     task.spawn(function()
-        -- Matikan Setting Global (Cukup sekali)
         Lighting.GlobalShadows = false
         Lighting.Brightness = 0
         pcall(function() settings().Rendering.QualityLevel = "Level01" end)
-        
-        -- Matikan Air (Cukup sekali)
         Terrain.WaterWaveSize = 0
         Terrain.WaterReflectance = 0
-        Terrain.WaterTransparency = 1 -- Transparan agar enteng
+        Terrain.WaterTransparency = 1 
         
-        -- Hapus Efek Partikel & Tekstur SEKALI SAJA di awal
         for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+            if v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then
                 v:Destroy()
             end
         end
@@ -59,7 +49,7 @@ task.spawn(EnablePotatoMode)
 -- ===============================
 local IsChangingRod = false
 local AutoActive = true
-local LastCastTime = os.time() -- Timer Anti-Stuck
+local LastCastTime = os.time() 
 
 -- Respawn & Anti-AFK
 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
@@ -67,7 +57,7 @@ if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
 end
 MyLp.CharacterAdded:Wait()
 MyLp.Character:WaitForChild("HumanoidRootPart", 10)
-task.wait(10)
+task.wait(5)
 
 MyLp.Idled:Connect(function()
     VirtualUser:CaptureController()
@@ -121,13 +111,12 @@ local function SetupLegitHooks()
     local oldStart = FishingController.FishingRodStarted
     local oldStop = FishingController.FishingStopped
     
-    -- [HOOK] SAAT MINIGAME MUNCUL
     FishingController.FishingRodStarted = function(self, ...)
         oldStart(self, ...)
         if AutoActive then
             LegitState.Status = "Reeling"
             STATE.Status = "Reeling (Mini-Game)"
-            LastCastTime = os.time() -- Reset Timer saat minigame mulai
+            LastCastTime = os.time() 
             
             if LegitClickThread then task.cancel(LegitClickThread) end
             LegitClickThread = task.spawn(function()
@@ -139,13 +128,12 @@ local function SetupLegitHooks()
         end
     end
 
-    -- [HOOK] SAAT MINIGAME SELESAI
     FishingController.FishingStopped = function(self, ...)
         oldStop(self, ...)
         if AutoActive then
             LegitState.Status = "Casting"
             STATE.Status = "Casting (Waiting)"
-            LastCastTime = os.time() -- Reset Timer saat selesai
+            LastCastTime = os.time() 
             
             if LegitClickThread then 
                 task.cancel(LegitClickThread)
@@ -312,16 +300,14 @@ task.spawn(function()
             local isStuck = false
             local stuckReason = "None"
             
-            -- CHECK 1: Stuck di "Casting (Waiting)" (Biasanya karena Native Auto mati sendiri)
+            -- CHECK 1: Stuck di Casting
             if STATE.Status == "Casting (Waiting)" and timeSinceLastAction > 8 then
-                isStuck = true
-                stuckReason = "Cast Lag"
+                isStuck = true; stuckReason = "Cast Lag"
             end
             
-            -- CHECK 2: Stuck di "Monitoring (Native)" (Bisa karena server lag / no bite)
+            -- CHECK 2: Stuck di Monitoring
             if STATE.Status == "Monitoring (Native)" and timeSinceLastAction > 25 then
-                isStuck = true
-                stuckReason = "No Bite Timeout"
+                isStuck = true; stuckReason = "No Bite Timeout"
             end
 
             -- ACTION: FORCE RESET
@@ -333,8 +319,7 @@ task.spawn(function()
                 pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
                 pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
                 pcall(function() RF_ChargeFishingRod:InvokeServer(os.time()) end)
-                
-                LastCastTime = os.time() -- Reset timer
+                LastCastTime = os.time() 
                 task.wait(1.5)
             end
         else
@@ -344,7 +329,7 @@ task.spawn(function()
 end)
 
 -- ===============================
--- QUEST LOGIC
+-- QUEST & MODE LOGIC
 -- ===============================
 local function CheckDeepSeaQuest(data)
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
@@ -446,9 +431,6 @@ local function UpdateGameMode()
     STATE.Mode = "Finished"; STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
 end
 
--- ===============================
--- LEVER LOGIC
--- ===============================
 local function ExecuteLeverLogic()
     local inv = PlayerDataReplion:GetExpect("Inventory")
     EquipRod(169)
@@ -471,10 +453,15 @@ local function ExecuteLeverLogic()
             else
                 STATE.TargetInfo = "Farming: "..artName
                 Teleport(artName)
-                 if MyLp.Character then
-                    local dist = (MyLp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
-                    if dist > 5 then MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) end
+                
+                -- DISTANCE CHECK (LEVER FARMING)
+                if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") then
+                     local dist = (MyLp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
+                     if dist > 20 then
+                         MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look)
+                     end
                 end
+                
                 EnsureLegitFishingActive()
             end
             break 
@@ -513,26 +500,36 @@ task.spawn(function()
                 AutoBuyBestBait()
                 EquipBestBait()
             
-                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
-                    EquipRod("Best")
-                    if STATE.CurrentArea ~= STATE.NextLocation then 
-                        Teleport(STATE.NextLocation)
-                    else 
+                -- MAIN TELEPORT LOGIC WITH DISTANCE VERIFICATION
+                local function CheckAndTeleport(targetLoc)
+                    -- 1. Cek Logic Teleport Biasa
+                    if STATE.CurrentArea ~= targetLoc then 
+                        Teleport(targetLoc)
+                    else
+                        -- 2. SMART VERIFICATION (Fix Not Teleported)
+                        if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") and FishingAreas[targetLoc] then
+                            local myPos = MyLp.Character.HumanoidRootPart.Position
+                            local targetPos = FishingAreas[targetLoc].Pos
+                            local dist = (myPos - targetPos).Magnitude
+                            
+                            -- Jika jarak > 30 meter, berarti tertinggal/stuck -> Paksa TP lagi
+                            if dist > 30 then
+                                STATE.Status = "⚠️ Resync Teleport..."
+                                MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos, targetPos + FishingAreas[targetLoc].Look)
+                                task.wait(0.5)
+                            end
+                        end
+                        
                         EnsureLegitFishingActive()
                     end
+                end
+
+                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" or STATE.Mode == "Element" or STATE.Mode == "Finished" then
+                    if STATE.Mode ~= "Element" then EquipRod("Best") else EquipRod(169) end
+                    CheckAndTeleport(STATE.NextLocation)
 
                 elseif STATE.Mode == "Lever" then
                     ExecuteLeverLogic()
-
-                elseif STATE.Mode == "Element" then
-                    EquipRod(169)
-                    if STATE.CurrentArea ~= STATE.NextLocation then 
-                        Teleport(STATE.NextLocation)
-                    else 
-                        EnsureLegitFishingActive()
-                    end
-                elseif STATE.Mode == "Finished" then
-                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) else EnsureLegitFishingActive() end
                 end
             end)
              if not success then warn("Loop Error: " .. tostring(err)) end
@@ -554,7 +551,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.3 (No-Lag)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.4 (Fix TP)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
@@ -584,7 +581,7 @@ end
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub Full Auto (v1.4.3 Anti-Freeze) Started!")
+print("🚀 EnochHub Full Auto (v1.4.4 TP Fix) Started!")
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
 task.spawn(function()
