@@ -1,10 +1,10 @@
 -- ======================================================
--- ENOCHHUB | FULL AUTO: LEGIT EDITION (ANTI-STUCK FIX)
--- VERSION: v1.4.1 (Watchdog Added)
+-- ENOCHHUB | FULL AUTO: LEGIT EDITION (DUAL WATCHDOG)
+-- VERSION: v1.4.2 (Fix Monitoring Stuck)
 -- ======================================================
 
 -- [[ CONFIGURATION ]] --
-local DISABLE_3D_RENDER = true   -- True = Black Screen
+local DISABLE_3D_RENDER = true   -- True = Layar Hitam
 local DISABLE_AUDIO = true       -- True = Mute Audio
 local LIMIT_FPS = true           -- True = 15 FPS
 local LEGIT_SPEED = 0.1          -- Click Speed
@@ -50,7 +50,7 @@ task.spawn(EnablePotatoMode)
 -- ===============================
 local IsChangingRod = false
 local AutoActive = true
-local LastCastTime = os.time() -- [NEW] For Stuck Detection
+local LastCastTime = os.time() -- Timer Anti-Stuck
 
 -- Respawn & Anti-AFK
 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
@@ -103,7 +103,7 @@ local RF_PurchaseFishingRod = GetRemote(RPath, "RF/PurchaseFishingRod")
 local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 local RF_PlaceLeverItem = GetRemote(RPath, "RE/PlaceLeverItem")
 local RF_ChargeFishingRod = GetRemote(RPath, "RF/ChargeFishingRod")
-local RF_CancelFishingInputs = GetRemote(RPath, "RF/CancelFishingInputs") -- [NEW] For Anti-Stuck
+local RF_CancelFishingInputs = GetRemote(RPath, "RF/CancelFishingInputs") 
 
 -- ===============================
 -- LEGIT CORE LOGIC (HOOKS)
@@ -118,7 +118,7 @@ local function SetupLegitHooks()
         if AutoActive then
             LegitState.Status = "Reeling"
             STATE.Status = "Reeling (Mini-Game)"
-            LastCastTime = os.time() -- Reset Timer
+            LastCastTime = os.time() -- Reset Timer saat minigame mulai
             
             if LegitClickThread then task.cancel(LegitClickThread) end
             LegitClickThread = task.spawn(function()
@@ -136,7 +136,7 @@ local function SetupLegitHooks()
         if AutoActive then
             LegitState.Status = "Casting"
             STATE.Status = "Casting (Waiting)"
-            LastCastTime = os.time() -- Reset Timer to allow waiting
+            LastCastTime = os.time() -- Reset Timer saat selesai
             
             if LegitClickThread then 
                 task.cancel(LegitClickThread)
@@ -281,6 +281,64 @@ local function EquipBestBait()
 end
 
 -- ===============================
+-- LEGIT ACTIVATOR & MONITORING
+-- ===============================
+local function EnsureLegitFishingActive()
+    if STATE.Teleporting or STATE.Mode == "Starting..." then return end
+    
+    -- Update Status Visual (Jangan timpa Reeling/Casting)
+    if STATE.Status ~= "Reeling (Mini-Game)" and STATE.Status ~= "Casting (Waiting)" and not string.find(STATE.Status, "ANTI-STUCK") then
+        STATE.Status = "Monitoring (Native)"
+    end
+    
+    -- Force Enable Native Auto
+    if RF_UpdateAutoFishingState then
+        pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+    end
+end
+
+-- [THREAD: DUAL WATCHDOG ANTI-STUCK]
+task.spawn(function()
+    while task.wait(1) do
+        if AutoActive then
+            local timeSinceLastAction = os.time() - LastCastTime
+            local isStuck = false
+            local stuckReason = "None"
+            
+            -- CHECK 1: Stuck di "Casting (Waiting)" (Biasanya karena Native Auto mati sendiri)
+            -- Batas: 8 Detik (Harusnya cepat)
+            if STATE.Status == "Casting (Waiting)" and timeSinceLastAction > 8 then
+                isStuck = true
+                stuckReason = "Cast Lag"
+            end
+            
+            -- CHECK 2: Stuck di "Monitoring (Native)" (Bisa karena server lag / no bite)
+            -- Batas: 25 Detik (Beri waktu ikan makan)
+            if STATE.Status == "Monitoring (Native)" and timeSinceLastAction > 25 then
+                isStuck = true
+                stuckReason = "No Bite Timeout"
+            end
+
+            -- ACTION: FORCE RESET
+            if isStuck then
+                STATE.Status = "⚠️ RESET: " .. stuckReason
+                pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
+                task.wait(0.5)
+                pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+                pcall(function() RF_ChargeFishingRod:InvokeServer(os.time()) end)
+                
+                LastCastTime = os.time() -- Reset timer
+                task.wait(1.5)
+            end
+        else
+            LastCastTime = os.time()
+        end
+    end
+end)
+
+-- ===============================
 -- QUEST LOGIC
 -- ===============================
 local function CheckDeepSeaQuest(data)
@@ -384,44 +442,40 @@ local function UpdateGameMode()
 end
 
 -- ===============================
--- LEGIT ACTIVATOR & ANTI-STUCK
+-- LEVER LOGIC
 -- ===============================
-local function EnsureLegitFishingActive()
-    -- Only active if we are supposed to be fishing
-    if STATE.Teleporting or STATE.Mode == "Starting..." then return end
-    
-    -- Force Enable Native Auto
-    if RF_UpdateAutoFishingState then
-        pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+local function ExecuteLeverLogic()
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    EquipRod(169)
+    for _, artName in ipairs(ArtifactOrder) do
+        if not IsLeverUnlocked(artName) then
+            local d = ArtifactData[artName]
+            local hasArt = false
+            local id = ARTIFACT_IDS[artName]
+             local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
+            if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
+            if hasArt then
+                STATE.TargetInfo = "Placing: "..artName
+                if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") then
+                     MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
+                    task.wait(0.5); MyLp.Character.HumanoidRootPart.Anchored = true
+                    RE_UnequipItem:FireServer("all"); task.wait(0.5)
+                    RF_PlaceLeverItem:FireServer(artName); task.wait(2.0)
+                    MyLp.Character.HumanoidRootPart.Anchored = false
+                end
+            else
+                STATE.TargetInfo = "Farming: "..artName
+                Teleport(artName)
+                 if MyLp.Character then
+                    local dist = (MyLp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
+                    if dist > 5 then MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) end
+                end
+                EnsureLegitFishingActive()
+            end
+            break 
+         end
     end
 end
-
--- [THREAD: ANTI-STUCK WATCHDOG]
-task.spawn(function()
-    while task.wait(1) do
-        if AutoActive and STATE.Status == "Casting (Waiting)" then
-            -- If we have been waiting on "Casting" for > 8 seconds, we are stuck
-            if os.time() - LastCastTime > 15 then
-                STATE.Status = "⚠️ ANTI-STUCK ⚠️"
-                
-                -- Force Cancel & Reset
-                pcall(function() RF_CancelFishingInputs:InvokeServer() end)
-                pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
-                task.wait(0.5)
-                pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
-                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
-                pcall(function() RF_ChargeFishingRod:InvokeServer(os.time()) end)
-                
-                -- Reset Timer
-                LastCastTime = os.time()
-                task.wait(2)
-            end
-        else
-            -- If we are reeling or idle, keep updating timer so we don't false trigger
-            LastCastTime = os.time()
-        end
-    end
-end)
 
 -- ===============================
 -- THREADS
@@ -463,37 +517,7 @@ task.spawn(function()
                     end
 
                 elseif STATE.Mode == "Lever" then
-                    -- Execute Lever Logic (Self Contained)
-                    local inv = PlayerDataReplion:GetExpect("Inventory")
-                    EquipRod(169)
-                    for _, artName in ipairs(ArtifactOrder) do
-                        if not IsLeverUnlocked(artName) then
-                            local d = ArtifactData[artName]
-                            local hasArt = false
-                            local id = ARTIFACT_IDS[artName]
-                            local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
-                            if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
-                            if hasArt then
-                                STATE.TargetInfo = "Placing: "..artName
-                                if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") then
-                                     MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
-                                    task.wait(0.5); MyLp.Character.HumanoidRootPart.Anchored = true
-                                    RE_UnequipItem:FireServer("all"); task.wait(0.5)
-                                    RF_PlaceLeverItem:FireServer(artName); task.wait(2.0)
-                                    MyLp.Character.HumanoidRootPart.Anchored = false
-                                end
-                            else
-                                STATE.TargetInfo = "Farming: "..artName
-                                Teleport(artName)
-                                 if MyLp.Character then
-                                    local dist = (MyLp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
-                                    if dist > 5 then MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) end
-                                end
-                                EnsureLegitFishingActive()
-                            end
-                            break 
-                         end
-                    end
+                    ExecuteLeverLogic()
 
                 elseif STATE.Mode == "Element" then
                     EquipRod(169)
@@ -514,7 +538,6 @@ end)
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() 
         STATE.FishCount=STATE.FishCount+1; CalcStats();
-        -- Note: LegitState is handled by Hooks
     end)
 end
 
@@ -526,7 +549,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.1 (Anti-Stuck)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.2 (Dual Watchdog)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
@@ -556,7 +579,7 @@ end
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub Full Auto (v1.4.1 Anti-Stuck) Started!")
+print("🚀 EnochHub Full Auto (v1.4.2 Dual Watchdog) Started!")
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
 task.spawn(function()
