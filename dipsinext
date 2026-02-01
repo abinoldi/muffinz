@@ -1,19 +1,18 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.5 (Instant Potato + Smart Equip + Auto Restart)
+-- VERSION: v1.3.6 (Super Lite + Smart Equip - No Respawn)
 -- ======================================================
 
 -- [[ CONFIGURATION ]] --
-local STUCK_TIMEOUT = 30         -- Waktu (detik) tanpa ikan sebelum restart
-local DISABLE_3D_RENDER = true   -- True = Layar Hitam (Super Ringan)
+local DISABLE_3D_RENDER = true   -- True = Layar Hitam (Hemat CPU/GPU)
 local DISABLE_AUDIO = true       -- True = Mute semua suara game
-local DEBUG_MODE = false          
+local LIMIT_FPS = true           -- True = Paksa 15 FPS (Sangat Ringan)
 
 -- Tunggu Game Load
 repeat task.wait() until game:IsLoaded()
 
 -- ===============================
--- 1. INSTANT POTATO MODE (FIRST PRIORITY)
+-- 1. INSTANT SUPER POTATO MODE (FIRST PRIORITY)
 -- ===============================
 local RunService = game:GetService("RunService")
 local Plrs = game:GetService("Players")
@@ -21,69 +20,63 @@ local VirtualUser = game:GetService("VirtualUser")
 local MyLp = Plrs.LocalPlayer
 
 local function EnablePotatoMode()
-    -- 1. MEMBATASI FPS (Kunci Penghematan Baterai/CPU)
-    -- Memaksa game berjalan di 15 FPS saja (sangat ringan)
-    if setfpscap then 
+    -- 1. FPS LIMITER (Penghemat Baterai/CPU Terbesar)
+    if LIMIT_FPS and setfpscap then 
         setfpscap(15) 
     end
 
-    -- 2. MATIKAN 3D RENDER (Layar Hitam)
+    -- 2. DISABLE 3D RENDERING
     if DISABLE_3D_RENDER then
         RunService:Set3dRenderingEnabled(false)
+    else
+        RunService:Set3dRenderingEnabled(true)
     end
 
-    -- 3. PENGATURAN RENDERING MINIMUM
-    pcall(function()
-        settings().Rendering.QualityLevel = "Level01"
-        game.Lighting.GlobalShadows = false
-        game.Lighting.FogEnd = 9e9
-        game.Lighting.Brightness = 0
-        
-        -- Matikan efek air (karena game mancing banyak air)
-        workspace.Terrain.WaterWaveSize = 0
-        workspace.Terrain.WaterReflectance = 0
-        workspace.Terrain.WaterTransparency = 0
-    end)
-
-    -- 4. LOOP PEMBERSIH MEMORI (Destroy Objek Berat)
+    -- 3. LOOP PEMBERSIH MEMORI AGRESIF
     task.spawn(function()
-        while task.wait(5) do -- Loop setiap 5 detik
+        while task.wait(5) do
             pcall(function()
+                -- Setting Lighting
+                game.Lighting.GlobalShadows = false
+                game.Lighting.Brightness = 0
+                game.Lighting.FogEnd = 9e9
+                settings().Rendering.QualityLevel = "Level01"
+
+                -- Hapus Efek Berat
                 for _, v in ipairs(workspace:GetDescendants()) do
-                    -- Ubah part jadi plastik polos
                     if v:IsA("BasePart") then 
                         v.Material = Enum.Material.Plastic
                         v.Reflectance = 0
                         v.Transparency = 1 
                         v.CastShadow = false
-                        
-                    -- HAPUS PERMANEN (Destroy) Efek Visual Berat
                     elseif v:IsA("Decal") or v:IsA("Texture") then 
-                        v:Destroy() 
-                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
-                        v:Destroy() 
-                    
-                    -- Matikan Suara
+                        v:Destroy() -- Hapus Tekstur
+                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                        v:Destroy() -- Hapus Partikel
                     elseif DISABLE_AUDIO and (v:IsA("Sound") or v:IsA("SoundGroup")) then
                         if v:IsA("Sound") then v.Playing = false; v.Volume = 0; v:Stop() end
                     end
                 end
+                
+                -- Matikan Air
+                workspace.Terrain.WaterWaveSize = 0
+                workspace.Terrain.WaterReflectance = 0
+                workspace.Terrain.WaterTransparency = 0
             end)
         end
     end)
 end
 
--- AKTIFKAN SEKARANG JUGA!
+-- AKTIFKAN SEKARANG!
 task.spawn(EnablePotatoMode)
-print("🥔 Potato Mode Activated Immediately!")
+print("🥔 Super Potato Mode Activated!")
 
 -- ===============================
 -- 2. GLOBAL VARS & SETUP
 -- ===============================
-local IsChangingRod = false      -- Semaphore untuk mencegah konflik equip
-local LastCatchTime = os.time()  -- Timer deteksi stuck
+local IsChangingRod = false      -- Penanda agar equip tidak bentrok
 
--- Lakukan Respawn Awal (Reset Character)
+-- Lakukan Respawn Awal (Reset Character untuk refresh state)
 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
     MyLp.Character.Humanoid.Health = 0 
 end
@@ -91,7 +84,7 @@ end
 -- Tunggu Respawn
 MyLp.CharacterAdded:Wait()
 MyLp.Character:WaitForChild("HumanoidRootPart", 10)
-task.wait(10)
+task.wait(5)
 
 -- ===============================
 -- ANTI-AFK
@@ -489,35 +482,6 @@ task.spawn(function()
     end
 end)
 
--- [THREAD: STUCK DETECTION (AUTO RESTART)]
--- [THREAD: STUCK DETECTION (AUTO RESTART) - FIX HANG]
-task.spawn(function()
-    while task.wait(5) do
-        -- Cek apakah waktu stuck terlampaui DAN tidak sedang OTW teleport
-        if (os.time() - LastCatchTime > STUCK_TIMEOUT) and not STATE.Teleporting then
-            
-            warn("⚠️ STUCK DETECTED! Force Resetting...")
-            STATE.Status = "STUCK! RESPAWNING..."
-            
-            -- 1. Matikan Karakter
-            if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
-                MyLp.Character.Humanoid.Health = 0
-            end
-            
-            -- 2. JANGAN GUNAKAN CharacterAdded:Wait() KARENA BISA MACET/HANG
-            -- Gunakan delay manual 8 detik (Waktu rata-rata respawn)
-            task.wait(8) 
-            
-            -- 3. Reset Variabel (Paksa script jalan lagi)
-            LastCatchTime = os.time() -- Reset timer stuck
-            STATE.CurrentArea = "None" -- Paksa script sadar lokasi salah
-            STATE.Teleporting = false
-            STATE.Status = "Recovered." -- Update status agar user tahu script jalan lagi
-            
-            print("✅ System Reset Complete.")
-        end
-    end
-end)
 -- [THREAD: MAIN LOGIC]
 task.spawn(function()
     while task.wait(0.5) do
@@ -549,7 +513,6 @@ end)
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() 
         STATE.FishCount=STATE.FishCount+1; CalcStats(); STATE.Status="Caught!";
-        LastCatchTime = os.time() -- RESET STUCK TIMER
         task.delay(1,function() STATE.Status="Casting" end) 
     end)
 end
@@ -562,7 +525,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.5"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.6"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
@@ -592,7 +555,7 @@ end
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub Full Auto (v1.3.5) Started!")
+print("🚀 EnochHub Full Auto (v1.3.6 Lite) Started!")
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
 task.spawn(function()
