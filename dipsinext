@@ -1,45 +1,54 @@
 -- ======================================================
--- ENOCHHUB | FULL AUTO: LEGIT EDITION (DUAL WATCHDOG)
--- VERSION: v1.4.2 (Fix Monitoring Stuck)
+-- ENOCHHUB | FULL AUTO: LEGIT EDITION (ANTI-FREEZE FIX)
+-- VERSION: v1.4.3 (Optimized CPU Usage)
 -- ======================================================
 
 -- [[ CONFIGURATION ]] --
-local DISABLE_3D_RENDER = true   -- True = Layar Hitam
+local DISABLE_3D_RENDER = false  -- Set FALSE agar game terlihat (tidak layar hitam)
 local DISABLE_AUDIO = true       -- True = Mute Audio
-local LIMIT_FPS = true           -- True = 15 FPS
+local LIMIT_FPS = true           -- True = Batasi FPS agar PC adem
+local FPS_CAP = 30               -- [FIX] Dinaikkan ke 30 agar tidak terasa freeze
 local LEGIT_SPEED = 0.1          -- Click Speed
 
 -- Wait for Game Load
 repeat task.wait() until game:IsLoaded()
 
 -- ===============================
--- 1. INSTANT SUPER POTATO MODE
+-- 1. OPTIMIZED POTATO MODE (NO LAG LOOP)
 -- ===============================
 local RunService = game:GetService("RunService")
 local Plrs = game:GetService("Players")
 local VirtualUser = game:GetService("VirtualUser")
 local MyLp = Plrs.LocalPlayer
+local Lighting = game:GetService("Lighting")
+local Terrain = workspace:WaitForChild("Terrain")
 
 local function EnablePotatoMode()
-    if LIMIT_FPS and setfpscap then setfpscap(15) end
+    -- 1. FPS CAP (Agar tidak makan resource berlebih, tapi tetap smooth)
+    if LIMIT_FPS and setfpscap then 
+        setfpscap(FPS_CAP) 
+    end
+
+    -- 2. 3D RENDER (Hanya matikan jika user benar-benar minta)
     RunService:Set3dRenderingEnabled(not DISABLE_3D_RENDER)
     
+    -- 3. LIGHT WEIGHT VISUAL REMOVAL (Hanya sekali jalan, tidak looping berat)
     task.spawn(function()
-        while task.wait(5) do
-             pcall(function()
-                game.Lighting.GlobalShadows = false
-                game.Lighting.Brightness = 0
-                settings().Rendering.QualityLevel = "Level01"
-                for _, v in ipairs(workspace:GetDescendants()) do
-                    if v:IsA("BasePart") then 
-                        v.Material = Enum.Material.Plastic
-                        v.Reflectance = 0; v.Transparency = 1; v.CastShadow = false
-                    elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
-                        v:Destroy()
-                    end
-                end
-                workspace.Terrain.WaterWaveSize = 0
-            end)
+        -- Matikan Setting Global (Cukup sekali)
+        Lighting.GlobalShadows = false
+        Lighting.Brightness = 0
+        pcall(function() settings().Rendering.QualityLevel = "Level01" end)
+        
+        -- Matikan Air (Cukup sekali)
+        Terrain.WaterWaveSize = 0
+        Terrain.WaterReflectance = 0
+        Terrain.WaterTransparency = 1 -- Transparan agar enteng
+        
+        -- Hapus Efek Partikel & Tekstur SEKALI SAJA di awal
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                v:Destroy()
+            end
         end
     end)
 end
@@ -286,12 +295,10 @@ end
 local function EnsureLegitFishingActive()
     if STATE.Teleporting or STATE.Mode == "Starting..." then return end
     
-    -- Update Status Visual (Jangan timpa Reeling/Casting)
     if STATE.Status ~= "Reeling (Mini-Game)" and STATE.Status ~= "Casting (Waiting)" and not string.find(STATE.Status, "ANTI-STUCK") then
         STATE.Status = "Monitoring (Native)"
     end
     
-    -- Force Enable Native Auto
     if RF_UpdateAutoFishingState then
         pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
     end
@@ -306,14 +313,12 @@ task.spawn(function()
             local stuckReason = "None"
             
             -- CHECK 1: Stuck di "Casting (Waiting)" (Biasanya karena Native Auto mati sendiri)
-            -- Batas: 8 Detik (Harusnya cepat)
             if STATE.Status == "Casting (Waiting)" and timeSinceLastAction > 8 then
                 isStuck = true
                 stuckReason = "Cast Lag"
             end
             
             -- CHECK 2: Stuck di "Monitoring (Native)" (Bisa karena server lag / no bite)
-            -- Batas: 25 Detik (Beri waktu ikan makan)
             if STATE.Status == "Monitoring (Native)" and timeSinceLastAction > 25 then
                 isStuck = true
                 stuckReason = "No Bite Timeout"
@@ -549,7 +554,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.2 (Dual Watchdog)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.3 (No-Lag)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
@@ -579,7 +584,7 @@ end
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub Full Auto (v1.4.2 Dual Watchdog) Started!")
+print("🚀 EnochHub Full Auto (v1.4.3 Anti-Freeze) Started!")
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
 task.spawn(function()
