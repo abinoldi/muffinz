@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.8 (SMART LEGIT CORE)
+-- # ULTIMATE HUB: FINAL V4.9 (FORCE MONITOR EDITION)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -22,7 +22,7 @@ local req = request or http_request or syn.request
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
-    CatchDelay = 0.1, -- [SPEED KLIK] Diambil dari snippet (0.1 default)
+    CatchDelay = 0.1, -- Speed Klik Minigame
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
@@ -346,7 +346,7 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- [CORE LOGIC] SMART LEGIT FISHING
+-- [CORE LOGIC] SMART LEGIT FISHING + MONITOR
 -- ===============================
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState") 
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
@@ -427,28 +427,40 @@ function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
-    -- [1] SETUP HOOKS & INITIAL STATE
+    -- [1] SETUP HOOKS
     SetupLegitHooks()
-    LegitState.Status = "Casting" -- Set awal ke Casting supaya loop bawah jalan
+    LegitState.Status = "Casting" 
     
-    -- [2] SMART CAST LOOP (Hanya Cast jika status == Casting)
+    -- [2] MONITOR FORCE AUTO (SOLUSI WALKED AWAY)
+    -- Loop ini mengecek apakah kita ingin fishing, lalu MEMAKSA server 
+    -- untuk mengaktifkan AutoFishingState setiap 2 detik.
+    table.insert(FishingThreads, task.spawn(function()
+        print("🛡️ [Monitor] Force Auto-Fish Active. Watching for disabled state...")
+        while FishingState.IsFishing do
+            if RF_UpdateAutoFishingState then
+                -- Kita paksa kirim TRUE ke server
+                -- Ini akan meng-counter jika game mematikannya karena "Walked Away"
+                pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+            end
+            task.wait(2.0) -- Cek setiap 2 detik
+        end
+    end))
+    
+    -- [3] SMART CAST LOOP (Backup Logic)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            -- Kita cek setiap detik
             task.wait(1)
-            
-            -- Jika status "Casting" (berarti habis dapet ikan / baru mulai), kita lempar kail
+            -- Jika status "Casting" (habis dapet ikan), pastikan server tau kita mau mancing lagi
             if LegitState.Status == "Casting" then
                  if RF_UpdateAutoFishingState then
                      pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
                  end
-                 -- Ubah ke Idle sebentar supaya ga spam cast
                  LegitState.Status = "Idle" 
             end
         end
     end))
     
-    -- [3] AUTO EQUIP (Agar tidak idle)
+    -- [4] AUTO EQUIP
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then 
@@ -458,7 +470,7 @@ function StartFishingV1()
         end
     end))
 
-    -- [4] Auto Sell Loop
+    -- [5] AUTO SELL
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -473,7 +485,7 @@ function StartFishingV1()
         end
     end))
     
-    -- [5] Auto Favorite Loop
+    -- [6] AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -513,12 +525,10 @@ function StopFishingV1()
     FishingState.IsFishing = false
     LegitState.Status = "Idle"
     
-    -- Matikan Auto Fish Server
     if RF_UpdateAutoFishingState then 
         pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) 
     end
     
-    -- Cancel Click Thread
     if LegitClickThread then 
         task.cancel(LegitClickThread) 
         LegitClickThread = nil 
@@ -709,7 +719,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v4.8 (Smart Core)"
+    toggleBtn.Text = "W - v4.9 (Force Monitor)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
