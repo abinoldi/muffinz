@@ -7,7 +7,7 @@
 local DISABLE_3D_RENDER = false  -- Set FALSE agar game terlihat (tidak layar hitam)
 local DISABLE_AUDIO = true       -- True = Mute Audio
 local LIMIT_FPS = true           -- True = Batasi FPS agar PC adem
-local FPS_CAP = 30               -- [FIX] Dinaikkan ke 30 agar tidak terasa freeze
+local FPS_CAP = 20               -- [FIX] Dinaikkan ke 30 agar tidak terasa freeze
 local LEGIT_SPEED = 0.1          -- Click Speed
 
 -- Wait for Game Load
@@ -67,7 +67,7 @@ if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
 end
 MyLp.CharacterAdded:Wait()
 MyLp.Character:WaitForChild("HumanoidRootPart", 10)
-task.wait(5)
+task.wait(10)
 
 MyLp.Idled:Connect(function()
     VirtualUser:CaptureController()
