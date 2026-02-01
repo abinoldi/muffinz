@@ -1,13 +1,17 @@
-#!/system/bin/sh
+#!/data/data/com.termux/files/usr/bin/bash
 
 # ==========================================================
-# ROBLOX MANAGER v7.0 (PURE BASH - NO PYTHON)
+# ROBLOX MANAGER v8.0 (PURE BASH PORT OF PYTHON SCRIPT)
 # ==========================================================
+
+# --- INJECT PATH (Agar Root bisa akses tool Termux) ---
+export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:$PATH"
 
 # --- KONFIGURASI ---
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
 GOFILE_URL="https://gofile.io/d/ewZLec"
+GOFILE_PASSWORD="" # Isi jika ada password
 
 # --- WARNA ---
 GREEN='\033[0;32m'
@@ -16,195 +20,240 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# --- FUNGSI UTAMA ---
+# ==========================================================
+# BAGIAN 1: BASH GOFILE ENGINE (PORTED FROM PYTHON)
+# ==========================================================
+
+# Fungsi Helper: Parsing nilai JSON sederhana dengan sed
+# Mirip dengan logika dictionary di Python
+get_json_value() {
+    local json="$1"
+    local key="$2"
+    echo "$json" | sed -n 's/.*"'"$key"'":"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+# Fungsi: Setup Token (Sama seperti _set_account_access_token di Python)
+get_token() {
+    local response=$(curl -s -X POST "https://api.gofile.io/accounts")
+    local token=$(get_json_value "$response" "token")
+    echo "$token"
+}
+
+# Fungsi: Download File (Sama seperti _perform_download di Python)
+download_file() {
+    local url="$1"
+    local filename="$2"
+    local output_path="$3"
+    
+    # Cek jika file sudah ada (Logic _should_skip_download)
+    if [ -s "$output_path" ]; then
+        echo "   ⏩ Lewati: $filename (Sudah ada)"
+        return
+    fi
+
+    echo "   ⬇️ Download: ${CYAN}$filename${NC}"
+    
+    # curl -C - (Resume) menggantikan logic Range header di Python
+    # curl -# (Progress Bar) menggantikan logic _update_progress di Python
+    curl -L -# -C - --retry 5 --connect-timeout 30 \
+        -H "Authorization: Bearer $TOKEN" \
+        -o "$output_path" "$url"
+}
+
+# Fungsi: Recursive Fetch (Sama seperti _build_content_tree_structure di Python)
+fetch_recursive() {
+    local content_id="$1"
+    local current_dir="$2"
+    local hashed_password="$3"
+    
+    local api_url="https://api.gofile.io/contents/$content_id?cache=true"
+    
+    # Tambahkan password hash jika ada
+    if [ -n "$hashed_password" ]; then
+        api_url="${api_url}&password=${hashed_password}"
+    fi
+
+    # Request API
+    local response=$(curl -s -H "Authorization: Bearer $TOKEN" \
+                             -H "X-Website-Token: 4fd6sg89d7s6" \
+                             "$api_url")
+    
+    local status=$(get_json_value "$response" "status")
+    
+    if [ "$status" != "ok" ]; then
+        echo "${RED}❌ Gagal akses ID: $content_id (Status: $status)${NC}"
+        return
+    fi
+
+    local type=$(get_json_value "$response" "type")
+    local name=$(get_json_value "$response" "name")
+
+    # Tentukan path tujuan
+    if [[ "$current_dir" == "$DOWNLOAD_DIR" ]] && [[ "$type" == "folder" ]]; then
+         local target_path="$current_dir" # Flatten root folder
+    else
+         local target_path="$current_dir/$name"
+    fi
+
+    if [ "$type" == "folder" ]; then
+        mkdir -p "$target_path"
+        
+        # [TEKNIK PURE BASH PARSING]
+        # Python menggunakan: for child in data["children"].values():
+        # Bash tidak bisa parsing object nested dengan mudah.
+        # Trik: Ubah setiap objek anak "{"id":..." menjadi baris baru.
+        
+        # 1. Ambil bagian "children":{...}
+        # 2. Ganti pembuka objek id "":{" menjadi baris baru
+        # 3. Parsing setiap baris
+        
+        # Kita ambil SEMUA ID anak (baik folder maupun file)
+        local child_ids=$(echo "$response" | sed 's/,"/\n/g' | grep '"id":' | cut -d'"' -f4)
+        
+        # Jika folder kosong
+        if [ -z "$child_ids" ]; then return; fi
+
+        for cid in $child_ids; do
+            # Rekursif: Panggil fungsi ini lagi untuk setiap anak
+            # (Ini meniru logic rekursif Python)
+            fetch_recursive "$cid" "$target_path" "$hashed_password"
+        done
+
+    else
+        # Jika tipe adalah FILE
+        local link=$(get_json_value "$response" "link")
+        if [ -n "$link" ]; then
+            download_file "$link" "$name" "$target_path/$name"
+        fi
+    fi
+}
+
+# ==========================================================
+# BAGIAN 2: MANAGER UTILS
+# ==========================================================
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        echo "${RED}❌ Script ini MEMBUTUHKAN akses Root!${NC}"
-        echo "👉 Jalankan dengan: tsu"
+        echo "${RED}❌ Script ini butuh ROOT (tsu).${NC}"
         exit 1
     fi
 }
 
-get_gofile_token() {
-    # Ambil token tamu
-    curl -s -X POST https://api.gofile.io/accounts | grep -o '"token":"[^"]*' | cut -d'"' -f4
-}
-
-# --- FUNGSI PARSING JSON TANPA PYTHON/JQ ---
-# Ini rahasianya: Kita ubah koma (,) jadi Enter (\n) biar grep bisa baca
-get_download_links() {
-    local content_id=$1
-    local token=$2
-    
-    # Ambil JSON
-    response=$(curl -s "https://api.gofile.io/contents/$content_id?cache=true" \
-        -H "Authorization: Bearer $token" \
-        -H "X-Website-Token: 4fd6sg89d7s6")
-
-    # TEKNIK SED: Pecah baris panjang jadi baris pendek-pendek
-    # Lalu cari baris yang mengandung "link":"https..."
-    # Lalu bersihkan kutipnya
-    echo "$response" | sed 's/,/\n/g' | grep '"link":' | grep -o 'https://[^"]*'
-}
-
-# --- FUNGSI MENU ---
-
-do_backup() {
-    echo "=========================================="
-    echo "       MEMULAI PROSES BACKUP...           "
-    echo "=========================================="
-    mkdir -p "$BACKUP_DIR"
-    count=0
-    for folder in /data/data/com.roblox.clien*; do
-        [ -e "$folder" ] || continue
-        pkg_name=$(basename "$folder")
-        
-        # Cek lokasi cookie (kadang beda versi beda letak)
-        cookie_path=""
-        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
-        [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
-
-        if [ -n "$cookie_path" ]; then
-            cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
-            echo "✅ Backup: $pkg_name"
-            count=$((count + 1))
-        fi
-    done
-    echo "Selesai! $count database tersimpan."
-}
-
 do_restore_sequential() {
-    echo "=========================================="
-    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
-    echo "=========================================="
-    
-    # Syntax array bash
-    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    echo "=== FASE RESTORE ==="
+    # Array Bash (Membutuhkan #!/bin/bash)
+    backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
-    total_backups=${#backups[@]}
-    total_pkgs=${#pkgs[@]}
+    local max=${#backups[@]}
+    [ ${#pkgs[@]} -lt $max ] && max=${#pkgs[@]}
 
-    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
-        echo "❌ Data backup atau aplikasi tidak ditemukan."
-        return 1
+    if [ $max -eq 0 ]; then
+        echo "❌ Tidak ada data restore."
+        return
     fi
 
-    echo "ℹ️ Mengembalikan $total_backups akun ke $total_pkgs aplikasi."
-
-    i=0
-    while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
-        current_db="${backups[$i]}"
-        current_pkg="${pkgs[$i]}"
-        target_path="/data/data/$current_pkg/app_webview/Default/Cookies"
-
-        echo "🔄 Restore: $(basename "$current_db") -> $current_pkg"
-        mkdir -p "$(dirname "$target_path")"
-        cp "$current_db" "$target_path"
+    for ((i=0; i<max; i++)); do
+        local db="${backups[$i]}"
+        local pkg="${pkgs[$i]}"
+        local target="/data/data/$pkg/app_webview/Default/Cookies"
         
-        # Permission Fix
-        app_uid=$(stat -c "%u:%g" "/data/data/$current_pkg")
-        chown -R "$app_uid" "/data/data/$current_pkg/app_webview"
-        chmod 660 "$target_path"
+        echo "🔄 Restore: $(basename "$db") -> $pkg"
+        mkdir -p "$(dirname "$target")"
+        cp "$db" "$target"
         
-        i=$((i + 1))
+        local uid=$(stat -c "%u:%g" "/data/data/$pkg")
+        chown -R "$uid" "/data/data/$pkg/app_webview"
+        chmod 660 "$target"
     done
-    echo "✅ Selesai!"
+    echo "✅ Selesai."
+}
+
+do_backup() {
+    echo "=== BACKUP ==="
+    mkdir -p "$BACKUP_DIR"
+    for f in /data/data/com.roblox.clien*; do
+        [ -d "$f" ] || continue
+        local pkg=$(basename "$f")
+        local cookie="$f/app_webview/Default/Cookies"
+        [ -f "$cookie" ] && cp "$cookie" "$BACKUP_DIR/$pkg.db" && echo "✅ $pkg"
+    done
 }
 
 do_uninstall() {
-    echo "=== HAPUS APLIKASI ==="
-    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
-    
-    echo -n "❓ Yakin hapus SEMUA? (y/n): "
-    read confirm
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        for pkg in $pkgs; do
-            pm uninstall "$pkg" > /dev/null 2>&1 && echo "✅ $pkg Terhapus."
-        done
+    local pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
+    [ -z "$pkgs" ] && return
+    echo -n "❓ Hapus semua? (y/n): "
+    read c
+    if [[ "$c" == "y" ]]; then
+        for p in $pkgs; do pm uninstall "$p" >/dev/null 2>&1 && echo "🗑️ $p"; done
     fi
 }
 
+# ==========================================================
+# MAIN LOGIC
+# ==========================================================
+
 do_auto_process() {
     echo "=========================================="
-    echo "    PROSES OTOMATIS (PURE BASH/NO PY)     "
+    echo "   PROSES OTOMATIS (PURE BASH ENGINE)     "
     echo "=========================================="
     
     mkdir -p "$DOWNLOAD_DIR"
+    local content_id=$(echo "$GOFILE_URL" | grep -oE '[a-zA-Z0-9]+$' | tail -n 1)
     
-    # 1. Bersihkan folder download lama biar tidak duplikat
-    rm -f "$DOWNLOAD_DIR"/*.apk
-
-    # 2. Ambil ID Gofile dari URL
-    CONTENT_ID=$(echo "$GOFILE_URL" | grep -oE '[a-zA-Z0-9]+$' | tail -n 1)
+    # 1. Setup Token & Password Hash
+    echo "${CYAN}🚀 Menyiapkan koneksi Gofile...${NC}"
+    TOKEN=$(get_token)
     
-    echo "${CYAN}🚀 Mengambil Token & Link Download...${NC}"
-    TOKEN=$(get_gofile_token)
-    
-    if [ -z "$TOKEN" ]; then
-        echo "${RED}❌ Gagal mengambil token Gofile. Cek internet.${NC}"
-        return
-    fi
-
-    # 3. Ambil List URL File
-    # (Menggunakan fungsi parsing sed+grep tadi)
-    LINKS=$(get_download_links "$CONTENT_ID" "$TOKEN")
-    
-    if [ -z "$LINKS" ]; then
-        echo "${RED}❌ Tidak ditemukan file di link tersebut.${NC}"
-        return
+    local hashed_pass=""
+    if [ -n "$GOFILE_PASSWORD" ]; then
+        # Logic Hashing SHA256 (Port dari Python: hashlib.sha256(pwd).hexdigest())
+        hashed_pass=$(echo -n "$GOFILE_PASSWORD" | sha256sum | awk '{print $1}')
     fi
     
-    echo "⬇️ Mulai mendownload..."
-    cd "$DOWNLOAD_DIR"
+    # 2. Start Recursive Download
+    echo "⏳ Memindai folder (Recursive)..."
+    # Fungsi ini akan berjalan layaknya class Downloader di Python
+    fetch_recursive "$content_id" "$DOWNLOAD_DIR" "$hashed_pass"
     
-    # 4. Loop Download
-    # curl -JLO akan otomatis mendeteksi nama file asli (1.apk, 2.apk) dari server
-    for link in $LINKS; do
-        echo "   ...mendownload file..."
-        curl -JLO -s "$link" 
-    done
-    
-    echo "${GREEN}✅ Download Selesai.${NC}"
+    # 3. Install APK
     echo "------------------------------------------"
-    echo "⏳ Menginstall APK..."
-
-    # 5. Install (Diurutkan)
-    # ls -v agar urut (1, 2, 3... 10)
-    for apk in $(ls -v *.apk 2>/dev/null); do
-        echo "📦 Memasang $apk..."
+    echo "📦 Memulai Instalasi..."
+    
+    local count=$(find "$DOWNLOAD_DIR" -name "*.apk" | wc -l)
+    if [ "$count" -eq 0 ]; then
+        echo "${RED}❌ Tidak ada APK terdownload.${NC}"
+        return
+    fi
+    
+    # Sortir versi (sort -V) mirip logic python sorting
+    find "$DOWNLOAD_DIR" -name "*.apk" | sort -V | while read apk; do
+        echo "🔨 Install: $(basename "$apk")..."
         pm install -r "$apk" > /dev/null 2>&1
     done
 
-    # 6. Restore
+    # 4. Restore
     do_restore_sequential
-    echo "✨ SEMUA PROSES SELESAI!"
+    echo "✨ SELESAI!"
 }
 
 # --- MENU ---
 check_root
 while true; do
     echo ""
-    echo "=========================================="
-    echo "   ROBLOX MANAGER v7.0 (NO PYTHON)        "
-    echo "=========================================="
-    echo "1. Backup Akun"
-    echo "2. Restore Akun"
+    echo "1. Backup"
+    echo "2. Restore"
     echo "3. Hapus Clone"
-    echo "4. AUTO (Download + Install + Restore)"
-    echo "5. Keluar"
-    echo "------------------------------------------"
-    echo -n "Pilih menu [1-5]: "
-    read choice
-  
-    case $choice in
+    echo "4. AUTO (Pure Bash Download)"
+    echo "5. Exit"
+    echo -n "Pilih: "
+    read c
+    case $c in
         1) do_backup ;;
         2) do_restore_sequential ;;
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) exit 0 ;;
-        *) echo "⚠️ Pilihan salah." ;;
     esac
 done
