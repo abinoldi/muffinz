@@ -1,227 +1,220 @@
-#!/bin/bash
+#!/system/bin/sh
 
 # ==========================================================
-# ROBLOX MANAGER v5.2 (PHASE SEPARATION: DL -> INSTALL)
+# ROBLOX CLONE MANAGER v6.1 (AUTO-INSTALL DEPENDENCY)
 # ==========================================================
 
-# --- KONFIGURASI ---
+# --- KONFIGURASI ASLI ---
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-GOFILE_URL="https://gofile.io/d/ewZLec"
-TOKEN=""
 
-# --- WARNA OUTPUT ---
+# --- KONFIGURASI BARU (CLOUD) ---
+GITHUB_PYTHON_URL="https://raw.githubusercontent.com/abinoldi/muffinz/main/downloader.py"
+LOCAL_PYTHON_PATH="/data/data/com.termux/files/home/downloader.py"
+GOFILE_URL="https://gofile.io/d/ewZLec"
+
+# Konfigurasi Environment untuk Script Python
+export GF_DOWNLOAD_DIR="$DOWNLOAD_DIR"
+export GF_MAX_CONCURRENT_DOWNLOADS=5
+export GF_MAX_RETRIES=5
+
+# --- WARNA ---
 GREEN='\033[0;32m'
-RED='\033[0;31m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-_print() { echo -e "$1"; }
-
-# ==========================================================
-# BAGIAN 1: PARSING ENGINE (FIXED)
-# ==========================================================
-
-parse_json() {
-    local key=$1
-    local json=$2
-    echo "$json" | sed -n 's/.*"'"$key"'":"\([^"]*\)".*/\1/p' | head -n 1
-}
-
-parse_children_ids() {
-    # [CRITICAL FIX] 
-    # Mengubah koma menjadi baris baru agar grep bisa membaca SEMUA ID (1-8)
-    # Tanpa ini, grep akan berhenti di file pertama.
-    echo "$1" | sed 's/,/\n/g' | grep -oP '"id":"\K[^"]+' | tail -n +2
-}
-
-setup_token() {
-    if [ -z "$TOKEN" ]; then
-        local response=$(curl -s -X POST https://api.gofile.io/accounts)
-        TOKEN=$(parse_json "token" "$response")
-    fi
-}
-
-# ==========================================================
-# BAGIAN 2: DOWNLOAD PHASE
-# ==========================================================
-
-download_file() {
-    local url="$1"
-    local output_path="$2"
-    local filename=$(basename "$output_path")
-    
-    if [ -s "$output_path" ]; then
-        _print "   ⏩ Lewati: $filename (Sudah ada)"
-        return
-    fi
-
-    _print "   ⬇️ Download: ${CYAN}$filename${NC}"
-    curl -L -# --retry 3 -H "Authorization: Bearer $TOKEN" -o "$output_path" "$url"
-}
-
-fetch_contents() {
-    local content_id="$1"
-    local current_dir="$2"
-    local password="$3"
-
-    local api_url="https://api.gofile.io/contents/$content_id?cache=true"
-    [ -n "$password" ] && api_url+="&password=$(echo -n $password | sha256sum | awk '{print $1}')"
-
-    local response=$(curl -s -H "X-Website-Token: 4fd6sg89d7s6" -H "Authorization: Bearer $TOKEN" "$api_url")
-    local type=$(parse_json "type" "$response")
-    local name=$(parse_json "name" "$response")
-    
-    # Tentukan folder
-    if [[ "$current_dir" == "$DOWNLOAD_DIR" ]] && [[ "$type" == "folder" ]]; then
-         local target_path="$current_dir"
-    else
-         local target_path="$current_dir/$name"
-    fi
-
-    if [ "$type" == "folder" ]; then
-        mkdir -p "$target_path"
-        
-        # Ambil SEMUA ID anak
-        local ids=$(parse_children_ids "$response")
-        
-        # Loop Download
-        for id in $ids; do
-            fetch_contents "$id" "$target_path" "$password"
-        done
-    else
-        local link=$(parse_json "link" "$response")
-        download_file "$link" "$target_path"
-    fi
-}
-
-# ==========================================================
-# BAGIAN 3: UTILS & LOGIC
-# ==========================================================
-
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        _print "${RED}❌ HARUS ROOT (Gunakan tsu)${NC}"
+        echo "❌ Script ini MEMBUTUHKAN akses Root!"
         exit 1
     fi
 }
 
-do_restore_sequential() {
-    _print "\n${YELLOW}=== FASE 3: RESTORE AKUN ===${NC}"
-    backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
-    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    
-    local count=0
-    local max=${#backups[@]}
-    [ ${#pkgs[@]} -lt $max ] && max=${#pkgs[@]}
+# --- FUNGSI CEK & INSTALL PYTHON (REQ USER) ---
+check_dependencies() {
+    echo "🔍 Memeriksa kelengkapan..."
 
-    if [ $max -eq 0 ]; then
-        _print "❌ Tidak ada data untuk direstore."
-        return
+    # 1. Cek apakah command 'python3' ada
+    if ! command -v python3 > /dev/null 2>&1; then
+        echo "${YELLOW}📦 Python belum terinstall. Sedang menginstall...${NC}"
+        # Install Python otomatis
+        pkg update -y > /dev/null 2>&1
+        pkg install python -y
+        echo "${GREEN}✅ Python berhasil diinstall.${NC}"
+    else
+        echo "✅ Python sudah siap."
     fi
 
-    for ((i=0; i<max; i++)); do
-        current_db="${backups[$i]}"
-        current_pkg="${pkgs[$i]}"
-        target_path="/data/data/$current_pkg/app_webview/Default/Cookies"
-        
-        _print "   🔄 Restore: $(basename "$current_db") -> $current_pkg"
-        
-        mkdir -p "$(dirname "$target_path")"
-        cp "$current_db" "$target_path"
-        
-        # Fix Permission
-        uid=$(stat -c "%u:%g" "/data/data/$current_pkg")
-        chown -R "$uid" "/data/data/$current_pkg/app_webview"
-        chmod 660 "$target_path"
-        count=$((count+1))
-    done
-    _print "✅ Sukses restore $count akun."
+    # 2. Cek apakah module 'requests' ada (Wajib untuk script downloader)
+    if ! python3 -c "import requests" > /dev/null 2>&1; then
+        echo "${YELLOW}📦 Modul 'requests' belum ada. Menginstall via pip...${NC}"
+        pip install requests
+        echo "${GREEN}✅ Modul requests berhasil diinstall.${NC}"
+    fi
 }
 
+setup_downloader() {
+    # Download script python dari GitHub jika belum ada
+    if [ ! -f "$LOCAL_PYTHON_PATH" ]; then
+        echo "☁️ Mengambil script downloader dari GitHub..."
+        curl -L -s "$GITHUB_PYTHON_URL" -o "$LOCAL_PYTHON_PATH"
+    fi
+}
+
+# --- FUNGSI ASLI (BACKUP, RESTORE, UNINSTALL) ---
+
 do_backup() {
-    _print "\n=== BACKUP ==="
+    echo "=========================================="
+    echo "       MEMULAI PROSES BACKUP...           "
+    echo "=========================================="
     mkdir -p "$BACKUP_DIR"
+    count=0
     for folder in /data/data/com.roblox.clien*; do
         [ -e "$folder" ] || continue
-        pkg=$(basename "$folder")
-        [ -f "$folder/app_webview/Default/Cookies" ] && cp "$folder/app_webview/Default/Cookies" "$BACKUP_DIR/$pkg.db" && echo "✅ $pkg"
+        pkg_name=$(basename "$folder")
+        cookie_path=""
+        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
+        [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
+
+        if [ -n "$cookie_path" ]; then
+            cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
+            echo "✅ Backup SUKSES: $pkg_name"
+            count=$((count + 1))
+        fi
     done
+    echo "------------------------------------------"
+    echo "Selesai! $count database tersimpan."
+}
+
+do_restore_sequential() {
+    echo "=========================================="
+    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
+    echo "=========================================="
+    
+    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
+
+    total_backups=${#backups[@]}
+    total_pkgs=${#pkgs[@]}
+
+    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
+        echo "❌ Data backup atau aplikasi tidak ditemukan."
+        return 1
+    fi
+
+    echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
+    echo "------------------------------------------"
+
+    i=0
+    while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
+        current_db="${backups[$i]}"
+        current_pkg="${pkgs[$i]}"
+        
+        target_folder="/data/data/$current_pkg"
+        target_dir_parent="$target_folder/app_webview/Default"
+        target_path="$target_dir_parent/Cookies"
+
+        echo "🔄 Merestore [$(basename "$current_db")] ke [$current_pkg]..."
+
+        mkdir -p "$target_dir_parent"
+        cp "$current_db" "$target_path"
+        
+        app_uid=$(stat -c "%u:%g" "$target_folder")
+        chown -R "$app_uid" "$target_folder/app_webview"
+        chmod 660 "$target_path"
+        
+        echo "✅ Berhasil."
+        i=$((i + 1))
+    done
+    echo "------------------------------------------"
+    echo "Selesai! $i akun dipulihkan."
 }
 
 do_uninstall() {
+    echo "=========================================="
+    echo "       MENGHAPUS APLIKASI CLONE...        "
+    echo "=========================================="
     pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    [ -z "$pkgs" ] && return
-    echo -n "❓ Hapus semua? (y/n): "
-    read c
-    if [[ "$c" == "y" ]]; then
-        for p in $pkgs; do pm uninstall "$p" >/dev/null 2>&1 && echo "🗑️ $p"; done
+    [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
+    
+    echo -n "❓ Yakin hapus SEMUA? (y/n): "
+    read confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        for pkg in $pkgs; do
+            pm uninstall "$pkg" > /dev/null 2>&1 && echo "✅ $pkg Terhapus."
+        done
     fi
 }
 
-# ==========================================================
-# LOGIC UTAMA: DOWNLOAD DULU -> BARU INSTALL
-# ==========================================================
+# --- FUNGSI AUTO PROCESS (DENGAN CEK PYTHON) ---
+
 do_auto_process() {
-    _print "\n=========================================="
-    _print "   PROSES OTOMATIS (TERPISAH)"
-    _print "=========================================="
+    echo "=========================================="
+    echo "       PROSES OTOMATIS BERJALAN           "
+    echo "=========================================="
+    
+    # 1. Cek Dependensi (Python & Requests) -> INSTALL JIKA BELUM ADA
+    check_dependencies
+    
+    # 2. Siapkan Script Downloader
+    setup_downloader
     
     mkdir -p "$DOWNLOAD_DIR"
-    local content_id=$(echo "$GOFILE_URL" | grep -oE '[a-zA-Z0-9]+$' | tail -n 1)
-    
-    # --- FASE 1: DOWNLOAD ---
-    _print "\n${YELLOW}=== FASE 1: DOWNLOAD SEMUA APK ===${NC}"
-    _print "⏳ Sedang mengambil daftar file (Mohon tunggu)..."
-    
-    setup_token
-    # Fungsi ini HANYA mendownload, tidak menginstall
-    fetch_contents "$content_id" "$DOWNLOAD_DIR" ""
-    
-    # --- FASE 2: INSTALASI ---
-    _print "\n${YELLOW}=== FASE 2: INSTALASI APK ===${NC}"
-    
-    # Cek jumlah file
-    local count_files=$(ls "$DOWNLOAD_DIR"/*.apk 2>/dev/null | wc -l)
-    
-    if [ "$count_files" -eq 0 ]; then
-        _print "${RED}❌ Tidak ada APK yang terdownload!${NC}"
-        _print "   Cek koneksi internet atau URL Gofile."
+
+    # 3. Jalankan Download via Python (Gofile)
+    echo "${CYAN}🚀 Memulai Download dari Gofile...${NC}"
+    if [ -f "$LOCAL_PYTHON_PATH" ]; then
+        python3 "$LOCAL_PYTHON_PATH" "$GOFILE_URL"
+    else
+        echo "❌ Gagal memuat script downloader.py!"
         return
     fi
-    
-    _print "📂 Ditemukan $count_files APK. Memulai instalasi..."
-    sleep 2
 
-    # Loop install (Sortir angka: 1, 2, 3... 10)
-    for apk in $(ls "$DOWNLOAD_DIR"/*.apk | sort -V); do
-        _print "   🔨 Memasang: ${GREEN}$(basename "$apk")${NC}..."
-        pm install -r "$apk" > /dev/null 2>&1
+    # 4. Proses Install APK
+    echo "------------------------------------------"
+    echo "⏳ Memindai file APK..."
+    
+    count_files=$(find "$DOWNLOAD_DIR" -name "*.apk" | wc -l)
+    
+    if [ "$count_files" -eq 0 ]; then
+        echo "❌ Tidak ada APK yang terdownload."
+        return
+    fi
+
+    find "$DOWNLOAD_DIR" -name "*.apk" | sort -V | while read apk_file; do
+        echo "⏳ Memasang $(basename "$apk_file")..."
+        pm install -r "$apk_file" > /dev/null 2>&1
+        sleep 1
     done
 
-    # --- FASE 3: RESTORE ---
+    # 5. Restore Data
     do_restore_sequential
-    
-    _print "\n✨ SEMUA PROSES SELESAI!"
+    echo "✨ SEMUA PROSES SELESAI!"
 }
 
-# --- MENU ---
+# --- MAIN MENU ---
 check_root
 while true; do
     echo ""
-    echo "1. Backup"
-    echo "2. Restore Only"
-    echo "3. Hapus Clone"
-    echo "4. AUTO (Download All -> Install All -> Restore)"
-    echo "5. Exit"
-    echo -n "Pilih: "
+    echo "=========================================="
+    echo "    ROBLOX CLONE MANAGER v6.1 (CLOUD)     "
+    echo "=========================================="
+    echo "1. Backup Akun"
+    echo "2. Restore Akun (Urutan Sequential)"
+    echo "3. Hapus Semua Aplikasi Clone"
+    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
+    echo "5. Keluar"
+    echo "------------------------------------------"
+    echo -n "Pilih menu [1-5]: "
     read choice
+  
     case $choice in
         1) do_backup ;;
         2) do_restore_sequential ;;
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) exit 0 ;;
+        *) echo "⚠️ Pilihan salah." ;;
     esac
 done
