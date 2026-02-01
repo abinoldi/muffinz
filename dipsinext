@@ -293,6 +293,7 @@ local function EnsureLegitFishingActive()
 end
 
 -- [THREAD: DUAL WATCHDOG ANTI-STUCK]
+-- [THREAD: DUAL WATCHDOG ANTI-STUCK]
 task.spawn(function()
     while task.wait(1) do
         if AutoActive then
@@ -300,7 +301,7 @@ task.spawn(function()
             local isStuck = false
             local stuckReason = "None"
             
-            -- CHECK 1: Stuck di Casting (Tidak melempar kail > 8 detik)
+            -- CHECK 1: Stuck di Casting (Tidak melempar > 8 detik)
             if STATE.Status == "Casting (Waiting)" and timeSinceLastAction > 8 then
                 isStuck = true; stuckReason = "Cast Lag"
             end
@@ -310,28 +311,44 @@ task.spawn(function()
                 isStuck = true; stuckReason = "No Bite Timeout"
             end
 
-            -- CHECK 3: Stuck di Reeling (Mini-game macet > 15 detik) [BARU]
+            -- CHECK 3: Stuck di Reeling (Mini-game macet > 15 detik)
             if (STATE.Status == "Reeling (Mini-Game)" or LegitState.Status == "Reeling") and timeSinceLastAction > 15 then
-                isStuck = true; stuckReason = "Reeling Stuck (>15s)"
+                isStuck = true; stuckReason = "Reeling Stuck"
             end
 
-            -- ACTION: FORCE RESET
+            -- ACTION: HARD RESET (FORCE UNEQUIP)
             if isStuck then
-                STATE.Status = "⚠️ RESET: " .. stuckReason
-                -- Cancel input fishing yang sedang berjalan
+                STATE.Status = "⚠️ HARD RESET: " .. stuckReason
+                
+                -- 1. Matikan paksa loop klik di client
+                LegitState.Status = "Idle" 
+                if LegitClickThread then 
+                    task.cancel(LegitClickThread)
+                    LegitClickThread = nil
+                end
+
+                -- 2. Cancel Input ke Server
                 pcall(function() RF_CancelFishingInputs:InvokeServer() end)
                 
-                -- Reset state auto fishing
+                -- 3. Matikan Auto State Sementara
                 pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
-                task.wait(0.5)
-                pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+
+                -- 4. FORCE UNEQUIP (Lepas pancingan dari tangan -> KUNCI RESET)
+                if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
+                    pcall(function() MyLp.Character.Humanoid:UnequipTools() end)
+                end
                 
-                -- Equip ulang & Lempar kail lagi
+                task.wait(1.5) -- Tunggu animasi unequip selesai
+
+                -- 5. Nyalakan lagi & Equip Ulang
+                pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
                 pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+                
+                -- 6. Lempar ulang
+                task.wait(1) 
                 pcall(function() RF_ChargeFishingRod:InvokeServer(os.time()) end)
                 
                 LastCastTime = os.time() 
-                task.wait(1.5)
             end
         else
             LastCastTime = os.time()
