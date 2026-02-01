@@ -300,25 +300,36 @@ task.spawn(function()
             local isStuck = false
             local stuckReason = "None"
             
-            -- CHECK 1: Stuck di Casting
+            -- CHECK 1: Stuck di Casting (Tidak melempar kail > 8 detik)
             if STATE.Status == "Casting (Waiting)" and timeSinceLastAction > 8 then
                 isStuck = true; stuckReason = "Cast Lag"
             end
             
-            -- CHECK 2: Stuck di Monitoring
+            -- CHECK 2: Stuck di Monitoring (Tidak ada ikan > 25 detik)
             if STATE.Status == "Monitoring (Native)" and timeSinceLastAction > 25 then
                 isStuck = true; stuckReason = "No Bite Timeout"
+            end
+
+            -- CHECK 3: Stuck di Reeling (Mini-game macet > 15 detik) [BARU]
+            if (STATE.Status == "Reeling (Mini-Game)" or LegitState.Status == "Reeling") and timeSinceLastAction > 15 then
+                isStuck = true; stuckReason = "Reeling Stuck (>15s)"
             end
 
             -- ACTION: FORCE RESET
             if isStuck then
                 STATE.Status = "⚠️ RESET: " .. stuckReason
+                -- Cancel input fishing yang sedang berjalan
                 pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                
+                -- Reset state auto fishing
                 pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
                 task.wait(0.5)
                 pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+                
+                -- Equip ulang & Lempar kail lagi
                 pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
                 pcall(function() RF_ChargeFishingRod:InvokeServer(os.time()) end)
+                
                 LastCastTime = os.time() 
                 task.wait(1.5)
             end
@@ -327,7 +338,6 @@ task.spawn(function()
         end
     end
 end)
-
 -- ===============================
 -- QUEST & MODE LOGIC
 -- ===============================
