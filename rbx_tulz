@@ -1,23 +1,13 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v6.3 (PATH FIX + ROOT SAFE)
+# ROBLOX MANAGER v7.0 (PURE BASH - NO PYTHON)
 # ==========================================================
-
-# --- [FIX MUTLAK] INJECT PATH AGAR ROOT BISA BACA PYTHON ---
-export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:$PATH"
-export LD_LIBRARY_PATH="/data/data/com.termux/files/usr/lib"
 
 # --- KONFIGURASI ---
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-GITHUB_PYTHON_URL="https://raw.githubusercontent.com/abinoldi/muffinz/main/downloader.py"
-LOCAL_PYTHON_PATH="/data/data/com.termux/files/home/downloader.py"
 GOFILE_URL="https://gofile.io/d/ewZLec"
-
-export GF_DOWNLOAD_DIR="$DOWNLOAD_DIR"
-export GF_MAX_CONCURRENT_DOWNLOADS=5
-export GF_MAX_RETRIES=5
 
 # --- WARNA ---
 GREEN='\033[0;32m'
@@ -26,61 +16,51 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# --- FUNGSI SYSTEM ---
+# --- FUNGSI UTAMA ---
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "${RED}❌ Script ini MEMBUTUHKAN akses Root!${NC}"
-        echo "👉 Gunakan perintah tsu saat menjalankannya."
+        echo "👉 Jalankan dengan: tsu"
         exit 1
     fi
 }
 
-check_environment() {
-    echo "🔍 Memeriksa lingkungan sistem..."
-
-    # Cek apakah Python terbaca oleh Root
-    if ! command -v python3 > /dev/null 2>&1; then
-        echo "${RED}❌ CRITICAL ERROR: Python tidak ditemukan oleh Root!${NC}"
-        echo "${YELLOW}⚠️ Solusi:${NC} Keluar dari root, lalu jalankan: 'pkg install python'"
-        echo "   Lalu jalankan script ini lagi."
-        exit 1
-    else
-        echo "✅ Python terdeteksi: $(which python3)"
-    fi
-
-    # Cek Module Requests
-    if ! python3 -c "import requests" > /dev/null 2>&1; then
-        echo "${YELLOW}📦 Modul 'requests' kurang. Mencoba install via pip root...${NC}"
-        # Pip biasanya boleh dijalankan root (dengan warning), tidak seperti pkg
-        pip install requests --break-system-packages > /dev/null 2>&1
-        
-        if ! python3 -c "import requests" > /dev/null 2>&1; then
-             echo "${RED}❌ Gagal install requests. Install manual di Termux biasa!${NC}"
-             exit 1
-        fi
-        echo "${GREEN}✅ Modul requests berhasil diinstall.${NC}"
-    fi
+get_gofile_token() {
+    # Ambil token tamu
+    curl -s -X POST https://api.gofile.io/accounts | grep -o '"token":"[^"]*' | cut -d'"' -f4
 }
 
-setup_downloader() {
-    # Download script python jika belum ada
-    if [ ! -f "$LOCAL_PYTHON_PATH" ]; then
-        echo "☁️ Mengambil script downloader dari GitHub..."
-        curl -L -s "$GITHUB_PYTHON_URL" -o "$LOCAL_PYTHON_PATH"
-        chmod +x "$LOCAL_PYTHON_PATH"
-    fi
+# --- FUNGSI PARSING JSON TANPA PYTHON/JQ ---
+# Ini rahasianya: Kita ubah koma (,) jadi Enter (\n) biar grep bisa baca
+get_download_links() {
+    local content_id=$1
+    local token=$2
+    
+    # Ambil JSON
+    response=$(curl -s "https://api.gofile.io/contents/$content_id?cache=true" \
+        -H "Authorization: Bearer $token" \
+        -H "X-Website-Token: 4fd6sg89d7s6")
+
+    # TEKNIK SED: Pecah baris panjang jadi baris pendek-pendek
+    # Lalu cari baris yang mengandung "link":"https..."
+    # Lalu bersihkan kutipnya
+    echo "$response" | sed 's/,/\n/g' | grep '"link":' | grep -o 'https://[^"]*'
 }
 
-# --- FUNGSI INTI (BACKUP/RESTORE) ---
+# --- FUNGSI MENU ---
 
 do_backup() {
-    echo "=== BACKUP PROCESS ==="
+    echo "=========================================="
+    echo "       MEMULAI PROSES BACKUP...           "
+    echo "=========================================="
     mkdir -p "$BACKUP_DIR"
     count=0
     for folder in /data/data/com.roblox.clien*; do
         [ -e "$folder" ] || continue
         pkg_name=$(basename "$folder")
+        
+        # Cek lokasi cookie (kadang beda versi beda letak)
         cookie_path=""
         [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
         [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
@@ -95,18 +75,23 @@ do_backup() {
 }
 
 do_restore_sequential() {
-    echo "=== RESTORE SEQUENTIAL ==="
-    # Fix untuk syntax array bash
-    backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    echo "=========================================="
+    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
+    echo "=========================================="
+    
+    # Syntax array bash
+    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
     total_pkgs=${#pkgs[@]}
 
-    if [ "$total_backups" -eq 0 ]; then
-        echo "${RED}❌ Data backup tidak ditemukan.${NC}"
+    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
+        echo "❌ Data backup atau aplikasi tidak ditemukan."
         return 1
     fi
+
+    echo "ℹ️ Mengembalikan $total_backups akun ke $total_pkgs aplikasi."
 
     i=0
     while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
@@ -118,7 +103,7 @@ do_restore_sequential() {
         mkdir -p "$(dirname "$target_path")"
         cp "$current_db" "$target_path"
         
-        # Permission Fix (Penting!)
+        # Permission Fix
         app_uid=$(stat -c "%u:%g" "/data/data/$current_pkg")
         chown -R "$app_uid" "/data/data/$current_pkg/app_webview"
         chmod 660 "$target_path"
@@ -129,7 +114,7 @@ do_restore_sequential() {
 }
 
 do_uninstall() {
-    echo "=== UNINSTALL CLONES ==="
+    echo "=== HAPUS APLIKASI ==="
     pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
     [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
     
@@ -144,33 +129,56 @@ do_uninstall() {
 
 do_auto_process() {
     echo "=========================================="
-    echo "       PROSES OTOMATIS (ROOT v6.3)        "
+    echo "    PROSES OTOMATIS (PURE BASH/NO PY)     "
     echo "=========================================="
     
-    check_environment
-    setup_downloader
-    
     mkdir -p "$DOWNLOAD_DIR"
-
-    echo "${CYAN}🚀 Memulai Download via Python...${NC}"
-    # Memanggil python dengan full path explicit untuk keamanan
-    python3 "$LOCAL_PYTHON_PATH" "$GOFILE_URL"
-
-    echo "------------------------------------------"
-    echo "⏳ Memindai & Install APK..."
     
-    count_files=$(find "$DOWNLOAD_DIR" -name "*.apk" | wc -l)
+    # 1. Bersihkan folder download lama biar tidak duplikat
+    rm -f "$DOWNLOAD_DIR"/*.apk
+
+    # 2. Ambil ID Gofile dari URL
+    CONTENT_ID=$(echo "$GOFILE_URL" | grep -oE '[a-zA-Z0-9]+$' | tail -n 1)
     
-    if [ "$count_files" -eq 0 ]; then
-        echo "${RED}❌ Tidak ada APK yang terdownload.${NC}"
+    echo "${CYAN}🚀 Mengambil Token & Link Download...${NC}"
+    TOKEN=$(get_gofile_token)
+    
+    if [ -z "$TOKEN" ]; then
+        echo "${RED}❌ Gagal mengambil token Gofile. Cek internet.${NC}"
         return
     fi
 
-    find "$DOWNLOAD_DIR" -name "*.apk" | sort -V | while read apk_file; do
-        echo "⏳ Memasang $(basename "$apk_file")..."
-        pm install -r "$apk_file" > /dev/null 2>&1
+    # 3. Ambil List URL File
+    # (Menggunakan fungsi parsing sed+grep tadi)
+    LINKS=$(get_download_links "$CONTENT_ID" "$TOKEN")
+    
+    if [ -z "$LINKS" ]; then
+        echo "${RED}❌ Tidak ditemukan file di link tersebut.${NC}"
+        return
+    fi
+    
+    echo "⬇️ Mulai mendownload..."
+    cd "$DOWNLOAD_DIR"
+    
+    # 4. Loop Download
+    # curl -JLO akan otomatis mendeteksi nama file asli (1.apk, 2.apk) dari server
+    for link in $LINKS; do
+        echo "   ...mendownload file..."
+        curl -JLO -s "$link" 
+    done
+    
+    echo "${GREEN}✅ Download Selesai.${NC}"
+    echo "------------------------------------------"
+    echo "⏳ Menginstall APK..."
+
+    # 5. Install (Diurutkan)
+    # ls -v agar urut (1, 2, 3... 10)
+    for apk in $(ls -v *.apk 2>/dev/null); do
+        echo "📦 Memasang $apk..."
+        pm install -r "$apk" > /dev/null 2>&1
     done
 
+    # 6. Restore
     do_restore_sequential
     echo "✨ SEMUA PROSES SELESAI!"
 }
@@ -180,7 +188,7 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "   ROBLOX MANAGER v6.3 (ROOT FIXED)       "
+    echo "   ROBLOX MANAGER v7.0 (NO PYTHON)        "
     echo "=========================================="
     echo "1. Backup Akun"
     echo "2. Restore Akun"
