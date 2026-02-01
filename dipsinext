@@ -21,27 +21,51 @@ local VirtualUser = game:GetService("VirtualUser")
 local MyLp = Plrs.LocalPlayer
 
 local function EnablePotatoMode()
-    -- Langsung matikan 3D Render
-    if DISABLE_3D_RENDER then
-        RunService:Set3dRenderingEnabled(false)
-    else
-        RunService:Set3dRenderingEnabled(true)
+    -- 1. MEMBATASI FPS (Kunci Penghematan Baterai/CPU)
+    -- Memaksa game berjalan di 15 FPS saja (sangat ringan)
+    if setfpscap then 
+        setfpscap(15) 
     end
 
+    -- 2. MATIKAN 3D RENDER (Layar Hitam)
+    if DISABLE_3D_RENDER then
+        RunService:Set3dRenderingEnabled(false)
+    end
+
+    -- 3. PENGATURAN RENDERING MINIMUM
+    pcall(function()
+        settings().Rendering.QualityLevel = "Level01"
+        game.Lighting.GlobalShadows = false
+        game.Lighting.FogEnd = 9e9
+        game.Lighting.Brightness = 0
+        
+        -- Matikan efek air (karena game mancing banyak air)
+        workspace.Terrain.WaterWaveSize = 0
+        workspace.Terrain.WaterReflectance = 0
+        workspace.Terrain.WaterTransparency = 0
+    end)
+
+    -- 4. LOOP PEMBERSIH MEMORI (Destroy Objek Berat)
     task.spawn(function()
-        while task.wait(3) do
+        while task.wait(5) do -- Loop setiap 5 detik
             pcall(function()
-                game.Lighting.GlobalShadows = false
-                game.Lighting.Brightness = 0
                 for _, v in ipairs(workspace:GetDescendants()) do
+                    -- Ubah part jadi plastik polos
                     if v:IsA("BasePart") then 
-                        v.Transparency = 1; v.CastShadow = false
-                    elseif v:IsA("Decal") or v:IsA("Texture") then 
+                        v.Material = Enum.Material.Plastic
+                        v.Reflectance = 0
                         v.Transparency = 1 
-                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then 
-                        v.Enabled = false
+                        v.CastShadow = false
+                        
+                    -- HAPUS PERMANEN (Destroy) Efek Visual Berat
+                    elseif v:IsA("Decal") or v:IsA("Texture") then 
+                        v:Destroy() 
+                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                        v:Destroy() 
+                    
+                    -- Matikan Suara
                     elseif DISABLE_AUDIO and (v:IsA("Sound") or v:IsA("SoundGroup")) then
-                        if v:IsA("Sound") then v.Playing = false; v.Volume = 0 end
+                        if v:IsA("Sound") then v.Playing = false; v.Volume = 0; v:Stop() end
                     end
                 end
             end)
