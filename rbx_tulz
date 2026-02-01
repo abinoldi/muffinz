@@ -25,27 +25,26 @@ NC='\033[0m'
 # ==========================================================
 
 # Fungsi Helper: Parsing nilai JSON sederhana dengan sed
-# Mirip dengan logika dictionary di Python
 get_json_value() {
     local json="$1"
     local key="$2"
     echo "$json" | sed -n 's/.*"'"$key"'":"\([^"]*\)".*/\1/p' | head -n 1
 }
 
-# Fungsi: Setup Token (Sama seperti _set_account_access_token di Python)
+# Fungsi: Setup Token (Porting dari _set_account_access_token)
 get_token() {
     local response=$(curl -s -X POST "https://api.gofile.io/accounts")
     local token=$(get_json_value "$response" "token")
     echo "$token"
 }
 
-# Fungsi: Download File (Sama seperti _perform_download di Python)
+# Fungsi: Download File (Porting dari _perform_download)
 download_file() {
     local url="$1"
     local filename="$2"
     local output_path="$3"
     
-    # Cek jika file sudah ada (Logic _should_skip_download)
+    # Cek jika file sudah ada
     if [ -s "$output_path" ]; then
         echo "   ⏩ Lewati: $filename (Sudah ada)"
         return
@@ -54,13 +53,13 @@ download_file() {
     echo "   ⬇️ Download: ${CYAN}$filename${NC}"
     
     # curl -C - (Resume) menggantikan logic Range header di Python
-    # curl -# (Progress Bar) menggantikan logic _update_progress di Python
+    # curl -# (Progress Bar) menggantikan logic _update_progress
     curl -L -# -C - --retry 5 --connect-timeout 30 \
         -H "Authorization: Bearer $TOKEN" \
         -o "$output_path" "$url"
 }
 
-# Fungsi: Recursive Fetch (Sama seperti _build_content_tree_structure di Python)
+# Fungsi: Recursive Fetch (Porting dari _build_content_tree_structure)
 fetch_recursive() {
     local content_id="$1"
     local current_dir="$2"
@@ -99,24 +98,20 @@ fetch_recursive() {
         mkdir -p "$target_path"
         
         # [TEKNIK PURE BASH PARSING]
-        # Python menggunakan: for child in data["children"].values():
-        # Bash tidak bisa parsing object nested dengan mudah.
-        # Trik: Ubah setiap objek anak "{"id":..." menjadi baris baru.
+        # Python menggunakan loop dictionary. Bash menggunakan text processing.
+        # Trik: Ubah setiap objek anak (,"id":...) menjadi baris baru.
         
-        # 1. Ambil bagian "children":{...}
-        # 2. Ganti pembuka objek id "":{" menjadi baris baru
-        # 3. Parsing setiap baris
-        
-        # Kita ambil SEMUA ID anak (baik folder maupun file)
+        # Ambil semua ID anak untuk diloop (Recursive)
         local child_ids=$(echo "$response" | sed 's/,"/\n/g' | grep '"id":' | cut -d'"' -f4)
         
         # Jika folder kosong
         if [ -z "$child_ids" ]; then return; fi
 
         for cid in $child_ids; do
-            # Rekursif: Panggil fungsi ini lagi untuk setiap anak
-            # (Ini meniru logic rekursif Python)
-            fetch_recursive "$cid" "$target_path" "$hashed_password"
+            # Hindari infinite loop jika ID sama dengan parent
+            if [ "$cid" != "$content_id" ]; then
+                fetch_recursive "$cid" "$target_path" "$hashed_password"
+            fi
         done
 
     else
@@ -129,7 +124,7 @@ fetch_recursive() {
 }
 
 # ==========================================================
-# BAGIAN 2: MANAGER UTILS
+# BAGIAN 2: MANAGER UTILS (ORIGINAL)
 # ==========================================================
 
 check_root() {
@@ -141,7 +136,7 @@ check_root() {
 
 do_restore_sequential() {
     echo "=== FASE RESTORE ==="
-    # Array Bash (Membutuhkan #!/bin/bash)
+    # Array Bash (Membutuhkan #!/bin/bash, bukan sh)
     backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
@@ -191,7 +186,7 @@ do_uninstall() {
 }
 
 # ==========================================================
-# MAIN LOGIC
+# MAIN LOGIC (AUTO PROCESS)
 # ==========================================================
 
 do_auto_process() {
@@ -208,7 +203,7 @@ do_auto_process() {
     
     local hashed_pass=""
     if [ -n "$GOFILE_PASSWORD" ]; then
-        # Logic Hashing SHA256 (Port dari Python: hashlib.sha256(pwd).hexdigest())
+        # Logic Hashing SHA256 Bash
         hashed_pass=$(echo -n "$GOFILE_PASSWORD" | sha256sum | awk '{print $1}')
     fi
     
