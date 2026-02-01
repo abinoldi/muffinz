@@ -1,18 +1,16 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v6.2 (ROOT PATH FIX)
+# ROBLOX CLONE MANAGER v6.3 (PATH FIX + ROOT SAFE)
 # ==========================================================
 
-# --- [FIX WAJIB] INJECT PATH TERMUX KE ROOT ---
-# Baris ini membuat perintah 'pkg', 'python', 'pip' bisa dibaca oleh Root/SU
-export PATH="/data/data/com.termux/files/usr/bin:$PATH"
+# --- [FIX MUTLAK] INJECT PATH AGAR ROOT BISA BACA PYTHON ---
+export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:$PATH"
+export LD_LIBRARY_PATH="/data/data/com.termux/files/usr/lib"
 
-# --- KONFIGURASI ASLI ---
+# --- KONFIGURASI ---
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-
-# --- KONFIGURASI CLOUD ---
 GITHUB_PYTHON_URL="https://raw.githubusercontent.com/abinoldi/muffinz/main/downloader.py"
 LOCAL_PYTHON_PATH="/data/data/com.termux/files/home/downloader.py"
 GOFILE_URL="https://gofile.io/d/ewZLec"
@@ -28,45 +26,53 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# --- FUNGSI SYSTEM ---
+
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "${RED}❌ Script ini MEMBUTUHKAN akses Root!${NC}"
+        echo "👉 Gunakan perintah tsu saat menjalankannya."
         exit 1
     fi
 }
 
-# --- FUNGSI DEPENDENCY (SUDAH DIPERBAIKI) ---
-check_dependencies() {
-    echo "🔍 Memeriksa kelengkapan sistem..."
+check_environment() {
+    echo "🔍 Memeriksa lingkungan sistem..."
 
-    # Cek Python
+    # Cek apakah Python terbaca oleh Root
     if ! command -v python3 > /dev/null 2>&1; then
-        echo "${YELLOW}📦 Python tidak ditemukan. Sedang menginstall...${NC}"
-        # Karena path sudah di-export, 'pkg' sekarang bisa jalan di root
-        pkg update -y > /dev/null 2>&1
-        pkg install python -y
-        echo "${GREEN}✅ Python berhasil diinstall.${NC}"
+        echo "${RED}❌ CRITICAL ERROR: Python tidak ditemukan oleh Root!${NC}"
+        echo "${YELLOW}⚠️ Solusi:${NC} Keluar dari root, lalu jalankan: 'pkg install python'"
+        echo "   Lalu jalankan script ini lagi."
+        exit 1
     else
-        echo "✅ Python sudah siap."
+        echo "✅ Python terdeteksi: $(which python3)"
     fi
 
-    # Cek Requests
+    # Cek Module Requests
     if ! python3 -c "import requests" > /dev/null 2>&1; then
-        echo "${YELLOW}📦 Modul 'requests' belum ada. Menginstall...${NC}"
-        pip install requests --break-system-packages
+        echo "${YELLOW}📦 Modul 'requests' kurang. Mencoba install via pip root...${NC}"
+        # Pip biasanya boleh dijalankan root (dengan warning), tidak seperti pkg
+        pip install requests --break-system-packages > /dev/null 2>&1
+        
+        if ! python3 -c "import requests" > /dev/null 2>&1; then
+             echo "${RED}❌ Gagal install requests. Install manual di Termux biasa!${NC}"
+             exit 1
+        fi
         echo "${GREEN}✅ Modul requests berhasil diinstall.${NC}"
     fi
 }
 
 setup_downloader() {
+    # Download script python jika belum ada
     if [ ! -f "$LOCAL_PYTHON_PATH" ]; then
         echo "☁️ Mengambil script downloader dari GitHub..."
-        # Curl juga butuh path fix agar jalan di root
         curl -L -s "$GITHUB_PYTHON_URL" -o "$LOCAL_PYTHON_PATH"
+        chmod +x "$LOCAL_PYTHON_PATH"
     fi
 }
 
-# --- FUNGSI UTAMA ---
+# --- FUNGSI INTI (BACKUP/RESTORE) ---
 
 do_backup() {
     echo "=== BACKUP PROCESS ==="
@@ -90,8 +96,7 @@ do_backup() {
 
 do_restore_sequential() {
     echo "=== RESTORE SEQUENTIAL ==="
-    
-    # Syntax Array () ini butuh BASH, bukan SH
+    # Fix untuk syntax array bash
     backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
@@ -103,8 +108,6 @@ do_restore_sequential() {
         return 1
     fi
 
-    echo "ℹ️ Mengembalikan $total_backups akun..."
-
     i=0
     while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
         current_db="${backups[$i]}"
@@ -115,7 +118,7 @@ do_restore_sequential() {
         mkdir -p "$(dirname "$target_path")"
         cp "$current_db" "$target_path"
         
-        # Permission Fix
+        # Permission Fix (Penting!)
         app_uid=$(stat -c "%u:%g" "/data/data/$current_pkg")
         chown -R "$app_uid" "/data/data/$current_pkg/app_webview"
         chmod 660 "$target_path"
@@ -141,21 +144,17 @@ do_uninstall() {
 
 do_auto_process() {
     echo "=========================================="
-    echo "       PROSES OTOMATIS (FIXED PATH)       "
+    echo "       PROSES OTOMATIS (ROOT v6.3)        "
     echo "=========================================="
     
-    check_dependencies
+    check_environment
     setup_downloader
     
     mkdir -p "$DOWNLOAD_DIR"
 
     echo "${CYAN}🚀 Memulai Download via Python...${NC}"
-    if [ -f "$LOCAL_PYTHON_PATH" ]; then
-        python3 "$LOCAL_PYTHON_PATH" "$GOFILE_URL"
-    else
-        echo "${RED}❌ Script downloader.py hilang!${NC}"
-        return
-    fi
+    # Memanggil python dengan full path explicit untuk keamanan
+    python3 "$LOCAL_PYTHON_PATH" "$GOFILE_URL"
 
     echo "------------------------------------------"
     echo "⏳ Memindai & Install APK..."
@@ -181,7 +180,7 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "   ROBLOX MANAGER v6.2 (ROOT FIXED)       "
+    echo "   ROBLOX MANAGER v6.3 (ROOT FIXED)       "
     echo "=========================================="
     echo "1. Backup Akun"
     echo "2. Restore Akun"
