@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.7 (CLEAN VERSION - NO BYPASS)
+-- # ULTIMATE HUB: FINAL V4.8 (SMART TIMEOUT FIX)
 -- ======================================================
 
 local Services = {
@@ -41,6 +41,7 @@ local MasterConfig = {
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
+
 -- STATE TRACKING
 local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
 local TradingState = { IsTrading = false, Thread = nil }
@@ -64,10 +65,9 @@ local function GetRemote(name)
     return current:FindFirstChild(name)
 end
 
--- DEFINISI REMOTE (UPDATED)
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RF_CatchFishCompleted = GetRemote("RF/CatchFishCompleted") -- [UPDATED] Remote Baru
+local RF_CatchFishCompleted = GetRemote("RF/CatchFishCompleted") -- Remote Utama
 local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
 local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
@@ -75,43 +75,70 @@ local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
 -- ===============================
--- CORE FISHING LOGIC (CLEAN)
+-- SMART INVOKE (ANTI-FREEZE + ANTI-FAIL)
+-- ===============================
+-- Fungsi ini menunggu balasan server, TAPI ada batas waktunya (timeout).
+-- Jadi ikan tetap ketangkap, tapi kalau lag gak bakal freeze selamanya.
+local function ForceInvoke(remote, timeout, ...)
+    if not remote then return end
+    local args = {...}
+    local done = false
+    local result
+    
+    -- Jalankan Invoke di thread lain biar bisa dihitung waktunya
+    task.spawn(function()
+        result = {pcall(function() return remote:InvokeServer(unpack(args)) end)}
+        done = true
+    end)
+    
+    local start = os.clock()
+    -- Tunggu sampai SELESAI atau WAKTU HABIS
+    repeat 
+        task.wait() 
+    until done or (os.clock() - start) > timeout
+    
+    return result
+end
+
+-- ===============================
+-- CORE FISHING LOGIC (SMART)
 -- ===============================
 local function RunInstantFish()
     local timestamp = workspace:GetServerTimeNow()
     local args = {-1.233, 1, timestamp} 
 
-    -- Step 1: Charge
-    pcall(function() RF_ChargeFishingRod:InvokeServer() end)
+    -- Step 1: Charge (Kasih waktu max 2 detik)
+    ForceInvoke(RF_ChargeFishingRod, 2)
     task.wait(0.01)
 
-    -- Step 2: Start Minigame
-    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(unpack(args)) end)
+    -- Step 2: Start Minigame (Kasih waktu max 2 detik)
+    ForceInvoke(RF_RequestFishingMinigameStarted, 2, unpack(args))
 
-    -- Step 3: Wait Delay
+    -- Step 3: Wait Delay (Wajib tunggu agar ikan masuk)
     task.wait(MasterConfig.CatchDelay)
 
-    -- Step 4: Complete Catch (Simulasi FireServer)
-    -- Kita pakai task.spawn agar TIDAK MENUNGGU (No Freeze)
-    task.spawn(function()
-        if RF_CatchFishCompleted then
-            RF_CatchFishCompleted:InvokeServer() 
-        end
-    end)
+    -- Step 4: Complete Catch (CRITICAL)
+    -- Kita pakai ForceInvoke dengan timeout 3 detik.
+    -- Ini memberi waktu server memproses ikan, jadi ikan GAK LEPAS.
+    -- Tapi kalau server freeze > 3 detik, script lanjut (GAK FREEZE).
+    if RF_CatchFishCompleted then
+        ForceInvoke(RF_CatchFishCompleted, 3) 
+    end
 
     -- Step 5: Cleanup
     task.wait(0.01)
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    ForceInvoke(RF_CancelFishingInputs, 2)
 end
 
 function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
-    -- Optional: Update State ke Server (Kalau ada)
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+    -- [REQUESTED FIX] Matikan Auto Fishing Bawaan Game (False)
+    if RF_UpdateAutoFishingState then 
+        pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) 
+    end
     
-    -- Main Loop
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do 
             RunInstantFish()
@@ -119,7 +146,6 @@ function StartFishingV1()
         end
     end))
     
-    -- Auto Equip
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then 
@@ -129,7 +155,6 @@ function StartFishingV1()
         end
     end))
 
-    -- Auto Sell
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -144,7 +169,6 @@ function StartFishingV1()
         end
     end))
     
-    -- Auto Favorite
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -172,7 +196,6 @@ function StartFishingV1()
         end
     end))
 
-    -- Auto Unfavorite Rubies
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then RunAutoUnfavoriteRubies() end
@@ -183,6 +206,7 @@ end
 
 function StopFishingV1()
     FishingState.IsFishing = false
+    -- Saat stop, boleh balikin ke true atau biarin false (aman false)
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
     FishingThreads = {}
@@ -340,7 +364,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v4.7 (Clean)"
+    toggleBtn.Text = "W - v4.8 (Smart Fix)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -393,7 +417,7 @@ function CreateDashboard()
 end
 
 -- ===============================
--- TRADING, TOTEM & POTATO (KEEPING ORIGINAL LOGIC)
+-- TRADING, TOTEM & POTATO
 -- ===============================
 function TeleportToFishingLocation()
     if FishingState.Teleporting then return end
@@ -541,14 +565,14 @@ task.spawn(function()
 end)
 
 task.delay(2, function()
-    print("[AutoStart] Clean V4.7 Loaded")
+    print("[AutoStart] Smart V4.8 Loaded")
     CreateDashboard()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
     
     if req and MasterConfig.DiscordWebhookEnabled then
        pcall(function() 
-           req({Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({username = "Webhak Enok", content = "✅ Script Started (Clean Version) at " .. MasterConfig.SelectedLocation})})
+           req({Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({username = "Webhak Enok", content = "✅ Script Started (Smart V4.8) at " .. MasterConfig.SelectedLocation})})
        end)
     end
 
