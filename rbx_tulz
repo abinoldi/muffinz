@@ -1,101 +1,24 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/system/bin/sh
 
 # ==========================================================
-# ROBLOX MANAGER v9.0 (PURE BASH + GOFILE)
+# ROBLOX CLONE MANAGER v2.8 (SEQUENTIAL RESTORE)
 # ==========================================================
 
-# --- FIX WAJIB: Agar Root bisa baca perintah Termux ---
-export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:$PATH"
-
-# --- KONFIGURASI ---
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-# URL Gofile Anda
-GOFILE_URL="https://gofile.io/d/ewZLec" 
-# Kosongkan jika tidak ada password
-GOFILE_PASSWORD="" 
-
-# --- WARNA ---
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-# ==========================================================
-# BAGIAN 1: ENGINE DOWNLOAD GOFILE (TANPA PYTHON)
-# ==========================================================
-
-get_json_value() {
-    echo "$1" | sed -n 's/.*"'"$2"'":"\([^"]*\)".*/\1/p' | head -n 1
-}
-
-get_token() {
-    # Mengambil Token Tamu
-    curl -s -X POST "https://api.gofile.io/accounts" | grep -o '"token":"[^"]*' | cut -d'"' -f4
-}
-
-fetch_recursive() {
-    local content_id="$1"
-    local current_dir="$2"
-    local hashed_password="$3"
-    
-    local api_url="https://api.gofile.io/contents/$content_id?cache=true"
-    [ -n "$hashed_password" ] && api_url="${api_url}&password=${hashed_password}"
-
-    # Request ke Gofile
-    local response=$(curl -s -H "Authorization: Bearer $TOKEN" -H "X-Website-Token: 4fd6sg89d7s6" "$api_url")
-    local status=$(get_json_value "$response" "status")
-    
-    if [ "$status" != "ok" ]; then
-        echo "${RED}❌ Gagal akses Gofile ID: $content_id${NC}"
-        return
-    fi
-
-    local type=$(get_json_value "$response" "type")
-    local name=$(get_json_value "$response" "name")
-
-    if [[ "$current_dir" == "$DOWNLOAD_DIR" ]] && [[ "$type" == "folder" ]]; then
-         local target_path="$current_dir"
-    else
-         local target_path="$current_dir/$name"
-    fi
-
-    if [ "$type" == "folder" ]; then
-        mkdir -p "$target_path"
-        # Trik SED: Ubah koma jadi enter agar grep bisa baca semua ID anak
-        local child_ids=$(echo "$response" | sed 's/,"/\n/g' | grep '"id":' | cut -d'"' -f4)
-        
-        for cid in $child_ids; do
-            [ "$cid" != "$content_id" ] && fetch_recursive "$cid" "$target_path" "$hashed_password"
-        done
-    else
-        local link=$(get_json_value "$response" "link")
-        if [ -n "$link" ]; then
-            # Download jika file belum ada
-            if [ ! -s "$target_path/$name" ]; then
-                echo "   ⬇️ Download: ${CYAN}$name${NC}"
-                curl -L -# -C - --retry 5 -H "Authorization: Bearer $TOKEN" -o "$target_path/$name" "$link"
-            else
-                echo "   ⏩ Lewati: $name (Sudah ada)"
-            fi
-        fi
-    fi
-}
-
-# ==========================================================
-# BAGIAN 2: MENU ASLI (DENGAN PERBAIKAN BASH)
-# ==========================================================
+BASE_URL="http://43.134.116.2:5555/uploaded"
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        echo "${RED}❌ Script ini MEMBUTUHKAN akses Root!${NC}"
-        echo "👉 Jalankan dengan perintah: tsu"
+        echo "❌ Script ini MEMBUTUHKAN akses Root!"
         exit 1
     fi
 }
 
 do_backup() {
-    echo "=== MEMULAI BACKUP ==="
+    echo "=========================================="
+    echo "       MEMULAI PROSES BACKUP...           "
+    echo "=========================================="
     mkdir -p "$BACKUP_DIR"
     count=0
     for folder in /data/data/com.roblox.clien*; do
@@ -107,53 +30,67 @@ do_backup() {
 
         if [ -n "$cookie_path" ]; then
             cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
-            echo "✅ Backup: $pkg_name"
+            echo "✅ Backup SUKSES: $pkg_name"
             count=$((count + 1))
         fi
     done
+    echo "------------------------------------------"
     echo "Selesai! $count database tersimpan."
 }
 
+# Fungsi Restore Berdasarkan Urutan (Tanpa Cek Nama Paket)
 do_restore_sequential() {
-    echo "=== RESTORE SEQUENTIAL ==="
+    echo "=========================================="
+    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
+    echo "=========================================="
     
-    # INI BAGIAN YANG ERROR SEBELUMNYA DI 'SH'
-    # Syntax (...) hanya jalan di BASH
-    backups=($(ls -v "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    # Ambil daftar file backup ke dalam array
+    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    # Ambil daftar aplikasi terinstall ke dalam array
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
     total_pkgs=${#pkgs[@]}
 
-    if [ "$total_backups" -eq 0 ]; then
-        echo "❌ Data backup tidak ditemukan."
-        return
+    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
+        echo "❌ Data backup atau aplikasi tidak ditemukan."
+        return 1
     fi
 
-    echo "ℹ️ Mengembalikan $total_backups akun..."
+    echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
+    echo "------------------------------------------"
 
+    # Loop menggunakan indeks agar urut
     i=0
     while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
         current_db="${backups[$i]}"
         current_pkg="${pkgs[$i]}"
-        target_path="/data/data/$current_pkg/app_webview/Default/Cookies"
+        
+        target_folder="/data/data/$current_pkg"
+        target_dir_parent="$target_folder/app_webview/Default"
+        target_path="$target_dir_parent/Cookies"
 
-        echo "🔄 Restore: $(basename "$current_db") -> $current_pkg"
-        mkdir -p "$(dirname "$target_path")"
+        echo "🔄 Merestore [$(basename "$current_db")] ke [$current_pkg]..."
+
+        mkdir -p "$target_dir_parent"
         cp "$current_db" "$target_path"
         
-        # Fix Permission
-        app_uid=$(stat -c "%u:%g" "/data/data/$current_pkg")
-        chown -R "$app_uid" "/data/data/$current_pkg/app_webview"
+        # Perbaikan Izin Akses
+        app_uid=$(stat -c "%u:%g" "$target_folder")
+        chown -R "$app_uid" "$target_folder/app_webview"
         chmod 660 "$target_path"
         
+        echo "✅ Berhasil."
         i=$((i + 1))
     done
-    echo "✅ Selesai!"
+    echo "------------------------------------------"
+    echo "Selesai! $i akun dipulihkan."
 }
 
 do_uninstall() {
-    echo "=== HAPUS APLIKASI ==="
+    echo "=========================================="
+    echo "       MENGHAPUS APLIKASI CLONE...        "
+    echo "=========================================="
     pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
     [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
     
@@ -168,50 +105,40 @@ do_uninstall() {
 
 do_auto_process() {
     echo "=========================================="
-    echo "   PROSES OTOMATIS (GOFILE BASH)          "
+    echo "       PROSES OTOMATIS BERJALAN           "
     echo "=========================================="
-    
-    mkdir -p "$DOWNLOAD_DIR"
-    
-    # 1. SETUP GOFILE
-    echo "🚀 Menghubungkan ke Gofile..."
-    TOKEN=$(get_token)
-    CONTENT_ID=$(echo "$GOFILE_URL" | grep -oE '[a-zA-Z0-9]+$' | tail -n 1)
-    HASH_PASS=""
-    [ -n "$GOFILE_PASSWORD" ] && HASH_PASS=$(echo -n "$GOFILE_PASSWORD" | sha256sum | awk '{print $1}')
+    total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
+    [ "$total_backup" -eq 0 ] && echo "❌ Tidak ada backup." && return
 
-    # 2. DOWNLOAD RECURSIVE (MENGGANTIKAN PYTHON)
-    echo "⏳ Memindai & Mendownload..."
-    fetch_recursive "$CONTENT_ID" "$DOWNLOAD_DIR" "$HASH_PASS"
-    
-    # 3. INSTALL APK
-    echo "------------------------------------------"
-    echo "📦 Memulai Instalasi..."
-    
-    count=$(find "$DOWNLOAD_DIR" -name "*.apk" | wc -l)
-    if [ "$count" -eq 0 ]; then
-        echo "${RED}❌ Tidak ada APK terdownload.${NC}"
-        return
-    fi
-    
-    find "$DOWNLOAD_DIR" -name "*.apk" | sort -V | while read apk; do
-        echo "🔨 Install: $(basename "$apk")..."
-        pm install -r "$apk" > /dev/null 2>&1
+    mkdir -p "$DOWNLOAD_DIR"
+    for i in $(seq 1 "$total_backup"); do
+        echo "------------------------------------------"
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+        [ ! -f "$SAVE_PATH" ] && curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
+        
+        if [ -f "$SAVE_PATH" ]; then
+            echo "⏳ Memasang $APK_NAME..."
+            pm install -r "$SAVE_PATH" > /dev/null 2>&1
+            sleep 3
+        fi
     done
 
-    # 4. RESTORE
     do_restore_sequential
     echo "✨ SEMUA PROSES SELESAI!"
 }
 
-# --- MENU ---
+# --- MAIN MENU ---
 check_root
 while true; do
     echo ""
+    echo "=========================================="
+    echo "    ROBLOX CLONE MANAGER v2.8 (ROOT)      "
+    echo "=========================================="
     echo "1. Backup Akun"
-    echo "2. Restore Akun (Sequential)"
+    echo "2. Restore Akun (Urutan Sequential)"
     echo "3. Hapus Semua Aplikasi Clone"
-    echo "4. PROSES OTOMATIS (Gofile -> Install -> Restore)"
+    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
     echo "5. Keluar"
     echo "------------------------------------------"
     echo -n "Pilih menu [1-5]: "
