@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.8 (SMART TIMEOUT FIX)
+-- # ULTIMATE HUB: FINAL V4.8 (SMART POTATO + AUDIO FIX)
 -- ======================================================
 
 local Services = {
@@ -22,7 +22,7 @@ local OnlineConfigUrl = "https://raw.githubusercontent.com/abinoldi/muffzle/refs
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
-    CatchDelay = 1.05,
+    CatchDelay = 1.05, -- Delay Optimal
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
@@ -33,14 +33,11 @@ local MasterConfig = {
     SelectedLocation = "Crater Island",
     AutoTotem = true,
     
-    -- Pastikan ada KOMA (,) di ujung baris PotatoMode di bawah ini:
-    PotatoMode = true, 
+    -- [POTATO SETTINGS]
+    PotatoMode = true,
+    Disable3DRendering = true, -- Ubah ke true jika ingin layar hitam (HEMAT GPU)
+    DisableAudio = true,       -- Ubah ke true jika ingin bisu (HEMAT CPU)
     
-    -- Settingan Baru (Pastikan ada koma di ujungnya juga)
-    Disable3DRendering = true,  -- Set ke true untuk layar hitam (hemat GPU)
-    DisableAudio = true,        -- Set ke true untuk bisu (hemat CPU)
-
-    -- Lanjutan config lama
     AutoTrade = false,
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST", 
@@ -84,22 +81,18 @@ local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 -- ===============================
 -- SMART INVOKE (ANTI-FREEZE + ANTI-FAIL)
 -- ===============================
--- Fungsi ini menunggu balasan server, TAPI ada batas waktunya (timeout).
--- Jadi ikan tetap ketangkap, tapi kalau lag gak bakal freeze selamanya.
 local function ForceInvoke(remote, timeout, ...)
     if not remote then return end
     local args = {...}
     local done = false
     local result
     
-    -- Jalankan Invoke di thread lain biar bisa dihitung waktunya
     task.spawn(function()
         result = {pcall(function() return remote:InvokeServer(unpack(args)) end)}
         done = true
     end)
     
     local start = os.clock()
-    -- Tunggu sampai SELESAI atau WAKTU HABIS
     repeat 
         task.wait() 
     until done or (os.clock() - start) > timeout
@@ -114,25 +107,16 @@ local function RunInstantFish()
     local timestamp = workspace:GetServerTimeNow()
     local args = {-1.233, 1, timestamp} 
 
-    -- Step 1: Charge (Kasih waktu max 2 detik)
     ForceInvoke(RF_ChargeFishingRod, 2)
     task.wait(0.01)
 
-    -- Step 2: Start Minigame (Kasih waktu max 2 detik)
     ForceInvoke(RF_RequestFishingMinigameStarted, 2, unpack(args))
-
-    -- Step 3: Wait Delay (Wajib tunggu agar ikan masuk)
     task.wait(MasterConfig.CatchDelay)
 
-    -- Step 4: Complete Catch (CRITICAL)
-    -- Kita pakai ForceInvoke dengan timeout 3 detik.
-    -- Ini memberi waktu server memproses ikan, jadi ikan GAK LEPAS.
-    -- Tapi kalau server freeze > 3 detik, script lanjut (GAK FREEZE).
     if RF_CatchFishCompleted then
         ForceInvoke(RF_CatchFishCompleted, 3) 
     end
 
-    -- Step 5: Cleanup
     task.wait(0.01)
     ForceInvoke(RF_CancelFishingInputs, 2)
 end
@@ -141,7 +125,6 @@ function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
-    -- [REQUESTED FIX] Matikan Auto Fishing Bawaan Game (False)
     if RF_UpdateAutoFishingState then 
         pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) 
     end
@@ -213,7 +196,6 @@ end
 
 function StopFishingV1()
     FishingState.IsFishing = false
-    -- Saat stop, boleh balikin ke true atau biarin false (aman false)
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
     FishingThreads = {}
@@ -520,7 +502,7 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
-    -- [BAGIAN 1: SETTING 3D & AUDIO]
+    -- [BAGIAN 1: SETTING 3D & AUDIO (BARU)]
     -- Menggunakan pcall agar script TIDAK ERROR meskipun executor tidak support
     pcall(function()
         -- Atur 3D Rendering (Layar jadi hitam/beku jika true)
@@ -539,38 +521,26 @@ local function ApplyExtremePotato()
         end
     end)
 
-    -- [BAGIAN 2: PENGHAPUSAN EFEK VISUAL (KODE ASLI)]
+    -- [BAGIAN 2: PENGHAPUSAN EFEK VISUAL]
     local VFXControllerModule
-    pcall(function() 
-        VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) 
-    end)
-    
+    pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
     if VFXControllerModule then
-        -- Mematikan fungsi handle VFX
         VFXControllerModule.Handle = function(...) return nil end
-        if VFXControllerModule.PlayVFX then 
-            VFXControllerModule.PlayVFX.Fire = function(...) return nil end 
-        end
+        if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end)
     end
-
+    
     -- [BAGIAN 3: CAHAYA & TERRAIN]
     pcall(function() 
         local lighting = game:GetService("Lighting")
-        lighting.GlobalShadows = false
-        lighting.Brightness = 0
+        lighting.GlobalShadows = false; lighting.Brightness = 0 
         if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0 end
     end)
-
-    -- [BAGIAN 4: TRANSPARANSI PART]
+    
+    -- [BAGIAN 4: PART TRANSPARENCY]
     for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then 
-            v.Transparency = 1
-            v.Reflectance = 0
-            v.CastShadow = false
-        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
-            v:Destroy() 
-        end
+        if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
     end
 end
 
