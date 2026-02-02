@@ -1,14 +1,14 @@
--- [[ STANDALONE AUTO BUY WEATHER - OPTIMIZED VERSION ]] --
+-- [[ STANDALONE AUTO BUY WEATHER - SILENT BACKGROUND VERSION ]] --
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
 
--- 1. Configuration
+-- Configuration
 local TargetWeathers = {"Cloudy", "Wind", "Storm"}
-local SafeCheckInterval = 30 -- Cek setiap 30 detik (Lebih Aman)
-local FailureDelay = 60      -- Jika gagal (uang habis), tunggu 1 menit baru cek lagi
+local SafeCheckInterval = 30 
+local FailureDelay = 60      
 
--- 2. Remote Helper
+-- Remote Helper
 local function GetRemote(remotePath, name, timeout)
     local currentInstance = ReplicatedStorage
     for _, childName in ipairs(remotePath) do
@@ -20,12 +20,9 @@ end
 
 local RF_PurchaseWeatherEvent = GetRemote(RPath, "RF/PurchaseWeatherEvent", 5)
 
--- 3. Logic Loop
+-- Logic Loop (Silent Mode)
 task.spawn(function()
-    print("[SynceHub] Optimized Weather Buy Active (30s Delay)")
-    
     while true do
-        -- Pastikan Remote ada
         if not RF_PurchaseWeatherEvent then
             RF_PurchaseWeatherEvent = GetRemote(RPath, "RF/PurchaseWeatherEvent", 1)
             task.wait(5)
@@ -35,27 +32,22 @@ task.spawn(function()
         local boughtSomething = false
 
         for _, weather in ipairs(TargetWeathers) do
-            -- Kirim Invoke ke Server
-            local success, result = pcall(function()
+            -- Eksekusi pembelian tanpa output/print
+            local success = pcall(function()
                 return RF_PurchaseWeatherEvent:InvokeServer(weather)
             end)
 
             if success then
-                print("[Weather] Berhasil membeli: " .. weather)
                 boughtSomething = true
-                break -- Berhenti jika sudah berhasil beli satu
+                break 
             end
             
-            -- Jeda antar pilihan cuaca (agar tidak instan serentak)
             task.wait(1) 
         end
 
-        -- Atur jeda berikutnya
         if boughtSomething then
-            -- Tunggu cukup lama karena cuaca biasanya bertahan 5-15 menit
             task.wait(SafeCheckInterval) 
         else
-            -- Jika semua gagal (mungkin uang kurang), beri jeda lebih lama
             task.wait(FailureDelay)
         end
     end
