@@ -448,8 +448,8 @@ local function UpdateGameMode()
                     if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
                         currentBestRodValue = shopRod.Price
                         if shopRod.Price >= 50000 then bestArea = "Sisyphus Statue"
-                        elseif shopRod.Price >= 15000 then bestArea = "Treasure Room"
-                        else bestArea = "Enchant Room" end
+                        elseif shopRod.Price >= 15000 then bestArea = "Esoteric Island"
+                        else bestArea = "Esoteric Island" end
                     end
                  end
             end
