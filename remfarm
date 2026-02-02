@@ -5,7 +5,7 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
-local OnlineConfigUrl = "http://43.134.116.2:5000/config.json" 
+local OnlineConfigUrl = "https://ghostbin.axel.org/paste/5mxv5/raw" 
 
 local Services = {
     Players = game:GetService("Players"),
@@ -26,14 +26,14 @@ local MasterConfig = {
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
-    AutoUnfavoriteRubies = true,
-    DiscordWebhookEnabled = true,
+    AutoUnfavoriteRubies = false,
+    DiscordWebhookEnabled = false,
     DiscordWebhookUrl = "",
     AutoTeleport = true,
-    SelectedLocation = "Crater Island",
+    SelectedLocation = "Treasure Room",
     AutoTotem = true,
     PotatoMode = true,
-    AutoTrade = true,
+    AutoTrade = false,
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST",
     TradeDelay = 6.5,
