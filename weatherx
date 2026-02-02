@@ -1,10 +1,14 @@
--- [[ STANDALONE AUTO BUY WEATHER SCRIPT ]] --
--- Target: Cloudy, Wind, Storm
+-- [[ STANDALONE AUTO BUY WEATHER - OPTIMIZED VERSION ]] --
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RPath = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
 
--- 1. Fungsi untuk mendapatkan Remote
+-- 1. Configuration
+local TargetWeathers = {"Cloudy", "Wind", "Storm"}
+local SafeCheckInterval = 30 -- Cek setiap 30 detik (Lebih Aman)
+local FailureDelay = 60      -- Jika gagal (uang habis), tunggu 1 menit baru cek lagi
+
+-- 2. Remote Helper
 local function GetRemote(remotePath, name, timeout)
     local currentInstance = ReplicatedStorage
     for _, childName in ipairs(remotePath) do
@@ -16,61 +20,43 @@ end
 
 local RF_PurchaseWeatherEvent = GetRemote(RPath, "RF/PurchaseWeatherEvent", 5)
 
--- 2. Konfigurasi
-local TargetWeathers = {"Cloudy", "Wind", "Storm"}
-local CheckInterval = 5 -- Cek setiap 5 detik
-local SuccessCooldown = 10 -- Cooldown internal setelah berhasil beli (detik)
-
--- 3. Fungsi Notifikasi (Internal Console)
-local function Notify(title, msg)
-    print(string.format("[%s] %s: %s", os.date("%X"), title, msg))
-    -- Opsional: Gunakan notifikasi in-game jika WindUI tersedia
-    local success, WindUI = pcall(function() return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))() end)
-    if success and type(WindUI) == "table" then
-        pcall(function()
-            WindUI:Notify({ Title = title, Content = msg, Duration = 3, Icon = "cloud" })
-        end)
-    end
-end
-
--- 4. Main Logic Loop
+-- 3. Logic Loop
 task.spawn(function()
-    Notify("SynceHub Weather", "Standalone Auto Buy Started (Cloudy, Wind, Storm)")
+    print("[SynceHub] Optimized Weather Buy Active (30s Delay)")
     
     while true do
+        -- Pastikan Remote ada
         if not RF_PurchaseWeatherEvent then
             RF_PurchaseWeatherEvent = GetRemote(RPath, "RF/PurchaseWeatherEvent", 1)
-            if not RF_PurchaseWeatherEvent then
-                warn("Remote RF/PurchaseWeatherEvent tidak ditemukan, mencoba lagi...")
-                task.wait(2)
-                continue
-            end
+            task.wait(5)
+            continue
         end
 
-        local anySuccessfulBuy = false
-        local boughtName = ""
+        local boughtSomething = false
 
-        -- Mencoba membeli setiap cuaca dalam daftar target secara instan
         for _, weather in ipairs(TargetWeathers) do
-            local success, err = pcall(function()
+            -- Kirim Invoke ke Server
+            local success, result = pcall(function()
                 return RF_PurchaseWeatherEvent:InvokeServer(weather)
             end)
 
             if success then
-                anySuccessfulBuy = true
-                boughtName = weather
-                Notify("Weather Purchased", "Berhasil membeli cuaca: " .. weather)
-                break -- Berhenti di cuaca pertama yang sukses dibeli
+                print("[Weather] Berhasil membeli: " .. weather)
+                boughtSomething = true
+                break -- Berhenti jika sudah berhasil beli satu
             end
-            task.wait(0.1) -- Jeda mikro antar attempt
+            
+            -- Jeda antar pilihan cuaca (agar tidak instan serentak)
+            task.wait(1) 
         end
 
-        -- Jika berhasil beli, tunggu cooldown (misal 15 menit aslinya, tapi di sini diset singkat)
-        if anySuccessfulBuy then
-            task.wait(SuccessCooldown) 
+        -- Atur jeda berikutnya
+        if boughtSomething then
+            -- Tunggu cukup lama karena cuaca biasanya bertahan 5-15 menit
+            task.wait(SafeCheckInterval) 
         else
-            -- Jika gagal (semua cuaca mungkin masih cooldown/uang kurang), tunggu interval normal
-            task.wait(CheckInterval)
+            -- Jika semua gagal (mungkin uang kurang), beri jeda lebih lama
+            task.wait(FailureDelay)
         end
     end
 end)
