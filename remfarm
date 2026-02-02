@@ -5,7 +5,7 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
-local OnlineConfigUrl = "https://ghostbin.axel.org/paste/5mxv5/raw" -- < GANTI DENGAN LINK WEB KAMU
+local OnlineConfigUrl = "https://raw.githubusercontent.com/abinoldi/muffzle/refs/heads/main/remconfig" -- < GANTI DENGAN LINK WEB KAMU
 
 local Services = {
     Players = game:GetService("Players"),
