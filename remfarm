@@ -512,21 +512,56 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
+    -- [1] FITUR: Disable 3D Rendering
+    -- Menghentikan rendering grafis 3D untuk menghemat GPU/CPU secara maksimal
+    local successRender, errRender = pcall(function()
+        game:GetService("RunService"):Set3dRenderingEnabled(not MasterConfig.Disable3DRendering)
+    end)
+
+    -- [2] FITUR: Disable Audio
+    -- Mematikan seluruh suara di dalam game melalui SoundService
+    pcall(function()
+        if MasterConfig.DisableAudio then
+            game:GetService("SoundService").MainVolume = 0
+        else
+            game:GetService("SoundService").MainVolume = 1
+        end
+    end)
+
+    -- [3] KODE ASLI: VFX & Cosmetic Removal
     local VFXControllerModule
-    pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
+    pcall(function() 
+        VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) 
+    end)
+    
     if VFXControllerModule then
-        VFXControllerModule.Handle = function(...) return nil end
-        if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
-        pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end)
+        VFXControllerModule.Handle = function(...) return nil end [cite: 60]
+        if VFXControllerModule.PlayVFX then 
+            VFXControllerModule.PlayVFX.Fire = function(...) return nil end [cite: 60]
+        end
+        pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end) [cite: 60]
     end
+
+    -- [4] KODE ASLI: Lighting & Terrain Optimization
     pcall(function() 
         local lighting = game:GetService("Lighting")
-        lighting.GlobalShadows = false; lighting.Brightness = 0 
-        if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0 end
+        lighting.GlobalShadows = false [cite: 60]
+        lighting.Brightness = 0 [cite: 61]
+        if workspace.Terrain then 
+            workspace.Terrain.WaterWaveSize = 0 [cite: 61]
+        end
     end)
+
+    -- [5] KODE ASLI: Instance Transparency & Removal
+    -- Membuat semua part menjadi transparan dan menghapus efek visual
     for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
-        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
+        if v:IsA("BasePart") then 
+            v.Transparency = 1 [cite: 61]
+            v.Reflectance = 0 [cite: 62]
+            v.CastShadow = false [cite: 62]
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
+            v:Destroy() [cite: 62]
+        end
     end
 end
 
