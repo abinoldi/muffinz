@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.9 (SMART POTATO + WEBHOOK FIX)
+-- # ULTIMATE HUB: FINAL V4.9 (GET METHOD FIX)
 -- ======================================================
 
 local Services = {
@@ -22,19 +22,19 @@ local OnlineConfigUrl = "https://raw.githubusercontent.com/abinoldi/muffzle/refs
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
-    CatchDelay = 1.05, -- Delay Optimal
+    CatchDelay = 1.05,
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
     AutoUnfavoriteRubies = false,
     
-    -- [DISCORD CONFIG]
+    -- [DISCORD CONFIG - WAJIB POST]
     DiscordWebhookEnabled = false,
     DiscordWebhookUrl = "",
     
-    -- [CUSTOM WEBHOOK CONFIG]
+    -- [CUSTOM WEBHOOK CONFIG - UBAH KE GET]
     WebhookEnabled = true,
-    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit", -- Skrip sekarang mengirim ke sini juga
+    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
     
     AutoTeleport = true,
     SelectedLocation = "Crater Island",
@@ -42,8 +42,8 @@ local MasterConfig = {
     
     -- [POTATO & PERFORMANCE SETTINGS]
     PotatoMode = true,
-    Disable3DRendering = true, -- Ubah ke true jika ingin layar hitam (HEMAT GPU)
-    DisableAudio = true,       -- Ubah ke true jika ingin bisu (HEMAT CPU)
+    Disable3DRendering = true,
+    DisableAudio = true,
     
     AutoTrade = false,
     TargetUsername = "mm3kenak",
@@ -55,7 +55,6 @@ local MasterConfig = {
 local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
 local TradingState = { IsTrading = false, Thread = nil }
 local FishingThreads = {}
-local PotatoLoopThread = nil
 
 -- VARIABLES GLOBAL
 local SessionStartTime = os.time()
@@ -76,7 +75,7 @@ end
 
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RF_CatchFishCompleted = GetRemote("RF/CatchFishCompleted") -- Remote Utama
+local RF_CatchFishCompleted = GetRemote("RF/CatchFishCompleted")
 local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
 local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
@@ -84,44 +83,44 @@ local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
 -- ===============================
--- SMART INVOKE (ANTI-FREEZE + ANTI-FAIL)
+-- HELPER: URL ENCODER (UNTUK GET REQUEST)
+-- ===============================
+local function ToQueryString(tbl)
+    local str = {}
+    for k, v in pairs(tbl) do
+        table.insert(str, string.format("%s=%s", Services.HttpService:UrlEncode(tostring(k)), Services.HttpService:UrlEncode(tostring(v))))
+    end
+    return table.concat(str, "&")
+end
+
+-- ===============================
+-- SMART INVOKE
 -- ===============================
 local function ForceInvoke(remote, timeout, ...)
     if not remote then return end
     local args = {...}
     local done = false
     local result
-    
     task.spawn(function()
         result = {pcall(function() return remote:InvokeServer(unpack(args)) end)}
         done = true
     end)
-    
     local start = os.clock()
-    repeat 
-        task.wait() 
-    until done or (os.clock() - start) > timeout
-    
+    repeat task.wait() until done or (os.clock() - start) > timeout
     return result
 end
 
 -- ===============================
--- CORE FISHING LOGIC (SMART)
+-- CORE FISHING LOGIC
 -- ===============================
 local function RunInstantFish()
     local timestamp = workspace:GetServerTimeNow()
     local args = {-1.233, 1, timestamp} 
-
     ForceInvoke(RF_ChargeFishingRod, 2)
     task.wait(0.01)
-
     ForceInvoke(RF_RequestFishingMinigameStarted, 2, unpack(args))
     task.wait(MasterConfig.CatchDelay)
-
-    if RF_CatchFishCompleted then
-        ForceInvoke(RF_CatchFishCompleted, 3) 
-    end
-
+    if RF_CatchFishCompleted then ForceInvoke(RF_CatchFishCompleted, 3) end
     task.wait(0.01)
     ForceInvoke(RF_CancelFishingInputs, 2)
 end
@@ -129,27 +128,17 @@ end
 function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
-    
-    if RF_UpdateAutoFishingState then 
-        pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) 
-    end
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     
     table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do 
-            RunInstantFish()
-            task.wait(0.1) 
-        end
+        while FishingState.IsFishing do RunInstantFish(); task.wait(0.1) end
     end))
-    
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then 
-                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-            end
+            if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
             task.wait(0.5)
         end
     end))
-
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -163,7 +152,6 @@ function StartFishingV1()
             task.wait(MasterConfig.SellDelay)
         end
     end))
-    
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -178,9 +166,7 @@ function StartFishingV1()
                                 local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby")
                                 local isRare = string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage")
                                 if (isRuby or isRare) and not isLocked then
-                                    task.spawn(function()
-                                        for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID); task.wait(0.05) end
-                                    end)
+                                    task.spawn(function() for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID); task.wait(0.05) end end)
                                 end
                             end
                         end
@@ -190,7 +176,6 @@ function StartFishingV1()
             task.wait(0.5)
         end
     end))
-
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then RunAutoUnfavoriteRubies() end
@@ -280,7 +265,7 @@ local function LoadWebConfig()
 end
 
 -- ===============================
--- HELPERS LAIN (Totem, Trade, GUI)
+-- HELPERS LAIN
 -- ===============================
 local FishingLocations = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
@@ -507,26 +492,15 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
-    -- [BAGIAN 1: SETTING 3D & AUDIO]
-    -- Pcall untuk menghindari error di executor tertentu
     pcall(function()
-        -- Atur 3D Rendering (Layar hitam jika true)
         local runService = game:GetService("RunService")
         local renderStatus = not MasterConfig.Disable3DRendering
         runService:Set3dRenderingEnabled(renderStatus)
     end)
-
     pcall(function()
-        -- Atur Audio (Bisu jika true)
         local soundService = game:GetService("SoundService")
-        if MasterConfig.DisableAudio then
-            soundService.MainVolume = 0
-        else
-            soundService.MainVolume = 1
-        end
+        if MasterConfig.DisableAudio then soundService.MainVolume = 0 else soundService.MainVolume = 1 end
     end)
-
-    -- [BAGIAN 2: PENGHAPUSAN EFEK VISUAL]
     local VFXControllerModule
     pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
     if VFXControllerModule then
@@ -534,15 +508,11 @@ local function ApplyExtremePotato()
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end)
     end
-    
-    -- [BAGIAN 3: CAHAYA & TERRAIN]
     pcall(function() 
         local lighting = game:GetService("Lighting")
         lighting.GlobalShadows = false; lighting.Brightness = 0 
         if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0 end
     end)
-    
-    -- [BAGIAN 4: PART TRANSPARENCY]
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
@@ -568,7 +538,7 @@ if RE_ObtainedNewFishNotification then
             if rarity and string.upper(tostring(rarity)) == "SECRET" then
                 pcall(UpdateStatsFromInventory)
                 
-                -- [LOGIKA 1] Send to DISCORD (Jika ada)
+                -- [LOGIKA 1] DISCORD (Wajib POST)
                 if MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" and req then
                     req({
                         Url = MasterConfig.DiscordWebhookUrl, 
@@ -588,21 +558,21 @@ if RE_ObtainedNewFishNotification then
                     })
                 end
                 
-                -- [LOGIKA 2] Send to CUSTOM WEBHOOK (FIXED)
+                -- [LOGIKA 2] CUSTOM WEBHOOK (Diubah ke GET)
                 if MasterConfig.WebhookEnabled and MasterConfig.WebhookUrl ~= "" and req then
                     pcall(function()
+                        -- Mengubah Data ke URL Parameters karena GET jarang support Body
+                        local params = {
+                            type = "secret_catch",
+                            username = MasterConfig.TargetUsername or lp.Name,
+                            fish_name = name,
+                            rarity = rarity,
+                            mutation = mutation,
+                            location = MasterConfig.SelectedLocation
+                        }
                         req({
-                            Url = MasterConfig.WebhookUrl,
-                            Method = "POST",
-                            Headers = {["Content-Type"] = "application/json"},
-                            Body = Services.HttpService:JSONEncode({
-                                type = "secret_catch",
-                                username = MasterConfig.TargetUsername or lp.Name,
-                                fish_name = name,
-                                rarity = rarity,
-                                mutation = mutation,
-                                location = MasterConfig.SelectedLocation
-                            })
+                            Url = MasterConfig.WebhookUrl .. "?" .. ToQueryString(params),
+                            Method = "GET"
                         })
                     end)
                 end
@@ -622,7 +592,7 @@ task.delay(2, function()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
     
-    -- [LOGIKA START] Send to DISCORD
+    -- [LOGIKA START] DISCORD (POST)
     if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
            req({
@@ -637,19 +607,18 @@ task.delay(2, function()
        end)
     end
     
-    -- [LOGIKA START] Send to CUSTOM WEBHOOK (FIXED)
+    -- [LOGIKA START] CUSTOM WEBHOOK (GET)
     if req and MasterConfig.WebhookEnabled and MasterConfig.WebhookUrl ~= "" then
         pcall(function()
+            local params = {
+                type = "script_start",
+                username = MasterConfig.TargetUsername or lp.Name,
+                message = "Script Started",
+                location = MasterConfig.SelectedLocation
+            }
             req({
-                Url = MasterConfig.WebhookUrl, 
-                Method = "POST", 
-                Headers = {["Content-Type"] = "application/json"}, 
-                Body = Services.HttpService:JSONEncode({
-                    type = "script_start",
-                    username = MasterConfig.TargetUsername or lp.Name,
-                    message = "Script Started",
-                    location = MasterConfig.SelectedLocation
-                })
+                Url = MasterConfig.WebhookUrl .. "?" .. ToQueryString(params),
+                Method = "GET"
             })
         end)
     end
