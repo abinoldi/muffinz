@@ -117,13 +117,17 @@ local function RunInstantFish()
     -- Step 3: Wait Delay (Wajib tunggu agar ikan masuk)
     task.wait(MasterConfig.CatchDelay)
 
-    -- Step 4: Complete Catch (CRITICAL)
-    -- Kita pakai ForceInvoke dengan timeout 3 detik.
-    -- Ini memberi waktu server memproses ikan, jadi ikan GAK LEPAS.
-    -- Tapi kalau server freeze > 3 detik, script lanjut (GAK FREEZE).
-    if RF_CatchFishCompleted then
-        ForceInvoke(RF_CatchFishCompleted, 3) 
-    end
+     -- Step 4: Complete the fishing action (Menggunakan InvokeServer karena RF)
+
+    pcall(function() 
+
+        if RF_CatchFishCompleted then
+
+            RF_CatchFishCompleted:InvokeServer() 
+
+        end
+
+    end)
 
     -- Step 5: Cleanup
     task.wait(0.01)
