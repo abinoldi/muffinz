@@ -375,7 +375,7 @@ end
 -- [UPDATED FUNCTION] Core Instant Fish Logic
 local function RunInstantFish()
     local timestamp = workspace:GetServerTimeNow()
-    local args = {-139.630452165, 0.99647927980797} -- Standard arguments for safety
+    local args = {-1.233, 1, timestamp} -- Standard arguments for safety
 
     -- Step 1: Charge
     local s1 = pcall(function() 
