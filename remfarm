@@ -5,7 +5,7 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
-local OnlineConfigUrl = "http://165.232.148.115:5000/config.json" 
+local OnlineConfigUrl = "http://43.134.116.2:5000/config.json" 
 
 local Services = {
     Players = game:GetService("Players"),
