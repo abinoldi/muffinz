@@ -109,7 +109,7 @@ function StartFishingV1()
     FishingState.IsFishing = true
     
     -- Optional: Update State ke Server (Kalau ada)
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     
     -- Main Loop
     table.insert(FishingThreads, task.spawn(function()
