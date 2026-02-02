@@ -7,7 +7,7 @@
 local DISABLE_3D_RENDER = true   -- Set FALSE agar game terlihat
 local DISABLE_AUDIO = true       -- True = Mute Audio
 local LIMIT_FPS = true           -- True = 30 FPS
-local FPS_CAP = 20               
+local FPS_CAP = 15               
 local LEGIT_SPEED = 0.1          -- Click Speed
 
 -- Wait for Game Load
