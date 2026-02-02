@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.8 (SMART POTATO + AUDIO FIX)
+-- # ULTIMATE HUB: FINAL V4.9 (SMART POTATO + WEBHOOK FIX)
 -- ======================================================
 
 local Services = {
@@ -27,13 +27,20 @@ local MasterConfig = {
     SellDelay = 65,
     AutoFavorite = true,
     AutoUnfavoriteRubies = false,
+    
+    -- [DISCORD CONFIG]
     DiscordWebhookEnabled = false,
     DiscordWebhookUrl = "",
+    
+    -- [CUSTOM WEBHOOK CONFIG]
+    WebhookEnabled = true,
+    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit", -- Skrip sekarang mengirim ke sini juga
+    
     AutoTeleport = true,
     SelectedLocation = "Crater Island",
     AutoTotem = true,
     
-    -- [POTATO SETTINGS]
+    -- [POTATO & PERFORMANCE SETTINGS]
     PotatoMode = true,
     Disable3DRendering = true, -- Ubah ke true jika ingin layar hitam (HEMAT GPU)
     DisableAudio = true,       -- Ubah ke true jika ingin bisu (HEMAT CPU)
@@ -42,8 +49,6 @@ local MasterConfig = {
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST", 
     TradeDelay = 6.5,
-    WebhookEnabled = true,
-    WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
 -- STATE TRACKING
@@ -353,7 +358,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v4.8 (Smart Fix)"
+    toggleBtn.Text = "W - v4.9 (Smart+Fix)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -502,17 +507,17 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
-    -- [BAGIAN 1: SETTING 3D & AUDIO (BARU)]
-    -- Menggunakan pcall agar script TIDAK ERROR meskipun executor tidak support
+    -- [BAGIAN 1: SETTING 3D & AUDIO]
+    -- Pcall untuk menghindari error di executor tertentu
     pcall(function()
-        -- Atur 3D Rendering (Layar jadi hitam/beku jika true)
+        -- Atur 3D Rendering (Layar hitam jika true)
         local runService = game:GetService("RunService")
         local renderStatus = not MasterConfig.Disable3DRendering
         runService:Set3dRenderingEnabled(renderStatus)
     end)
 
     pcall(function()
-        -- Atur Audio (Bisu total jika true)
+        -- Atur Audio (Bisu jika true)
         local soundService = game:GetService("SoundService")
         if MasterConfig.DisableAudio then
             soundService.MainVolume = 0
@@ -559,13 +564,47 @@ if RE_ObtainedNewFishNotification then
                 name, rarity = GetFishNameAndRarity(item)
                 mutation = GetMutation(item)
             end)
+            
             if rarity and string.upper(tostring(rarity)) == "SECRET" then
                 pcall(UpdateStatsFromInventory)
-                if MasterConfig.DiscordWebhookEnabled and req then
+                
+                -- [LOGIKA 1] Send to DISCORD (Jika ada)
+                if MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" and req then
                     req({
-                        Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"},
-                        Body = Services.HttpService:JSONEncode({username = "Webhak Enok", embeds = {{title = "🚨 SECRET FISH! 🚨", fields = {{name="Ikan", value=name}, {name="Rarity", value=rarity}, {name="Mutasi", value=mutation}}}}})
+                        Url = MasterConfig.DiscordWebhookUrl, 
+                        Method = "POST", 
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = Services.HttpService:JSONEncode({
+                            username = "Webhak Enok", 
+                            embeds = {{
+                                title = "🚨 SECRET FISH! 🚨", 
+                                fields = {
+                                    {name="Ikan", value=name}, 
+                                    {name="Rarity", value=rarity}, 
+                                    {name="Mutasi", value=mutation}
+                                }
+                            }}
+                        })
                     })
+                end
+                
+                -- [LOGIKA 2] Send to CUSTOM WEBHOOK (FIXED)
+                if MasterConfig.WebhookEnabled and MasterConfig.WebhookUrl ~= "" and req then
+                    pcall(function()
+                        req({
+                            Url = MasterConfig.WebhookUrl,
+                            Method = "POST",
+                            Headers = {["Content-Type"] = "application/json"},
+                            Body = Services.HttpService:JSONEncode({
+                                type = "secret_catch",
+                                username = MasterConfig.TargetUsername or lp.Name,
+                                fish_name = name,
+                                rarity = rarity,
+                                mutation = mutation,
+                                location = MasterConfig.SelectedLocation
+                            })
+                        })
+                    end)
                 end
             end
         end)
@@ -578,15 +617,41 @@ task.spawn(function()
 end)
 
 task.delay(2, function()
-    print("[AutoStart] Smart V4.8 Loaded")
+    print("[AutoStart] Smart V4.9 Loaded")
     CreateDashboard()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
     
-    if req and MasterConfig.DiscordWebhookEnabled then
+    -- [LOGIKA START] Send to DISCORD
+    if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
-           req({Url = MasterConfig.DiscordWebhookUrl, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = Services.HttpService:JSONEncode({username = "Webhak Enok", content = "✅ Script Started (Smart V4.8) at " .. MasterConfig.SelectedLocation})})
+           req({
+               Url = MasterConfig.DiscordWebhookUrl, 
+               Method = "POST", 
+               Headers = {["Content-Type"] = "application/json"}, 
+               Body = Services.HttpService:JSONEncode({
+                   username = "Webhak Enok", 
+                   content = "✅ Script Started (Smart V4.9) at " .. MasterConfig.SelectedLocation
+               })
+           })
        end)
+    end
+    
+    -- [LOGIKA START] Send to CUSTOM WEBHOOK (FIXED)
+    if req and MasterConfig.WebhookEnabled and MasterConfig.WebhookUrl ~= "" then
+        pcall(function()
+            req({
+                Url = MasterConfig.WebhookUrl, 
+                Method = "POST", 
+                Headers = {["Content-Type"] = "application/json"}, 
+                Body = Services.HttpService:JSONEncode({
+                    type = "script_start",
+                    username = MasterConfig.TargetUsername or lp.Name,
+                    message = "Script Started",
+                    location = MasterConfig.SelectedLocation
+                })
+            })
+        end)
     end
 
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
