@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V5.0 (LEGACY WEBHOOK + POTATO)
+-- # ULTIMATE HUB: FINAL V5.1 (STABLE - NO AUDIO TWEAK)
 -- ======================================================
 
 local Services = {
@@ -40,10 +40,9 @@ local MasterConfig = {
     SelectedLocation = "Crater Island",
     AutoTotem = true,
     
-    -- [POTATO & PERFORMANCE SETTINGS]
+    -- [POTATO SETTINGS]
     PotatoMode = true,
-    Disable3DRendering = true, -- Ubah ke true jika ingin layar hitam (HEMAT GPU)
-    DisableAudio = true,       -- Ubah ke true jika ingin bisu (HEMAT CPU)
+    Disable3DRendering = true, -- Masih ada (Layar Hitam), tapi Audio dihapus agar tidak Crash
     
     AutoTrade = false,
     TargetUsername = "mm3kenak",
@@ -332,7 +331,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v5.0 (Legacy+Fix)"
+    toggleBtn.Text = "W - v5.1 (Stable)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -481,15 +480,14 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
+    -- [BAGIAN 1: SETTING 3D (AUDIO DIHAPUS)]
     pcall(function()
         local runService = game:GetService("RunService")
         local renderStatus = not MasterConfig.Disable3DRendering
         runService:Set3dRenderingEnabled(renderStatus)
     end)
-    pcall(function()
-        local soundService = game:GetService("SoundService")
-        if MasterConfig.DisableAudio then soundService.MainVolume = 0 else soundService.MainVolume = 1 end
-    end)
+    -- AUDIO REMOVED HERE TO PREVENT CRASH
+    
     local VFXControllerModule
     pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
     if VFXControllerModule then
@@ -527,7 +525,7 @@ if RE_ObtainedNewFishNotification then
             if rarity and string.upper(tostring(rarity)) == "SECRET" then
                 pcall(UpdateStatsFromInventory)
                 
-                -- [NOTIFIKASI DISCORD - TETAP JALAN UNTUK NEW FISH]
+                -- [LOGIKA 1] DISCORD (Wajib POST)
                 if MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" and req then
                     req({
                         Url = MasterConfig.DiscordWebhookUrl, 
@@ -551,8 +549,7 @@ if RE_ObtainedNewFishNotification then
     end)
 end
 
--- [LEGACY WEBHOOK INTEGRATION]
--- Mengirim data inventory setiap 15 detik (sesuai request)
+-- [LEGACY WEBHOOK INTEGRATION - GET METHOD]
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
         local function SendHook(pName, data)
@@ -594,7 +591,7 @@ task.spawn(function()
 end)
 
 task.delay(2, function()
-    print("[AutoStart] Smart V5.0 Loaded")
+    print("[AutoStart] Smart V5.1 Loaded")
     CreateDashboard()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
@@ -607,7 +604,7 @@ task.delay(2, function()
                Headers = {["Content-Type"] = "application/json"}, 
                Body = Services.HttpService:JSONEncode({
                    username = "Webhak Enok", 
-                   content = "✅ Script Started (Smart V5.0) at " .. MasterConfig.SelectedLocation
+                   content = "✅ Script Started (Smart V5.1) at " .. MasterConfig.SelectedLocation
                })
            })
        end)
