@@ -22,7 +22,7 @@ local OnlineConfigUrl = "https://raw.githubusercontent.com/abinoldi/muffzle/refs
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
-    CatchDelay = 1.05, -- Delay Optimal
+    CatchDelay = 1.05,
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
@@ -32,9 +32,15 @@ local MasterConfig = {
     AutoTeleport = true,
     SelectedLocation = "Crater Island",
     AutoTotem = true,
-    PotatoMode = true,
-    Disable3DRendering = true, -- Tambahkan ini
-    DisableAudio = true,        -- Tambahkan ini
+    
+    -- Pastikan ada KOMA (,) di ujung baris PotatoMode di bawah ini:
+    PotatoMode = true, 
+    
+    -- Settingan Baru (Pastikan ada koma di ujungnya juga)
+    Disable3DRendering = true,  -- Set ke true untuk layar hitam (hemat GPU)
+    DisableAudio = true,        -- Set ke true untuk bisu (hemat CPU)
+
+    -- Lanjutan config lama
     AutoTrade = false,
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST", 
@@ -514,55 +520,56 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
-    -- [1] FITUR: Disable 3D Rendering
-    -- Menghentikan rendering grafis 3D untuk menghemat GPU/CPU secara maksimal
-    local successRender, errRender = pcall(function()
-        game:GetService("RunService"):Set3dRenderingEnabled(not MasterConfig.Disable3DRendering)
+    -- [BAGIAN 1: SETTING 3D & AUDIO]
+    -- Menggunakan pcall agar script TIDAK ERROR meskipun executor tidak support
+    pcall(function()
+        -- Atur 3D Rendering (Layar jadi hitam/beku jika true)
+        local runService = game:GetService("RunService")
+        local renderStatus = not MasterConfig.Disable3DRendering
+        runService:Set3dRenderingEnabled(renderStatus)
     end)
 
-    -- [2] FITUR: Disable Audio
-    -- Mematikan seluruh suara di dalam game melalui SoundService
     pcall(function()
+        -- Atur Audio (Bisu total jika true)
+        local soundService = game:GetService("SoundService")
         if MasterConfig.DisableAudio then
-            game:GetService("SoundService").MainVolume = 0
+            soundService.MainVolume = 0
         else
-            game:GetService("SoundService").MainVolume = 1
+            soundService.MainVolume = 1
         end
     end)
 
-    -- [3] KODE ASLI: VFX & Cosmetic Removal
+    -- [BAGIAN 2: PENGHAPUSAN EFEK VISUAL (KODE ASLI)]
     local VFXControllerModule
     pcall(function() 
         VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) 
     end)
     
     if VFXControllerModule then
-        VFXControllerModule.Handle = function(...) return nil end [cite: 60]
+        -- Mematikan fungsi handle VFX
+        VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.PlayVFX then 
-            VFXControllerModule.PlayVFX.Fire = function(...) return nil end [cite: 60]
+            VFXControllerModule.PlayVFX.Fire = function(...) return nil end 
         end
-        pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end) [cite: 60]
+        pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end)
     end
 
-    -- [4] KODE ASLI: Lighting & Terrain Optimization
+    -- [BAGIAN 3: CAHAYA & TERRAIN]
     pcall(function() 
         local lighting = game:GetService("Lighting")
-        lighting.GlobalShadows = false [cite: 60]
-        lighting.Brightness = 0 [cite: 61]
-        if workspace.Terrain then 
-            workspace.Terrain.WaterWaveSize = 0 [cite: 61]
-        end
+        lighting.GlobalShadows = false
+        lighting.Brightness = 0
+        if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0 end
     end)
 
-    -- [5] KODE ASLI: Instance Transparency & Removal
-    -- Membuat semua part menjadi transparan dan menghapus efek visual
+    -- [BAGIAN 4: TRANSPARANSI PART]
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then 
-            v.Transparency = 1 [cite: 61]
-            v.Reflectance = 0 [cite: 62]
-            v.CastShadow = false [cite: 62]
+            v.Transparency = 1
+            v.Reflectance = 0
+            v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
-            v:Destroy() [cite: 62]
+            v:Destroy() 
         end
     end
 end
