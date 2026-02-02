@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V5.1 (STABLE - NO AUDIO TWEAK)
+-- # ULTIMATE HUB: FINAL V5.2 (ANTI-FREEZE STABILITY)
 -- ======================================================
 
 local Services = {
@@ -28,11 +28,9 @@ local MasterConfig = {
     AutoFavorite = true,
     AutoUnfavoriteRubies = false,
     
-    -- [DISCORD CONFIG]
+    -- [WEBHOOKS]
     DiscordWebhookEnabled = false,
     DiscordWebhookUrl = "",
-    
-    -- [CUSTOM WEBHOOK CONFIG]
     WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
     
@@ -40,9 +38,9 @@ local MasterConfig = {
     SelectedLocation = "Crater Island",
     AutoTotem = true,
     
-    -- [POTATO SETTINGS]
+    -- [STABILITY SETTINGS]
     PotatoMode = true,
-    Disable3DRendering = true, -- Masih ada (Layar Hitam), tapi Audio dihapus agar tidak Crash
+    Disable3DRendering = true, -- Tetap ada, tapi dioptimalkan agar tidak crash
     
     AutoTrade = false,
     TargetUsername = "mm3kenak",
@@ -60,6 +58,7 @@ local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
+local Last3DRenderState = true -- Variable untuk melacak status render terakhir
 
 -- REMOTE HELPER
 local function GetRemote(name)
@@ -331,7 +330,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v5.1 (Stable)"
+    toggleBtn.Text = "W - v5.2 (Anti-Freeze)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -480,14 +479,17 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
-    -- [BAGIAN 1: SETTING 3D (AUDIO DIHAPUS)]
+    -- [OPTIMIZED 3D RENDER CHECK]
+    -- Hanya panggil Set3dRenderingEnabled jika statusnya berubah
     pcall(function()
-        local runService = game:GetService("RunService")
-        local renderStatus = not MasterConfig.Disable3DRendering
-        runService:Set3dRenderingEnabled(renderStatus)
+        local desiredState = not MasterConfig.Disable3DRendering
+        if Last3DRenderState ~= desiredState then
+            game:GetService("RunService"):Set3dRenderingEnabled(desiredState)
+            Last3DRenderState = desiredState
+        end
     end)
-    -- AUDIO REMOVED HERE TO PREVENT CRASH
     
+    -- [VFX REMOVAL]
     local VFXControllerModule
     pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
     if VFXControllerModule then
@@ -495,11 +497,15 @@ local function ApplyExtremePotato()
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end)
     end
+    
+    -- [LIGHTING OPTIMIZATION]
     pcall(function() 
         local lighting = game:GetService("Lighting")
         lighting.GlobalShadows = false; lighting.Brightness = 0 
         if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0 end
     end)
+    
+    -- [PART DELETION]
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
@@ -591,7 +597,7 @@ task.spawn(function()
 end)
 
 task.delay(2, function()
-    print("[AutoStart] Smart V5.1 Loaded")
+    print("[AutoStart] Smart V5.2 (Anti-Freeze) Loaded")
     CreateDashboard()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
@@ -604,7 +610,7 @@ task.delay(2, function()
                Headers = {["Content-Type"] = "application/json"}, 
                Body = Services.HttpService:JSONEncode({
                    username = "Webhak Enok", 
-                   content = "✅ Script Started (Smart V5.1) at " .. MasterConfig.SelectedLocation
+                   content = "✅ Script Started (Smart V5.2) at " .. MasterConfig.SelectedLocation
                })
            })
        end)
@@ -612,7 +618,19 @@ task.delay(2, function()
 
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
     if MasterConfig.AutoTotem then task.spawn(function() while true do SpawnMutationTotem(); task.wait(3780) end end) end
-    if MasterConfig.PotatoMode then task.spawn(function() while task.wait(3) do ApplyExtremePotato() end end) end
+    
+    -- [MODIFIED POTATO LOOP]
+    -- Loop diperlambat drastis (setiap 15 detik) untuk mencegah freeze memory leak
+    if MasterConfig.PotatoMode then 
+        task.spawn(function() 
+            -- Jalankan sekali di awal
+            ApplyExtremePotato() 
+            while task.wait(15) do -- Delay dinaikkan dari 3s ke 15s
+                ApplyExtremePotato() 
+            end 
+        end) 
+    end
+    
     if MasterConfig.FishingEnabled then StartFishingV1() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
 end)
