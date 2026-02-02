@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.9 (GET METHOD FIX)
+-- # ULTIMATE HUB: FINAL V5.0 (LEGACY WEBHOOK + POTATO)
 -- ======================================================
 
 local Services = {
@@ -28,11 +28,11 @@ local MasterConfig = {
     AutoFavorite = true,
     AutoUnfavoriteRubies = false,
     
-    -- [DISCORD CONFIG - WAJIB POST]
+    -- [DISCORD CONFIG]
     DiscordWebhookEnabled = false,
     DiscordWebhookUrl = "",
     
-    -- [CUSTOM WEBHOOK CONFIG - UBAH KE GET]
+    -- [CUSTOM WEBHOOK CONFIG]
     WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
     
@@ -42,8 +42,8 @@ local MasterConfig = {
     
     -- [POTATO & PERFORMANCE SETTINGS]
     PotatoMode = true,
-    Disable3DRendering = true,
-    DisableAudio = true,
+    Disable3DRendering = true, -- Ubah ke true jika ingin layar hitam (HEMAT GPU)
+    DisableAudio = true,       -- Ubah ke true jika ingin bisu (HEMAT CPU)
     
     AutoTrade = false,
     TargetUsername = "mm3kenak",
@@ -81,17 +81,6 @@ local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
-
--- ===============================
--- HELPER: URL ENCODER (UNTUK GET REQUEST)
--- ===============================
-local function ToQueryString(tbl)
-    local str = {}
-    for k, v in pairs(tbl) do
-        table.insert(str, string.format("%s=%s", Services.HttpService:UrlEncode(tostring(k)), Services.HttpService:UrlEncode(tostring(v))))
-    end
-    return table.concat(str, "&")
-end
 
 -- ===============================
 -- SMART INVOKE
@@ -343,7 +332,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v4.9 (Smart+Fix)"
+    toggleBtn.Text = "W - v5.0 (Legacy+Fix)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -538,7 +527,7 @@ if RE_ObtainedNewFishNotification then
             if rarity and string.upper(tostring(rarity)) == "SECRET" then
                 pcall(UpdateStatsFromInventory)
                 
-                -- [LOGIKA 1] DISCORD (Wajib POST)
+                -- [NOTIFIKASI DISCORD - TETAP JALAN UNTUK NEW FISH]
                 if MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" and req then
                     req({
                         Url = MasterConfig.DiscordWebhookUrl, 
@@ -557,27 +546,45 @@ if RE_ObtainedNewFishNotification then
                         })
                     })
                 end
-                
-                -- [LOGIKA 2] CUSTOM WEBHOOK (Diubah ke GET)
-                if MasterConfig.WebhookEnabled and MasterConfig.WebhookUrl ~= "" and req then
-                    pcall(function()
-                        -- Mengubah Data ke URL Parameters karena GET jarang support Body
-                        local params = {
-                            type = "secret_catch",
-                            username = MasterConfig.TargetUsername or lp.Name,
-                            fish_name = name,
-                            rarity = rarity,
-                            mutation = mutation,
-                            location = MasterConfig.SelectedLocation
-                        }
-                        req({
-                            Url = MasterConfig.WebhookUrl .. "?" .. ToQueryString(params),
-                            Method = "GET"
-                        })
-                    end)
-                end
             end
         end)
+    end)
+end
+
+-- [LEGACY WEBHOOK INTEGRATION]
+-- Mengirim data inventory setiap 15 detik (sesuai request)
+if MasterConfig.WebhookEnabled then
+    task.spawn(function()
+        local function SendHook(pName, data)
+            local json = Services.HttpService:JSONEncode(data)
+            local url = MasterConfig.WebhookUrl .. "?player=" .. Services.HttpService:UrlEncode(pName) .. "&data=" .. Services.HttpService:UrlEncode(json)
+            pcall(function() game:HttpGet(url) end)
+        end
+        local dataR = Replion:WaitReplion("Data")
+        while true do
+            local inv = dataR:GetExpect("Inventory")
+            local exportData = { Summary = {}, Details = {} }
+
+            if inv then
+                for _, items in pairs(inv) do
+                    for _, item in ipairs(items) do
+                        local n, r = GetFishNameAndRarity(item)
+                        local mut = GetMutation(item)
+                        if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
+                            local dName = n
+                            if mut ~= "None" then dName = "["..mut.."] "..n end
+                            exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                            table.insert(exportData.Details, {
+                                Name = dName, Rarity = r, Weight = item.Metadata and item.Metadata.Weight or 0,
+                                Mutation = mut, UniqueId = item.UUID or item.Id
+                            })
+                        end
+                    end
+                end
+            end
+            SendHook(lp.Name, exportData)
+            task.wait(15)
+        end
     end)
 end
 
@@ -587,12 +594,11 @@ task.spawn(function()
 end)
 
 task.delay(2, function()
-    print("[AutoStart] Smart V4.9 Loaded")
+    print("[AutoStart] Smart V5.0 Loaded")
     CreateDashboard()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
     
-    -- [LOGIKA START] DISCORD (POST)
     if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
            req({
@@ -601,26 +607,10 @@ task.delay(2, function()
                Headers = {["Content-Type"] = "application/json"}, 
                Body = Services.HttpService:JSONEncode({
                    username = "Webhak Enok", 
-                   content = "✅ Script Started (Smart V4.9) at " .. MasterConfig.SelectedLocation
+                   content = "✅ Script Started (Smart V5.0) at " .. MasterConfig.SelectedLocation
                })
            })
        end)
-    end
-    
-    -- [LOGIKA START] CUSTOM WEBHOOK (GET)
-    if req and MasterConfig.WebhookEnabled and MasterConfig.WebhookUrl ~= "" then
-        pcall(function()
-            local params = {
-                type = "script_start",
-                username = MasterConfig.TargetUsername or lp.Name,
-                message = "Script Started",
-                location = MasterConfig.SelectedLocation
-            }
-            req({
-                Url = MasterConfig.WebhookUrl .. "?" .. ToQueryString(params),
-                Method = "GET"
-            })
-        end)
     end
 
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
