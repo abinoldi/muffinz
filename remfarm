@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: V6.2 (FULL RAW + LOCATIONS + TRADE)
+-- # ULTIMATE HUB: V6.4 (RAW + WALK + WEB CONFIG)
 -- ======================================================
 
 local Services = {
@@ -9,12 +9,16 @@ local Services = {
     ReplicatedStorage = game:GetService("ReplicatedStorage"),
     RunService = game:GetService("RunService"),
     HttpService = game:GetService("HttpService"),
-    CoreGui = game:GetService("CoreGui")
+    CoreGui = game:GetService("CoreGui"),
+    UserInputService = game:GetService("UserInputService")
 }
 
 local lp = Services.Players.LocalPlayer
 
--- [1] CONFIGURASI UTAMA
+-- [1] SETUP URL CONFIG
+local OnlineConfigUrl = "https://raw.githubusercontent.com/abinoldi/muffzle/refs/heads/main/remconfig" 
+
+-- [2] DEFAULT CONFIG (Akan ditimpa oleh Web Config)
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
@@ -24,17 +28,20 @@ local MasterConfig = {
     AutoFavorite = true,
     AutoUnfavoriteRubies = false,
     
+    -- [FITUR BARU]
+    WalkOnWater = true, 
+    
     -- [TELEPORT]
     AutoTeleport = true,
-    SelectedLocation = "Crater Island", -- Ganti nama lokasi di sini
+    SelectedLocation = "Crater Island",
     AutoTotem = true,
     
     -- [PERFORMA]
     PotatoMode = true,
-    Disable3DRendering = true, -- Layar Hitam (Hemat GPU)
+    Disable3DRendering = true, 
     
     -- [TRADING]
-    AutoTrade = true, -- Auto Trade Aktif
+    AutoTrade = true,
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST", 
     TradeDelay = 6.5,
@@ -49,6 +56,11 @@ local FishingThreads = {}
 local TotalFishCaught = 0
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
+
+-- WALK ON WATER VARIABLES
+local walkOnWaterConnection = nil
+local isWalkOnWater = false
+local waterPlatform = nil
 
 -- REMOTE HELPER
 local function GetRemote(name)
@@ -73,23 +85,135 @@ local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 
 -- ===============================
+-- WEB CONFIG LOADER (RESTORED)
+-- ===============================
+local function LoadWebConfig()
+    if not OnlineConfigUrl or OnlineConfigUrl == "" then return end
+    
+    -- Ambil data dari URL
+    local success, response = pcall(function() return game:HttpGet(OnlineConfigUrl, true) end)
+    
+    if success then
+        local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
+        if decodeSuccess then
+            local settingsChanged = false
+            local locationChanged = false
+            
+            -- Update config lokal dengan data web
+            for key, value in pairs(decodedData) do
+                if MasterConfig[key] ~= value then
+                    if key == "SelectedLocation" then locationChanged = true end
+                    if key == "TargetUsername" then MasterConfig.TargetId = nil end
+                    
+                    MasterConfig[key] = value
+                    settingsChanged = true
+                end
+            end
+            
+            -- Terapkan perubahan jika ada update
+            if settingsChanged then
+                -- Restart Teleport jika lokasi berubah
+                if locationChanged and MasterConfig.AutoTeleport and TeleportToFishingLocation then 
+                    task.spawn(TeleportToFishingLocation) 
+                end
+                
+                -- Restart Fishing jika status berubah
+                if MasterConfig.FishingEnabled and not FishingState.IsFishing then 
+                    task.spawn(StartFishingV1)
+                elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then 
+                    StopFishingV1() 
+                end
+                
+                -- Restart Trade jika status berubah
+                if MasterConfig.AutoTrade and not TradingState.IsTrading then 
+                    task.spawn(RunAutoTrade)
+                elseif not MasterConfig.AutoTrade and TradingState.IsTrading then 
+                    TradingState.IsTrading = false
+                    if TradingState.Thread then task.cancel(TradingState.Thread) end
+                end
+                
+                -- Update Walk on Water
+                if MasterConfig.WalkOnWater ~= isWalkOnWater then
+                    ToggleWalkOnWater(MasterConfig.WalkOnWater)
+                end
+            end
+        end
+    end
+end
+
+-- ===============================
+-- WALK ON WATER LOGIC
+-- ===============================
+function ToggleWalkOnWater(state)
+    isWalkOnWater = state
+
+    if state then
+        if not waterPlatform then
+            waterPlatform = Instance.new("Part")
+            waterPlatform.Name = "WaterPlatform"
+            waterPlatform.Anchored = true
+            waterPlatform.CanCollide = true
+            waterPlatform.Transparency = 1 
+            waterPlatform.Size = Vector3.new(15, 1, 15)
+            waterPlatform.Parent = workspace
+        end
+
+        if walkOnWaterConnection then walkOnWaterConnection:Disconnect() end
+
+        walkOnWaterConnection = Services.RunService.RenderStepped:Connect(function()
+            local character = lp.Character
+            if not isWalkOnWater or not character then return end
+            
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            if not waterPlatform or not waterPlatform.Parent then
+                waterPlatform = Instance.new("Part")
+                waterPlatform.Name = "WaterPlatform"
+                waterPlatform.Anchored = true
+                waterPlatform.CanCollide = true
+                waterPlatform.Transparency = 1 
+                waterPlatform.Size = Vector3.new(15, 1, 15)
+                waterPlatform.Parent = workspace
+            end
+
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = {workspace.Terrain} 
+            rayParams.FilterType = Enum.RaycastFilterType.Include
+            rayParams.IgnoreWater = false 
+
+            local rayOrigin = hrp.Position + Vector3.new(0, 5, 0) 
+            local rayDirection = Vector3.new(0, -500, 0)
+            local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+
+            if result and result.Material == Enum.Material.Water then
+                local waterSurfaceHeight = result.Position.Y
+                waterPlatform.Position = Vector3.new(hrp.Position.X, waterSurfaceHeight, hrp.Position.Z)
+                
+                if hrp.Position.Y < (waterSurfaceHeight + 2) and hrp.Position.Y > (waterSurfaceHeight - 5) then
+                    if not Services.UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                        hrp.CFrame = CFrame.new(hrp.Position.X, waterSurfaceHeight + 3.2, hrp.Position.Z)
+                    end
+                end
+            else
+                waterPlatform.Position = Vector3.new(hrp.Position.X, -500, hrp.Position.Z)
+            end
+        end)
+    else
+        if walkOnWaterConnection then walkOnWaterConnection:Disconnect() walkOnWaterConnection = nil end
+        if waterPlatform then waterPlatform:Destroy() waterPlatform = nil end
+    end
+end
+
+-- ===============================
 -- CORE FISHING LOGIC (RAW MODE)
 -- ===============================
 local function RunInstantFish()
-    -- 1. Charge Rod
     pcall(function() RF_ChargeFishingRod:InvokeServer() end)
-    
-    -- 2. Start Minigame
     local timestamp = workspace:GetServerTimeNow()
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-1.233, 1, timestamp) end)
-
-    -- 3. Delay Ikan Masuk
     task.wait(MasterConfig.CatchDelay) 
-
-    -- 4. Catch Fish
     pcall(function() RF_CatchFishCompleted:InvokeServer() end)
-
-    -- 5. Reset Input
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
@@ -97,19 +221,14 @@ function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
-    -- Matikan Auto Fish bawaan game
     if RF_UpdateAutoFishingState then 
         pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) 
     end
     
-    -- LOOP UTAMA
     table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do 
-            RunInstantFish()
-        end
+        while FishingState.IsFishing do RunInstantFish() end
     end))
     
-    -- AUTO EQUIP LOOP
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then 
@@ -119,7 +238,6 @@ function StartFishingV1()
         end
     end))
 
-    -- AUTO SELL LOOP
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell and RF_SellAllItems then
@@ -130,6 +248,13 @@ function StartFishingV1()
     end))
 end
 
+function StopFishingV1()
+    FishingState.IsFishing = false
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    FishingThreads = {}
+end
+
 -- ===============================
 -- SHARED MODULES & DATA LOKASI
 -- ===============================
@@ -138,7 +263,6 @@ local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
 local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
 local PlayerData = Replion:WaitReplion("Data", 10)
 
--- DATA LOKASI LENGKAP
 local FishingLocations = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
     ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
@@ -202,15 +326,8 @@ function FormatNumber(n) return tostring(n):reverse():gsub("%d%d%d", "%1,"):reve
 -- ===============================
 function TeleportToFishingLocation()
     if FishingState.Teleporting then return end
-    
-    local locName = MasterConfig.SelectedLocation
-    local loc = FishingLocations[locName]
-    
-    if not loc then 
-        warn("Lokasi tidak ditemukan: " .. tostring(locName))
-        return 
-    end
-    
+    local loc = FishingLocations[MasterConfig.SelectedLocation]
+    if not loc then return end
     FishingState.Teleporting = true
     pcall(function()
         local char = lp.Character or lp.CharacterAdded:Wait()
@@ -283,7 +400,6 @@ function RunAutoTrade()
                 if #tradeList > 0 then
                     local targetItem = tradeList[1]
                     pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) end)
-                    -- Tunggu sebentar sampai item hilang (trade sukses)
                     task.wait(3)
                     pcall(UpdateStatsFromInventory)
                 else
@@ -337,7 +453,7 @@ function CreateDashboard()
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1,1,1)
     label.TextScaled = true
-    label.Text = "V6.2 RAW MODE"
+    label.Text = "V6.4 RAW + WALK"
     
     task.spawn(function()
         while task.wait(3) do 
@@ -345,7 +461,7 @@ function CreateDashboard()
             pcall(UpdateStatsFromInventory)
             local coins = (PlayerData and PlayerData:Get("Coins") or 0)
             label.Text = string.format(
-                "V6.2 RAW\nFish: %d | Coins: %s\nSecret: %d | RubyGem: %d", 
+                "V6.4 RAW\nFish: %d | Coins: %s\nSecret: %d | RubyGem: %d", 
                 TotalFishCaught, 
                 FormatNumber(coins), 
                 TotalSecretsFound, 
@@ -366,9 +482,13 @@ end
 -- AUTO START
 -- ===============================
 task.delay(1, function()
-    print("[AutoStart] V6.2 RAW MODE (Complete) Executed")
+    print("[AutoStart] V6.4 RAW (Walk+Config) Executed")
     CreateDashboard()
     
+    -- Load Config Awal
+    LoadWebConfig()
+    
+    if MasterConfig.WalkOnWater then ToggleWalkOnWater(true) end
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
     if MasterConfig.AutoTotem then task.spawn(function() while true do SpawnMutationTotem(); task.wait(3780) end end) end
     
@@ -388,4 +508,12 @@ task.delay(1, function()
     
     if MasterConfig.FishingEnabled then StartFishingV1() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
+    
+    -- Loop Check Config (Setiap 60 Detik)
+    task.spawn(function()
+        while true do
+            task.wait(60)
+            LoadWebConfig()
+        end
+    end)
 end)
