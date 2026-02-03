@@ -379,7 +379,6 @@ local function RunInstantFish()
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
     task.wait(MasterConfig.CatchDelay)
     pcall(function() RE_FishingCompleted:InvokeServer(timestamp) end)
-    task.wait(0.05)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
@@ -412,13 +411,13 @@ function StartFishingV1()
     if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
     
     table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do RunInstantFish(); task.wait(0.1) end
+        while FishingState.IsFishing do RunInstantFish(); task.wait(0.05) end
     end))
     
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
-            task.wait(0.5)
+            task.wait(0.1)
         end
     end))
 
