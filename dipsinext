@@ -17,7 +17,7 @@ MyLp.CharacterAdded:Wait() -- Menunggu event spawn
 MyLp.Character:WaitForChild("HumanoidRootPart", 10) -- Menunggu fisik karakter dimuat
 
 -- 3. Tunggu 3 Detik
-task.wait(5
+task.wait(5)
 
 -- ===============================
 -- 1. AUTO RECONNECT
