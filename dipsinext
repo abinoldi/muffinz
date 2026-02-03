@@ -1,64 +1,94 @@
 -- ======================================================
--- ENOCHHUB | FULL AUTO: LEGIT EDITION (TELEPORT FIX)
--- VERSION: v1.4.5 (Merged Pure Legit Core)
+-- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
+-- VERSION: v1.3.6 (Super Lite + Smart Equip - No Respawn)
 -- ======================================================
 
 -- [[ CONFIGURATION ]] --
-local DISABLE_3D_RENDER = true   -- Set FALSE agar game terlihat
-local DISABLE_AUDIO = true       -- True = Mute Audio
-local LIMIT_FPS = true           -- True = 30 FPS
-local FPS_CAP = 15               
-local LEGIT_SPEED = 0.1          -- Click Speed
+local DISABLE_3D_RENDER = true   -- True = Layar Hitam (Hemat CPU/GPU)
+local DISABLE_AUDIO = true       -- True = Mute semua suara game
+local LIMIT_FPS = true           -- True = Paksa 15 FPS (Sangat Ringan)
 
--- Wait for Game Load
+-- Tunggu Game Load
 repeat task.wait() until game:IsLoaded()
 
 -- ===============================
--- 1. OPTIMIZED POTATO MODE
+-- 1. INSTANT SUPER POTATO MODE (FIRST PRIORITY)
 -- ===============================
 local RunService = game:GetService("RunService")
 local Plrs = game:GetService("Players")
 local VirtualUser = game:GetService("VirtualUser")
 local MyLp = Plrs.LocalPlayer
-local Lighting = game:GetService("Lighting")
-local Terrain = workspace:WaitForChild("Terrain")
 
 local function EnablePotatoMode()
-    if LIMIT_FPS and setfpscap then setfpscap(FPS_CAP) end
-    RunService:Set3dRenderingEnabled(not DISABLE_3D_RENDER)
-    
+    -- 1. FPS LIMITER (Penghemat Baterai/CPU Terbesar)
+    if LIMIT_FPS and setfpscap then 
+        setfpscap(15) 
+    end
+
+    -- 2. DISABLE 3D RENDERING
+    if DISABLE_3D_RENDER then
+        RunService:Set3dRenderingEnabled(false)
+    else
+        RunService:Set3dRenderingEnabled(true)
+    end
+
+    -- 3. LOOP PEMBERSIH MEMORI AGRESIF
     task.spawn(function()
-        Lighting.GlobalShadows = false
-        Lighting.Brightness = 0
-        pcall(function() settings().Rendering.QualityLevel = "Level01" end)
-        Terrain.WaterWaveSize = 0
-        Terrain.WaterReflectance = 0
-        Terrain.WaterTransparency = 1 
-        
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then
-                v:Destroy()
-            end
+        while task.wait(5) do
+            pcall(function()
+                -- Setting Lighting
+                game.Lighting.GlobalShadows = false
+                game.Lighting.Brightness = 0
+                game.Lighting.FogEnd = 9e9
+                settings().Rendering.QualityLevel = "Level01"
+
+                -- Hapus Efek Berat
+                for _, v in ipairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") then 
+                        v.Material = Enum.Material.Plastic
+                        v.Reflectance = 0
+                        v.Transparency = 1 
+                        v.CastShadow = false
+                    elseif v:IsA("Decal") or v:IsA("Texture") then 
+                        v:Destroy() -- Hapus Tekstur
+                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                        v:Destroy() -- Hapus Partikel
+                    elseif DISABLE_AUDIO and (v:IsA("Sound") or v:IsA("SoundGroup")) then
+                        if v:IsA("Sound") then v.Playing = false; v.Volume = 0; v:Stop() end
+                    end
+                end
+                
+                -- Matikan Air
+                workspace.Terrain.WaterWaveSize = 0
+                workspace.Terrain.WaterReflectance = 0
+                workspace.Terrain.WaterTransparency = 0
+            end)
         end
     end)
 end
+
+-- AKTIFKAN SEKARANG!
 task.spawn(EnablePotatoMode)
+print("🥔 Super Potato Mode Activated!")
 
 -- ===============================
--- 2. GLOBAL VARS & STATE
+-- 2. GLOBAL VARS & SETUP
 -- ===============================
-local IsChangingRod = false
-local AutoActive = true
-local LastCastTime = os.time() 
+local IsChangingRod = false      -- Penanda agar equip tidak bentrok
 
--- Respawn & Anti-AFK
+-- Lakukan Respawn Awal (Reset Character untuk refresh state)
 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
     MyLp.Character.Humanoid.Health = 0 
 end
+
+-- Tunggu Respawn
 MyLp.CharacterAdded:Wait()
 MyLp.Character:WaitForChild("HumanoidRootPart", 10)
 task.wait(5)
 
+-- ===============================
+-- ANTI-AFK
+-- ===============================
 MyLp.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
@@ -68,18 +98,18 @@ end)
 -- SERVICES & STATE
 -- ===============================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
-local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 local STATE = {
     HasAstralRod = false, CurrentRod = "Checking...", CurrentRodID = 0, TotalCoins = 0,
-    Mode = "Starting...", FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
-    Status = "Idle", Teleporting = false, CurrentArea = "None", TargetInfo = "None",
+    Mode = "Starting...", 
+    FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
+    Status = "Starting...", Teleporting = false,
+    CurrentArea = "None", TargetInfo = "None",
     CurrentBait = "None", NextRodInfo = nil 
 }
 
 -- ===============================
--- REMOTES (ORIGINAL)
+-- REMOTES & DATA
 -- ===============================
 local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
 local function GetRemote(path, name)
@@ -91,171 +121,32 @@ end
 local RE_EquipItem = GetRemote(RPath, "RE/EquipItem")
 local RE_EquipToolFromHotbar = GetRemote(RPath, "RE/EquipToolFromHotbar")
 local RE_UnequipItem = GetRemote(RPath, "RE/UnequipItem")
--- RF_UpdateAutoFishingState is handled in the new core, but we define here for safety
 local RF_UpdateAutoFishingState = GetRemote(RPath, "RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote(RPath, "RF/SellAllItems")
 local RF_PurchaseBait = GetRemote(RPath, "RF/PurchaseBait")
 local RF_PurchaseFishingRod = GetRemote(RPath, "RF/PurchaseFishingRod")
 local RE_ObtainedNewFishNotification = GetRemote(RPath, "RE/ObtainedNewFishNotification")
 local RF_PlaceLeverItem = GetRemote(RPath, "RE/PlaceLeverItem")
+
+-- INSTANT FISH REMOTES
 local RF_ChargeFishingRod = GetRemote(RPath, "RF/ChargeFishingRod")
-local RF_CancelFishingInputs = GetRemote(RPath, "RF/CancelFishingInputs") 
+local RF_RequestFishingMinigameStarted = GetRemote(RPath, "RF/RequestFishingMinigameStarted")
+local RE_FishingCompleted = GetRemote(RPath, "RF/CatchFishCompleted")
+local RF_CancelFishingInputs = GetRemote(RPath, "RF/CancelFishingInputs")
 
--- ======================================================
--- [[ NEW CORE ]] PURE LEGIT FISHING SYSTEM
--- ======================================================
-
-local Services = {
-    Players = game:GetService("Players"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    RunService = game:GetService("RunService")
-}
-
-local lp = Services.Players.LocalPlayer
-
--- [1] CONFIGURATION
-local MasterConfig = {
-    FishingEnabled = true,
-    CatchDelay = 0.1 
-}
-
--- [2] STATE TRACKING
-local FishingState = { IsFishing = false }
-local LegitState = { Status = "Idle" } -- Idle, Reeling, Casting
-local FishingThreads = {}
-local LegitClickThread = nil
-local HooksInstalled = false
-
--- [3] MODULES & REMOTES
-local FishingController = require(Services.ReplicatedStorage.Controllers.FishingController) 
-
-local function GetRemoteNew(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"} 
-    local current = Services.ReplicatedStorage
-    for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 2)
-        if not current then return nil end
-    end
-    return current:FindFirstChild(name)
-end
-
-local RF_UpdateAutoFishingStateNew = GetRemoteNew("RF/UpdateAutoFishingState")
-
--- [4] CORE LOGIC: HOOKING SYSTEM
-local function SetupLegitHooks()
-    if HooksInstalled then return end
-    
-    local oldStart = FishingController.FishingRodStarted
-    local oldStop = FishingController.FishingStopped
-    
-    -- [HOOK] SAAT MINIGAME MUNCUL
-    FishingController.FishingRodStarted = function(self, ...)
-        oldStart(self, ...)
-        
-        if FishingState.IsFishing then
-            LegitState.Status = "Reeling" 
-            STATE.Status = "Reeling (Pure)" -- Update Global UI State
-            
-            if LegitClickThread then task.cancel(LegitClickThread) end
-            
-            -- [LOOP KLIK]
-            LegitClickThread = task.spawn(function()
-                while FishingState.IsFishing and LegitState.Status == "Reeling" do
-                    FishingController:RequestFishingMinigameClick() 
-                    task.wait(MasterConfig.CatchDelay)
-                end
-            end)
-        end
-    end
-
-    -- [HOOK] SAAT MINIGAME SELESAI
-    FishingController.FishingStopped = function(self, ...)
-        oldStop(self, ...)
-        
-        if FishingState.IsFishing then
-            LegitState.Status = "Casting" 
-            STATE.Status = "Casting (Pure)" -- Update Global UI State
-            
-            if LegitClickThread then 
-                task.cancel(LegitClickThread)
-                LegitClickThread = nil
-            end
-        end
-    end
-    
-    HooksInstalled = true
-    print("✅ [Legit] Fishing Hooks Installed.")
-end
-
--- [5] MAIN FUNCTIONS: START & STOP
-function StopFishing()
-    FishingState.IsFishing = false
-    LegitState.Status = "Idle"
-    STATE.Status = "Stopped"
-    
-    if RF_UpdateAutoFishingStateNew then 
-        pcall(function() RF_UpdateAutoFishingStateNew:InvokeServer(false) end) 
-    end
-    
-    if LegitClickThread then 
-        task.cancel(LegitClickThread) 
-        LegitClickThread = nil 
-    end
-    
-    for _, t in pairs(FishingThreads) do
-        if t then task.cancel(t) end
-    end
-    FishingThreads = {}
-    print("🛑 Fishing Stopped.")
-end
-
-function StartFishing()
-    if FishingState.IsFishing then return end
-    FishingState.IsFishing = true
-    
-    print("🎣 Starting Fishing (Pure Mode)...")
-    
-    SetupLegitHooks()
-    LegitState.Status = "Casting" 
-    
-    -- 2. MONITOR FORCE AUTO (SOLUSI WALKED AWAY)
-    table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do
-            if RF_UpdateAutoFishingStateNew then
-                pcall(function() RF_UpdateAutoFishingStateNew:InvokeServer(true) end) 
-            end
-            task.wait(2.0)
-        end
-    end))
-    
-    -- 3. SMART CAST LOOP
-    table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do
-            task.wait(1)
-            if LegitState.Status == "Casting" then
-                 if RF_UpdateAutoFishingStateNew then
-                      pcall(function() RF_UpdateAutoFishingStateNew:InvokeServer(true) end)
-                 end
-                 LegitState.Status = "Idle" 
-            end
-        end
-    end))
-end
-
--- [[ COMPATIBILITY BRIDGE ]]
--- This connects your old script's logic (Quests/Teleports) to the new Fishing System
-local function EnsureLegitFishingActive()
-    if STATE.Teleporting or STATE.Mode == "Starting..." then return end
-    
-    -- If the Pure System is not running, Start it
-    if not FishingState.IsFishing then
-        StartFishing()
-    end
-end
+local FishingController = require(ReplicatedStorage.Controllers.FishingController)
+local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
+local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
 -- DATA TABLES
 -- ===============================
+local ROD_DELAYS = {
+    [79] = 4.6, [76] = 4.35, [85] = 4.35, [77] = 4.35, [78] = 4.35,
+    [4] = 4.35, [80] = 3, [6] = 2.7, [7] = 2.5, [255] = 2.5,
+    [5] = 2, [126] = 1.7, [168] = 1.6, [169] = 1.23, [257] = 1.0
+}
+
 local ShopRods = {
     {Name="Luck Rod", ID=79, Price=325}, {Name="Carbon Rod", ID=76, Price=750}, 
     {Name="Grass Rod", ID=85, Price=1500}, {Name="Demascus Rod", ID=77, Price=3000},
@@ -278,7 +169,7 @@ local FishingAreas = {
     ["Sisyphus Statue"]={Pos=Vector3.new(-3743,-135,-1007),Look=Vector3.new(0.3,0,0.95)},
     ["Sacred Temple"]={Pos=Vector3.new(1461,-22,-670),Look=Vector3.new(-0.99,0,0.14)},
     ["Esoteric Island"]={Pos=Vector3.new(2164,3,1242),Look=Vector3.new(0,0,-1)},
-    ["Ancient Jungle"]={Pos=Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)}
+    ["Ancient Jungle"]={Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)}
 }
 
 -- ===============================
@@ -313,32 +204,47 @@ local function Teleport(area)
 end
 
 -- ===============================
--- EQUIP & BAIT
+-- EQUIP & BAIT LOGIC (SMART)
 -- ===============================
 local function EquipRod(nameID)
     if not PlayerDataReplion then return end
-    IsChangingRod = true
+    
+    IsChangingRod = true -- PAUSE thread spam
     task.wait(0.1)
+
     local inv = PlayerDataReplion:GetExpect("Inventory")
     local rods = inv["Fishing Rods"] or {}
     local targetRod = nil
     
+    -- Logika Pencarian
     for _, r in pairs(rods) do
         if nameID == "Best" then
             local bestPrice = -1
             for _, s in ipairs(ShopRods) do
                 if tonumber(r.Id) == s.ID and s.Price > bestPrice then 
-                     targetRod = r; bestPrice = s.Price
-                    STATE.CurrentRod = s.Name; STATE.CurrentRodID = s.ID
-                 end
+                    targetRod = r
+                    bestPrice = s.Price
+                    STATE.CurrentRod = s.Name
+                    STATE.CurrentRodID = s.ID
+                end
             end
         else
-            if tonumber(r.Id) == nameID then targetRod = r; STATE.CurrentRodID = tonumber(r.Id); break end
+            if tonumber(r.Id) == nameID then 
+                targetRod = r
+                STATE.CurrentRodID = tonumber(r.Id)
+                break 
+            end
         end
     end
 
+    -- Fallback: Jika "Best" tidak ketemu (Untuk Starter Rod)
     if nameID == "Best" and not targetRod then
-        for _, r in pairs(rods) do targetRod = r; STATE.CurrentRod = "Starter"; STATE.CurrentRodID = tonumber(r.Id) or 0; break end
+        for _, r in pairs(rods) do
+            targetRod = r
+            STATE.CurrentRod = "Starter/Common"
+            STATE.CurrentRodID = tonumber(r.Id) or 0
+            break
+        end
     end
 
     if targetRod then
@@ -348,7 +254,8 @@ local function EquipRod(nameID)
             RE_EquipToolFromHotbar:FireServer(1)
         end)
     end
-    IsChangingRod = false
+    
+    IsChangingRod = false -- RESUME thread spam
 end
 
 local function AutoBuyBestBait()
@@ -360,9 +267,9 @@ local function AutoBuyBestBait()
     for i = #ShopBaits, 1, -1 do
         local bait = ShopBaits[i]
         if data.Coins >= bait.Price and not owned[bait.ID] then
-             RF_PurchaseBait:InvokeServer(bait.ID)
+            RF_PurchaseBait:InvokeServer(bait.ID)
             task.wait(0.3)
-             break
+            break
         end
     end
 end
@@ -376,9 +283,10 @@ local function EquipBestBait()
         local baitId = tonumber(baitData.Id)
         for _, shopBait in ipairs(ShopBaits) do
             if shopBait.ID == baitId and shopBait.Price > bestBaitPrice then
-                bestBaitUUID = baitData.UUID; bestBaitPrice = shopBait.Price
+                bestBaitUUID = baitData.UUID
+                bestBaitPrice = shopBait.Price
                 STATE.CurrentBait = "Bait ID: " .. baitId
-             end
+            end
         end
     end
     if bestBaitUUID then pcall(function() RE_EquipItem:FireServer(bestBaitUUID, "Baits") end)
@@ -386,7 +294,23 @@ local function EquipBestBait()
 end
 
 -- ===============================
--- QUEST & MODE LOGIC
+-- FISHING ACTIONS
+-- ===============================
+local function RunInstantFish()
+    local currentDelay = ROD_DELAYS[STATE.CurrentRodID] or 5
+    STATE.Status = "Instant (" .. currentDelay .. "s)"
+    pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end)
+    local timestamp = os.time() + os.clock()
+    pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
+    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end)
+    task.wait(currentDelay)
+    pcall(function() RE_FishingCompleted:InvokeServer() end)
+    task.wait(0.25)
+    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+end
+
+-- ===============================
+-- QUEST LOGIC
 -- ===============================
 local function CheckDeepSeaQuest(data)
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
@@ -444,14 +368,14 @@ local function UpdateGameMode()
             local bestArea = "Esoteric Island"
             local currentBestRodValue = 0
             for _, ownedId in ipairs(ownedRods) do
-                 for _, shopRod in ipairs(ShopRods) do
+                for _, shopRod in ipairs(ShopRods) do
                     if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
                         currentBestRodValue = shopRod.Price
                         if shopRod.Price >= 50000 then bestArea = "Sisyphus Statue"
-                        elseif shopRod.Price >= 15000 then bestArea = "Esoteric Island"
-                        else bestArea = "Esoteric Island" end
+                        elseif shopRod.Price >= 15000 then bestArea = "Treasure Room"
+                        else bestArea = "Enchant Room" end
                     end
-                 end
+                end
             end
             STATE.NextLocation = bestArea
             STATE.NextRodInfo = nextRodToBuy
@@ -488,6 +412,9 @@ local function UpdateGameMode()
     STATE.Mode = "Finished"; STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
 end
 
+-- ===============================
+-- LEVER LOGIC
+-- ===============================
 local function ExecuteLeverLogic()
     local inv = PlayerDataReplion:GetExpect("Inventory")
     EquipRod(169)
@@ -496,12 +423,12 @@ local function ExecuteLeverLogic()
             local d = ArtifactData[artName]
             local hasArt = false
             local id = ARTIFACT_IDS[artName]
-             local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
+            local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
             if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
             if hasArt then
                 STATE.TargetInfo = "Placing: "..artName
                 if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") then
-                      MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
+                    MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
                     task.wait(0.5); MyLp.Character.HumanoidRootPart.Anchored = true
                     RE_UnequipItem:FireServer("all"); task.wait(0.5)
                     RF_PlaceLeverItem:FireServer(artName); task.wait(2.0)
@@ -510,25 +437,31 @@ local function ExecuteLeverLogic()
             else
                 STATE.TargetInfo = "Farming: "..artName
                 Teleport(artName)
-                 
-                -- DISTANCE CHECK (LEVER FARMING)
-                if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") then
-                     local dist = (MyLp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
-                     if dist > 20 then
-                          MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look)
-                     end
+                if MyLp.Character then
+                    local dist = (MyLp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
+                    if dist > 5 then MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) end
                 end
-                
-                EnsureLegitFishingActive()
-             end
+            end
             break 
-         end
+        end
     end
 end
 
 -- ===============================
--- THREADS
+-- LOOPS & THREADS
 -- ===============================
+local AutoActive = true
+local clickThread = nil
+local function ClickLoop()
+    while AutoActive and STATE.Status == "Reeling" do
+        FishingController:RequestFishingMinigameClick()
+        task.wait(0.1)
+    end
+end
+local oldStart = FishingController.FishingRodStarted
+FishingController.FishingRodStarted = function(self,...) oldStart(self,...) if AutoActive then STATE.Status="Reeling"; if clickThread then task.cancel(clickThread) end clickThread=task.spawn(ClickLoop) end end
+local oldStop = FishingController.FishingStopped
+FishingController.FishingStopped = function(self,...) oldStop(self,...) if AutoActive then STATE.Status="Casting" end end
 
 -- [THREAD: AUTO SELL]
 task.spawn(function()
@@ -537,18 +470,19 @@ task.spawn(function()
     end
 end)
 
--- [THREAD: AUTO EQUIP SLOT 1]
+-- [THREAD: BACKGROUND EQUIP (SMART ANTI-STUCK)]
 task.spawn(function()
     while task.wait(0.15) do
+        -- Hanya spam equip slot 1 jika TIDAK sedang ganti rod (biar tidak flicker)
         if AutoActive and not IsChangingRod then
-             if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") and MyLp.Character.Humanoid.Health > 0 then
+            if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") and MyLp.Character.Humanoid.Health > 0 then
                 pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
             end
         end
     end
 end)
 
--- [THREAD: MAIN LOGIC QUESTS]
+-- [THREAD: MAIN LOGIC]
 task.spawn(function()
     while task.wait(0.5) do
         if AutoActive then
@@ -557,46 +491,29 @@ task.spawn(function()
                 AutoBuyBestBait()
                 EquipBestBait()
             
-                -- MAIN TELEPORT LOGIC WITH DISTANCE VERIFICATION
-                local function CheckAndTeleport(targetLoc)
-                    -- 1. Cek Logic Teleport Biasa
-                    if STATE.CurrentArea ~= targetLoc then 
-                        Teleport(targetLoc)
-                    else
-                        -- 2. SMART VERIFICATION (Fix Not Teleported)
-                        if MyLp.Character and MyLp.Character:FindFirstChild("HumanoidRootPart") and FishingAreas[targetLoc] then
-                            local myPos = MyLp.Character.HumanoidRootPart.Position
-                            local targetPos = FishingAreas[targetLoc].Pos
-                             local dist = (myPos - targetPos).Magnitude
-                            
-                            -- Jika jarak > 30 meter, berarti tertinggal/stuck -> Paksa TP lagi
-                             if dist > 30 then
-                                STATE.Status = "⚠️ Resync Teleport..."
-                                MyLp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos, targetPos + FishingAreas[targetLoc].Look)
-                                task.wait(0.5)
-                            end
-                        end
-                        
-                        EnsureLegitFishingActive()
-                    end
-                end
-
-                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" or STATE.Mode == "Element" or STATE.Mode == "Finished" then
-                    if STATE.Mode ~= "Element" then EquipRod("Best") else EquipRod(169) end
-                    CheckAndTeleport(STATE.NextLocation)
+                if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation)
+                    else RunInstantFish() end
 
                 elseif STATE.Mode == "Lever" then
                     ExecuteLeverLogic()
-                 end
+
+                elseif STATE.Mode == "Element" then
+                    EquipRod(169)
+                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation)
+                    else RunInstantFish() end
+                end
             end)
-             if not success then warn("Loop Error: " .. tostring(err)) end
+            if not success then warn("Loop Error: " .. tostring(err)) end
         end
     end
 end)
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() 
-        STATE.FishCount=STATE.FishCount+1; CalcStats();
+        STATE.FishCount=STATE.FishCount+1; CalcStats(); STATE.Status="Caught!";
+        task.delay(1,function() STATE.Status="Casting" end) 
     end)
 end
 
@@ -608,7 +525,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.4.5 (PURE CORE)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.6"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
@@ -637,8 +554,8 @@ end
 
 task.spawn(CreateDashboard)
 task.wait(2)
-StartFishing() -- Start the new system
-print("🚀 EnochHub Full Auto (v1.4.5 PURE CORE) Started!")
+RF_UpdateAutoFishingState:InvokeServer(true)
+print("🚀 EnochHub Full Auto (v1.3.6 Lite) Started!")
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
 task.spawn(function()
