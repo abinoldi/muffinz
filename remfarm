@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V5.2 (ANTI-FREEZE STABILITY)
+-- # ULTIMATE HUB: FINAL V5.3 (GUI LEAK FIX)
 -- ======================================================
 
 local Services = {
@@ -40,7 +40,7 @@ local MasterConfig = {
     
     -- [STABILITY SETTINGS]
     PotatoMode = true,
-    Disable3DRendering = true, -- Tetap ada, tapi dioptimalkan agar tidak crash
+    Disable3DRendering = true, 
     
     AutoTrade = false,
     TargetUsername = "mm3kenak",
@@ -58,7 +58,7 @@ local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
-local Last3DRenderState = true -- Variable untuk melacak status render terakhir
+local Last3DRenderState = true 
 
 -- REMOTE HELPER
 local function GetRemote(name)
@@ -318,7 +318,7 @@ function RunAutoUnfavoriteRubies()
 end
 
 -- ===============================
--- GUI & NOTIFICATIONS
+-- GUI & NOTIFICATIONS (FIXED LEAK)
 -- ===============================
 function CreateDashboard()
     if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
@@ -330,7 +330,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v5.2 (Anti-Freeze)"
+    toggleBtn.Text = "W - v5.3 (Final Fix)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -361,8 +361,18 @@ function CreateDashboard()
     local L_Time = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
     local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
+    
+    -- [CRITICAL FIX: ZOMBIE THREAD KILLER]
+    -- Thread ini sekarang akan MATI otomatis jika GUI di-destroy
     task.spawn(function()
-        while task.wait(0.5) do
+        -- Loop diperlambat dari 0.5s ke 1.0s untuk hemat CPU
+        while task.wait(1.0) do
+            -- SAFETY CHECK: Jika GUI sudah tidak ada, hentikan loop ini selamanya
+            if not gui or not gui.Parent then 
+                print("♻️ [GUI] Cleaning up old dashboard loop.")
+                break 
+            end
+            
             if dashboard.Visible then
                 L_Coins.Text = "$" .. FormatNumber((PlayerData and PlayerData:Get("Coins") or 0))
                 L_Mode.Text = "LOC: " .. (MasterConfig.SelectedLocation or "None")
@@ -479,8 +489,6 @@ function RunAutoTrade()
 end
 
 local function ApplyExtremePotato()
-    -- [OPTIMIZED 3D RENDER CHECK]
-    -- Hanya panggil Set3dRenderingEnabled jika statusnya berubah
     pcall(function()
         local desiredState = not MasterConfig.Disable3DRendering
         if Last3DRenderState ~= desiredState then
@@ -488,8 +496,6 @@ local function ApplyExtremePotato()
             Last3DRenderState = desiredState
         end
     end)
-    
-    -- [VFX REMOVAL]
     local VFXControllerModule
     pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
     if VFXControllerModule then
@@ -497,15 +503,11 @@ local function ApplyExtremePotato()
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         pcall(function() workspace:FindFirstChild("CosmeticFolder"):ClearAllChildren() end)
     end
-    
-    -- [LIGHTING OPTIMIZATION]
     pcall(function() 
         local lighting = game:GetService("Lighting")
         lighting.GlobalShadows = false; lighting.Brightness = 0 
         if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0 end
     end)
-    
-    -- [PART DELETION]
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
@@ -597,7 +599,7 @@ task.spawn(function()
 end)
 
 task.delay(2, function()
-    print("[AutoStart] Smart V5.2 (Anti-Freeze) Loaded")
+    print("[AutoStart] Smart V5.3 (GUI Fix) Loaded")
     CreateDashboard()
     LoadWebConfig()
     pcall(UpdateStatsFromInventory)
@@ -610,7 +612,7 @@ task.delay(2, function()
                Headers = {["Content-Type"] = "application/json"}, 
                Body = Services.HttpService:JSONEncode({
                    username = "Webhak Enok", 
-                   content = "✅ Script Started (Smart V5.2) at " .. MasterConfig.SelectedLocation
+                   content = "✅ Script Started (Smart V5.3) at " .. MasterConfig.SelectedLocation
                })
            })
        end)
@@ -619,13 +621,10 @@ task.delay(2, function()
     if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
     if MasterConfig.AutoTotem then task.spawn(function() while true do SpawnMutationTotem(); task.wait(3780) end end) end
     
-    -- [MODIFIED POTATO LOOP]
-    -- Loop diperlambat drastis (setiap 15 detik) untuk mencegah freeze memory leak
     if MasterConfig.PotatoMode then 
         task.spawn(function() 
-            -- Jalankan sekali di awal
             ApplyExtremePotato() 
-            while task.wait(15) do -- Delay dinaikkan dari 3s ke 15s
+            while task.wait(15) do 
                 ApplyExtremePotato() 
             end 
         end) 
