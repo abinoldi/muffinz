@@ -379,7 +379,7 @@ local function RunInstantFish()
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
     task.wait(MasterConfig.CatchDelay)
     pcall(function() RE_FishingCompleted:InvokeServer(timestamp) end)
-    task.wait(0.3)
+    task.wait(0.05)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
