@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: V6.4 (RAW + WALK + WEB CONFIG)
+-- # ULTIMATE HUB: V6.5 (ORIGINAL GUI + RAW FEATURES)
 -- ======================================================
 
 local Services = {
@@ -18,11 +18,11 @@ local lp = Services.Players.LocalPlayer
 -- [1] SETUP URL CONFIG
 local OnlineConfigUrl = "https://raw.githubusercontent.com/abinoldi/muffzle/refs/heads/main/remconfig" 
 
--- [2] DEFAULT CONFIG (Akan ditimpa oleh Web Config)
+-- [2] DEFAULT CONFIG
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
-    CatchDelay = 1.05, -- Delay aman agar ikan "nyangkut"
+    CatchDelay = 1.05, 
     AutoSell = true,
     SellDelay = 60,
     AutoFavorite = true,
@@ -48,14 +48,15 @@ local MasterConfig = {
 }
 
 -- STATE TRACKING
-local FishingState = { IsFishing = false, Teleporting = false }
+local FishingState = { IsFishing = false, Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
 local TradingState = { IsTrading = false, Thread = nil }
 local FishingThreads = {}
 
 -- GLOBAL VARIABLES
-local TotalFishCaught = 0
+local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
+local TotalFishCaught = 0
 
 -- WALK ON WATER VARIABLES
 local walkOnWaterConnection = nil
@@ -85,57 +86,34 @@ local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 
 -- ===============================
--- WEB CONFIG LOADER (RESTORED)
+-- WEB CONFIG LOADER
 -- ===============================
 local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" then return end
-    
-    -- Ambil data dari URL
     local success, response = pcall(function() return game:HttpGet(OnlineConfigUrl, true) end)
-    
     if success then
         local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
         if decodeSuccess then
             local settingsChanged = false
             local locationChanged = false
-            
-            -- Update config lokal dengan data web
             for key, value in pairs(decodedData) do
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
-                    
                     MasterConfig[key] = value
                     settingsChanged = true
                 end
             end
-            
-            -- Terapkan perubahan jika ada update
             if settingsChanged then
-                -- Restart Teleport jika lokasi berubah
-                if locationChanged and MasterConfig.AutoTeleport and TeleportToFishingLocation then 
-                    task.spawn(TeleportToFishingLocation) 
-                end
-                
-                -- Restart Fishing jika status berubah
-                if MasterConfig.FishingEnabled and not FishingState.IsFishing then 
-                    task.spawn(StartFishingV1)
-                elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then 
-                    StopFishingV1() 
-                end
-                
-                -- Restart Trade jika status berubah
-                if MasterConfig.AutoTrade and not TradingState.IsTrading then 
-                    task.spawn(RunAutoTrade)
+                if locationChanged and MasterConfig.AutoTeleport and TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
+                if MasterConfig.FishingEnabled and not FishingState.IsFishing then task.spawn(StartFishingV1)
+                elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then StopFishingV1() end
+                if MasterConfig.AutoTrade and not TradingState.IsTrading then task.spawn(RunAutoTrade)
                 elseif not MasterConfig.AutoTrade and TradingState.IsTrading then 
                     TradingState.IsTrading = false
                     if TradingState.Thread then task.cancel(TradingState.Thread) end
                 end
-                
-                -- Update Walk on Water
-                if MasterConfig.WalkOnWater ~= isWalkOnWater then
-                    ToggleWalkOnWater(MasterConfig.WalkOnWater)
-                end
+                if MasterConfig.WalkOnWater ~= isWalkOnWater then ToggleWalkOnWater(MasterConfig.WalkOnWater) end
             end
         end
     end
@@ -146,7 +124,6 @@ end
 -- ===============================
 function ToggleWalkOnWater(state)
     isWalkOnWater = state
-
     if state then
         if not waterPlatform then
             waterPlatform = Instance.new("Part")
@@ -157,16 +134,12 @@ function ToggleWalkOnWater(state)
             waterPlatform.Size = Vector3.new(15, 1, 15)
             waterPlatform.Parent = workspace
         end
-
         if walkOnWaterConnection then walkOnWaterConnection:Disconnect() end
-
         walkOnWaterConnection = Services.RunService.RenderStepped:Connect(function()
             local character = lp.Character
             if not isWalkOnWater or not character then return end
-            
             local hrp = character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
-
             if not waterPlatform or not waterPlatform.Parent then
                 waterPlatform = Instance.new("Part")
                 waterPlatform.Name = "WaterPlatform"
@@ -176,20 +149,16 @@ function ToggleWalkOnWater(state)
                 waterPlatform.Size = Vector3.new(15, 1, 15)
                 waterPlatform.Parent = workspace
             end
-
             local rayParams = RaycastParams.new()
             rayParams.FilterDescendantsInstances = {workspace.Terrain} 
             rayParams.FilterType = Enum.RaycastFilterType.Include
             rayParams.IgnoreWater = false 
-
             local rayOrigin = hrp.Position + Vector3.new(0, 5, 0) 
             local rayDirection = Vector3.new(0, -500, 0)
             local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
-
             if result and result.Material == Enum.Material.Water then
                 local waterSurfaceHeight = result.Position.Y
                 waterPlatform.Position = Vector3.new(hrp.Position.X, waterSurfaceHeight, hrp.Position.Z)
-                
                 if hrp.Position.Y < (waterSurfaceHeight + 2) and hrp.Position.Y > (waterSurfaceHeight - 5) then
                     if not Services.UserInputService:IsKeyDown(Enum.KeyCode.Space) then
                         hrp.CFrame = CFrame.new(hrp.Position.X, waterSurfaceHeight + 3.2, hrp.Position.Z)
@@ -220,29 +189,20 @@ end
 function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
-    
-    if RF_UpdateAutoFishingState then 
-        pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) 
-    end
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do RunInstantFish() end
     end))
-    
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then 
-                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-            end
+            if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
             task.wait(1.5)
         end
     end))
-
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            if MasterConfig.AutoSell and RF_SellAllItems then
-                pcall(function() RF_SellAllItems:InvokeServer() end)
-            end
+            if MasterConfig.AutoSell and RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end
             task.wait(MasterConfig.SellDelay)
         end
     end))
@@ -256,7 +216,7 @@ function StopFishingV1()
 end
 
 -- ===============================
--- SHARED MODULES & DATA LOKASI
+-- SHARED MODULES & UTILS
 -- ===============================
 local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
 local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
@@ -320,6 +280,7 @@ function GetMutation(item)
 end
 
 function FormatNumber(n) return tostring(n):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "") end
+function FormatTime(s) return string.format("%02dh %02dm %02ds", math.floor(s/3600), math.floor((s%3600)/60), s%60) end
 
 -- ===============================
 -- TELEPORT & TOTEM
@@ -368,16 +329,14 @@ local function SpawnMutationTotem()
 end
 
 -- ===============================
--- AUTO TRADE (Secret & Ruby)
+-- AUTO TRADE
 -- ===============================
 function RunAutoTrade()
     if TradingState.IsTrading then return end
     TradingState.IsTrading = true
-    
     TradingState.Thread = task.spawn(function()
         while MasterConfig.AutoTrade and TradingState.IsTrading do
             pcall(UpdateStatsFromInventory)
-            
             local targetPlayer = Services.Players:FindFirstChild(MasterConfig.TargetUsername)
             if targetPlayer then
                 local tradeList = {}
@@ -396,10 +355,8 @@ function RunAutoTrade()
                     end
                 end
                 table.sort(tradeList, function(a, b) return a.priority > b.priority end)
-                
                 if #tradeList > 0 then
-                    local targetItem = tradeList[1]
-                    pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) end)
+                    pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, tradeList[1].uuid) end)
                     task.wait(3)
                     pcall(UpdateStatsFromInventory)
                 else
@@ -415,7 +372,7 @@ function RunAutoTrade()
 end
 
 -- ===============================
--- STATS & GUI
+-- STATS & ORIGINAL GUI
 -- ===============================
 UpdateStatsFromInventory = function()
     local secretCount = 0
@@ -436,37 +393,71 @@ UpdateStatsFromInventory = function()
 end
 
 function CreateDashboard()
-    if Services.CoreGui:FindFirstChild("EnochRaw") then Services.CoreGui.EnochRaw:Destroy() end
+    if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
     local gui = Instance.new("ScreenGui", Services.CoreGui)
-    gui.Name = "EnochRaw"
+    gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
     
-    local frame = Instance.new("Frame", gui)
-    frame.Size = UDim2.new(0.2, 0, 0.15, 0)
-    frame.Position = UDim2.new(0.5, 0, 0.1, 0)
-    frame.AnchorPoint = Vector2.new(0.5, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-    frame.BackgroundTransparency = 0.5
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "W - v6.5 (Restored GUI)"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1,0,1,0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.new(1,1,1)
-    label.TextScaled = true
-    label.Text = "V6.4 RAW + WALK"
+    local dashboard = Instance.new("Frame", gui)
+    dashboard.Size = UDim2.fromScale(1, 1)
+    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dashboard.Visible = true
+    
+    local layout = Instance.new("UIListLayout", dashboard)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0.015, 0)
+    
+    local function Text(txt, h, col) 
+        local l = Instance.new("TextLabel", dashboard)
+        l.Text = txt
+        l.TextColor3 = col
+        l.Size = UDim2.new(1,0,h,0)
+        l.BackgroundTransparency = 1
+        l.Font = Enum.Font.GothamBold
+        l.TextScaled = true
+        return l 
+    end
+    
+    local L_Coins = Text("$0", 0.10, Color3.fromRGB(255, 215, 0)) 
+    local L_Mode = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
+    local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
+    local L_Stats = Text("0 Fish", 0.06, Color3.fromRGB(255, 255, 255)) 
+    local L_Info = Text("Sec: 0 | Gem: 0", 0.06, Color3.fromRGB(255, 100, 255)) 
+    local L_Time = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
+    local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
+    
+    toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
     
     task.spawn(function()
-        while task.wait(3) do 
+        while task.wait(1.0) do
             if not gui or not gui.Parent then break end
-            pcall(UpdateStatsFromInventory)
-            local coins = (PlayerData and PlayerData:Get("Coins") or 0)
-            label.Text = string.format(
-                "V6.4 RAW\nFish: %d | Coins: %s\nSecret: %d | RubyGem: %d", 
-                TotalFishCaught, 
-                FormatNumber(coins), 
-                TotalSecretsFound, 
-                TotalRubyGemstones
-            )
+            if dashboard.Visible then
+                L_Coins.Text = "$" .. FormatNumber((PlayerData and PlayerData:Get("Coins") or 0))
+                L_Mode.Text = "LOC: " .. (MasterConfig.SelectedLocation or "None")
+                local tPlayer = Services.Players:FindFirstChild(MasterConfig.TargetUsername or "???")
+                L_Target.Text = "TARGET: " .. (MasterConfig.TargetUsername or "???") .. (tPlayer and " [✅]" or " [❌]")
+                L_Target.TextColor3 = tPlayer and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+                L_Stats.Text = string.format("Caught: %d", TotalFishCaught)
+                L_Info.Text = "Sec: " .. TotalSecretsFound .. " | Gem: " .. TotalRubyGemstones
+                L_Time.Text = FormatTime(os.time() - SessionStartTime)
+                local currentStatus = "Idle"
+                if FishingState.IsFishing then currentStatus = "Fishing" end
+                if TradingState.IsTrading then currentStatus = "Trading" end
+                if FishingState.Teleporting then currentStatus = "Teleporting" end
+                L_Status.Text = "Status: " .. currentStatus
+            end
         end
     end)
 end
@@ -482,10 +473,8 @@ end
 -- AUTO START
 -- ===============================
 task.delay(1, function()
-    print("[AutoStart] V6.4 RAW (Walk+Config) Executed")
+    print("[AutoStart] V6.5 RAW (Original GUI) Executed")
     CreateDashboard()
-    
-    -- Load Config Awal
     LoadWebConfig()
     
     if MasterConfig.WalkOnWater then ToggleWalkOnWater(true) end
@@ -509,11 +498,5 @@ task.delay(1, function()
     if MasterConfig.FishingEnabled then StartFishingV1() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
     
-    -- Loop Check Config (Setiap 60 Detik)
-    task.spawn(function()
-        while true do
-            task.wait(60)
-            LoadWebConfig()
-        end
-    end)
+    task.spawn(function() while true do task.wait(60) LoadWebConfig() end end)
 end)
