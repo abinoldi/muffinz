@@ -165,14 +165,26 @@ local BLOCKED_REMOTES = {
 local mt = getrawmetatable(game)
 local old_namecall = mt.__namecall
 setreadonly(mt, false)
+
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
+    
     if not checkcaller() then
-        if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then return task.wait(9e9) end
-        if method == "FireServer" and self.Name == "FishingCompleted" then return nil end
+        -- Block RemoteFunctions yang tidak diinginkan
+        if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then 
+            return task.wait(9e9) 
+        end
+        
+        -- Block FishingCompleted khusus untuk InvokeServer
+        if method == "InvokeServer" and self.Name == "FishingCompleted" then 
+            print("[BLOCKED] FishingCompleted InvokeServer")
+            return nil  -- Return nil untuk block InvokeServer
+        end
     end
+    
     return old_namecall(self, ...)
 end)
+
 setreadonly(mt, true)
 
 -- ===============================
@@ -378,7 +390,7 @@ local function RunInstantFish()
     if not s1 then return end
     pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
     task.wait(MasterConfig.CatchDelay)
-    pcall(function() RE_FishingCompleted:InvokeServer(timestamp) end)
+    pcall(function() RE_FishingCompleted:InvokeServer() end)
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
 end
 
