@@ -17,7 +17,33 @@ MyLp.CharacterAdded:Wait() -- Menunggu event spawn
 MyLp.Character:WaitForChild("HumanoidRootPart", 10) -- Menunggu fisik karakter dimuat
 
 -- 3. Tunggu 3 Detik
-task.wait(5)
+task.wait(5
+
+-- ===============================
+-- 1. AUTO RECONNECT
+-- ===============================
+local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
+local Players = game:GetService("Players")
+
+local placeId = game.PlaceId
+local serverId = game.JobId -- Captures current server ID
+
+GuiService.ErrorMessageChanged:Connect(function()
+    task.wait(5) -- Increased wait to ensure the connection is fully dropped
+    
+    local errorMessage = GuiService:GetErrorMessage()
+    if #errorMessage > 0 then
+        warn("Disconnect detected: " .. errorMessage)
+        
+        -- Attempt to reconnect to the exact same server instance
+        TeleportService:TeleportToPlaceInstance(placeId, serverId, Players.LocalPlayer)
+        
+        -- Fallback: If the specific server is full or crashed, join a random one
+        task.wait(10)
+        TeleportService:Teleport(placeId, Players.LocalPlayer)
+    end
+end)
 
 -- ===============================
 -- 1. ANTI-AFK
