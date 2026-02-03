@@ -938,4 +938,3 @@ task.delay(10, function() -- Mengubah delay dari 2 detik menjadi 10 detik
         RunAutoTrade()
     end
 end)
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/weatherx"))()
