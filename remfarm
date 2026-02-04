@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.7 (CLEAN VERSION)
+-- # ULTIMATE HUB: FINAL V4.8 (HIGH PRECISION UPDATE)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -22,7 +22,7 @@ local req = request or http_request or syn.request
 local MasterConfig = {
     FishingEnabled = true,
     AutoEquip = true,
-    CatchDelay = 1.5,
+    CatchDelay = 1.0, -- Default disesuaikan untuk High Precision
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
@@ -35,7 +35,7 @@ local MasterConfig = {
     PotatoMode = true,
     AutoTrade = false,
     TargetUsername = "mm3kenak",
-    TradeMode = "SECRETS_FIRST", -- Mode ini sekarang dimodif khusus Secret & Gem Only
+    TradeMode = "SECRETS_FIRST",
     TradeDelay = 6.5,
     WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
@@ -50,7 +50,7 @@ local PotatoLoopThread = nil
 -- VARIABLES GLOBAL
 local SessionStartTime = os.time()
 local TotalSecretsFound = 0
-local TotalRubyGemstones = 0 -- [BARU] Variabel Gemstone
+local TotalRubyGemstones = 0
 local TotalFishCaught = 0
 local FishSessionMap = {}
 
@@ -76,7 +76,6 @@ local function LoadWebConfig()
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
                     
-                    -- Reset TargetId jika username berubah agar discan ulang
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
 
                     MasterConfig[key] = value
@@ -147,8 +146,6 @@ pcall(function()
     end
 end)
 
--- [REMOVED] Old Hooking Logic as requested
-
 -- ===============================
 -- SHARED MODULES & HELPERS
 -- ===============================
@@ -161,7 +158,7 @@ local function GetRemote(name)
     local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
     local current = Services.ReplicatedStorage
     for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 2)
+        current = current:WaitForChild(child, 5) -- Adjusted wait time for safety
         if not current then return nil end
     end
     return current:FindFirstChild(name)
@@ -217,16 +214,16 @@ UpdateStatsFromInventory = function()
     local inv = PlayerData:Get("Inventory")
     if inv then
         for _, items in pairs(inv) do
-             for _, item in ipairs(items) do
+            for _, item in ipairs(items) do
                  local name, r = GetFishNameAndRarity(item)
                  local mut = GetMutation(item)
                  
                  if tostring(r):upper() == "SECRET" then
-                      secretCount = secretCount + 1
+                    secretCount = secretCount + 1
                  end
                  
                  if name == "Ruby" and mut == "Gemstone" then
-                      rubyGemCount = rubyGemCount + 1
+                    rubyGemCount = rubyGemCount + 1
                  end
             end
         end
@@ -321,17 +318,17 @@ local function ApplyExtremePotato()
             if v:IsA("MeshPart") then v.Transparency = 1 end
         end
     end
-    if setfpscap then pcall(function() setfpscap(30) end) end
+    if setfpscap then pcall(function() setfpscap(20) end) end
 end
 
 local function StartPotatoLoop()
     if PotatoLoopThread then return end
     ApplyExtremePotato()
-    PotatoLoopThread = task.spawn(function() while task.wait(3) do ApplyExtremePotato() end end)
+    PotatoLoopThread = task.spawn(function() while task.wait(5) do ApplyExtremePotato() end end)
 end
 
 -- ===============================
--- FISHER V1 LOGIC (STANDALONE BYPASS)
+-- FISHER V2 (HIGH PRECISION MODE)
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
@@ -346,37 +343,46 @@ local function GetCoins()
     return PlayerData and (PlayerData:Get("Coins") or 0) or 0
 end
 
+-- [CORE: PRECISE WAIT FUNCTION]
+-- Fungsi ini memaksa script menunggu waktu EXACT sesuai CPU, bukan frame game.
+local function PreciseWait(seconds)
+    local targetTime = os.clock() + seconds
+    while os.clock() < targetTime do
+        Services.RunService.Heartbeat:Wait()
+    end
+end
+
 local function RunInstantFish()
-    -- [CRITICAL] Use Delay from Config (Config Kamu)
-    local currentDelay = MasterConfig.CatchDelay or 1.5
+    -- [CRITICAL] Use Delay from MasterConfig (agar Web Config tetap berfungsi)
+    local currentDelay = MasterConfig.CatchDelay or 1.0
     
-    -- 1. Disable internal auto-fishing state to prevent conflicts
+    -- [A] Disable internal auto-fishing state
     pcall(function() 
         if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
     end)
 
-    -- 2. Charge the rod (Simulates holding click)
+    -- [B] Charge the rod (Simulates holding click)
     local timestamp = os.time() + os.clock()
     pcall(function() 
-        RF_ChargeFishingRod:InvokeServer(timestamp) 
+        if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(timestamp) end
     end)
 
-    -- 3. Trigger Minigame Start (Simulates fish biting)
+    -- [C] Trigger Minigame Start
     pcall(function() 
-        RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) 
+        if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end
     end)
 
-    -- 4. Wait for the legitimate catch duration (From Config)
-    task.wait(currentDelay)
+    -- [D] DELAY (High Precision)
+    PreciseWait(currentDelay)
 
-    -- 5. Complete Fishing (Simulates winning the minigame)
+    -- [E] Complete Fishing
     pcall(function() 
-        RE_FishingCompleted:InvokeServer() 
+        if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end
     end)
 
-    -- 6. Reset Inputs (Cleanup)
+    -- [F] Reset Inputs
     pcall(function() 
-        RF_CancelFishingInputs:InvokeServer() 
+        if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end
     end)
 end
 
@@ -407,22 +413,30 @@ function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
+    -- THREAD 1: Main Fishing Loop (High Precision Spam)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do 
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 RunInstantFish()
             end
-            task.wait(0.1) 
+            -- Menggunakan PreciseWait singkat untuk jeda antar loop
+            PreciseWait(0.1)
         end
     end))
     
+    -- THREAD 2: Auto Equip (Safety Check)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            if MasterConfig.AutoEquip and RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
-            task.wait(0.1)
+            if MasterConfig.AutoEquip then
+                if lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
+                    pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
+                end
+            end
+            task.wait(0.5) -- Check setiap 0.5s cukup
         end
     end))
 
+    -- THREAD 3: Auto Sell
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -437,6 +451,7 @@ function StartFishingV1()
         end
     end))
     
+    -- THREAD 4: Auto Favorite
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -444,7 +459,7 @@ function StartFishingV1()
                 if inv then
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
-                            if item.UUID then
+                             if item.UUID then
                                 local itemName, rarity = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
                                 local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
@@ -464,6 +479,7 @@ function StartFishingV1()
         end
     end))
 
+    -- THREAD 5: Ruby Cleaner
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then RunAutoUnfavoriteRubies() end
@@ -474,7 +490,7 @@ end
 
 function StopFishingV1()
     FishingState.IsFishing = false
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
     FishingThreads = {}
 end
 
@@ -643,7 +659,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v1.4 (Gem & Secret)"
+    toggleBtn.Text = "W - v4.8 (High Precision)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -676,10 +692,7 @@ function CreateDashboard()
     local L_Mode   = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
     local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
     local L_Stats  = Text("0 Fish", 0.06, Color3.fromRGB(255, 255, 255)) 
-    
-    -- [NEW] Added FPM Label here
     local L_FPM    = Text("0.0 F/M", 0.06, Color3.fromRGB(0, 255, 127)) 
-
     local L_Info   = Text("Sec: 0 | Gem: 0", 0.06, Color3.fromRGB(255, 100, 255)) 
     local L_Time   = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
     local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
@@ -703,13 +716,13 @@ function CreateDashboard()
                     L_Target.TextColor3 = Color3.fromRGB(255, 50, 50)
                 end
 
-                -- [NEW] F/M Calculation Logic
+                -- F/M Calculation Logic
                 local elapsed = os.time() - SessionStartTime
                 local fpm = 0
                 if elapsed > 0 and TotalFishCaught > 0 then
                     fpm = TotalFishCaught / (elapsed / 60)
                 end
-                L_FPM.Text = string.format("%.1f F/M", fpm) -- Updates the label (e.g. "12.5 F/M")
+                L_FPM.Text = string.format("%.1f F/M", fpm)
 
                 L_Stats.Text = string.format("Caught: %d", TotalFishCaught)
                 L_Info.Text = "Sec: " .. TotalSecretsFound .. " | Gem: " .. TotalRubyGemstones
