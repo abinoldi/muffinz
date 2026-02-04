@@ -637,6 +637,7 @@ function CreateDashboard()
     gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
 
+    -- Toggle Button
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
@@ -648,6 +649,7 @@ function CreateDashboard()
     toggleBtn.TextScaled = true
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
 
+    -- Dashboard Frame
     local dashboard = Instance.new("Frame", gui)
     dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -669,16 +671,22 @@ function CreateDashboard()
         return l 
     end
 
+    -- [UI LABELS]
     local L_Coins  = Text("$0", 0.10, Color3.fromRGB(255, 215, 0)) 
     local L_Mode   = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
     local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
     local L_Stats  = Text("0 Fish", 0.06, Color3.fromRGB(255, 255, 255)) 
+    
+    -- [NEW] Added FPM Label here
+    local L_FPM    = Text("0.0 F/M", 0.06, Color3.fromRGB(0, 255, 127)) 
+
     local L_Info   = Text("Sec: 0 | Gem: 0", 0.06, Color3.fromRGB(255, 100, 255)) 
     local L_Time   = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
     local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
 
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
+    -- [UPDATE LOOP]
     task.spawn(function()
         while task.wait(0.5) do
             if dashboard.Visible then
@@ -695,7 +703,14 @@ function CreateDashboard()
                     L_Target.TextColor3 = Color3.fromRGB(255, 50, 50)
                 end
 
+                -- [NEW] F/M Calculation Logic
                 local elapsed = os.time() - SessionStartTime
+                local fpm = 0
+                if elapsed > 0 and TotalFishCaught > 0 then
+                    fpm = TotalFishCaught / (elapsed / 60)
+                end
+                L_FPM.Text = string.format("%.1f F/M", fpm) -- Updates the label (e.g. "12.5 F/M")
+
                 L_Stats.Text = string.format("Caught: %d", TotalFishCaught)
                 L_Info.Text = "Sec: " .. TotalSecretsFound .. " | Gem: " .. TotalRubyGemstones
                 L_Time.Text = FormatTime(elapsed)
