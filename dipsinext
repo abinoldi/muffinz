@@ -439,29 +439,46 @@ end
 
 local function ExecuteLeverLogic()
     local inv = PlayerDataReplion:GetExpect("Inventory")
-    EquipRod(169)
+    EquipRod(169) -- Equips Ghostfin Rod (Required for Levers)
+    
     for _, artName in ipairs(ArtifactOrder) do
         if not IsLeverUnlocked(artName) then
             local d = ArtifactData[artName]
             local hasArt = false
             local id = ARTIFACT_IDS[artName]
+            
+            -- Check if we already have the artifact
             local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
             if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
+            
             if hasArt then
+                -- [[ PLACING MODE ]] --
                 STATE.TargetInfo = "Placing: "..artName
                 if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                     lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.LeverPos)
-                    task.wait(0.5); lp.Character.HumanoidRootPart.Anchored = true
-                    RE_UnequipItem:FireServer("all"); task.wait(0.5)
-                    RF_PlaceLeverItem:FireServer(artName); task.wait(2.0)
+                    task.wait(0.5)
+                    lp.Character.HumanoidRootPart.Anchored = true
+                    RE_UnequipItem:FireServer("all")
+                    task.wait(0.5)
+                    RF_PlaceLeverItem:FireServer(artName)
+                    task.wait(2.0)
                     lp.Character.HumanoidRootPart.Anchored = false
                 end
             else
+                -- [[ FARMING MODE - FIX APPLIED HERE ]] --
                 STATE.TargetInfo = "Farming: "..artName
-                Teleport(artName)
-                if lp.Character then
+                Teleport(artName) -- Try to teleport to the farming spot
+                
+                if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                     local dist = (lp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
-                    if dist > 5 then lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) end
+                    
+                    -- If we are too far, force position
+                    if dist > 5 then 
+                        lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) 
+                    else
+                        -- If we are close enough, START FISHING
+                        RunInstantFish()
+                    end
                 end
             end
             break 
