@@ -420,7 +420,7 @@ function StartFishingV1()
                 RunInstantFish()
             end
             -- Menggunakan PreciseWait singkat untuk jeda antar loop
-            PreciseWait(0.1)
+            PreciseWait(0.5)
         end
     end))
     
