@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V4.5 (GEM & SECRET TRADE EDITION)
+-- # ULTIMATE HUB: FINAL V4.7 (CLEAN VERSION)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -147,45 +147,7 @@ pcall(function()
     end
 end)
 
-task.spawn(function()
-    local S1, FishingController = pcall(function() return require(Services.ReplicatedStorage.Controllers.FishingController) end)
-    if S1 and FishingController then
-        FishingController.RequestChargeFishingRod = function(...) return nil end
-        FishingController.SendFishingRequestToServer = function(...) return false, "Blocked by V1" end
-    end
-end)
-
-local BLOCKED_REMOTES = {
-    ["RequestFishingMinigameStarted"] = true,
-    ["ChargeFishingRod"] = true,
-    ["UpdateAutoFishingState"] = true,
-    ["CancelFishingInputs"] = true
-}
-
-local mt = getrawmetatable(game)
-local old_namecall = mt.__namecall
-setreadonly(mt, false)
-
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    
-    if not checkcaller() then
-        -- Block RemoteFunctions yang tidak diinginkan
-        if method == "InvokeServer" and BLOCKED_REMOTES[self.Name] then 
-            return task.wait(9e9) 
-        end
-        
-        -- Block FishingCompleted khusus untuk InvokeServer
-        if method == "InvokeServer" and self.Name == "FishingCompleted" then 
-            print("[BLOCKED] FishingCompleted InvokeServer")
-            return nil  -- Return nil untuk block InvokeServer
-        end
-    end
-    
-    return old_namecall(self, ...)
-end)
-
-setreadonly(mt, true)
+-- [REMOVED] Old Hooking Logic as requested
 
 -- ===============================
 -- SHARED MODULES & HELPERS
@@ -369,7 +331,7 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- FISHER V1 LOGIC
+-- FISHER V1 LOGIC (STANDALONE BYPASS)
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
@@ -385,13 +347,37 @@ local function GetCoins()
 end
 
 local function RunInstantFish()
+    -- [CRITICAL] Use Delay from Config (Config Kamu)
+    local currentDelay = MasterConfig.CatchDelay or 1.5
+    
+    -- 1. Disable internal auto-fishing state to prevent conflicts
+    pcall(function() 
+        if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
+    end)
+
+    -- 2. Charge the rod (Simulates holding click)
     local timestamp = os.time() + os.clock()
-    local s1 = pcall(function() RF_ChargeFishingRod:InvokeServer(timestamp) end)
-    if not s1 then return end
-    pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-139.630452165, 0.99647927980797) end)
-    task.wait(MasterConfig.CatchDelay)
-    pcall(function() RE_FishingCompleted:InvokeServer() end)
-    pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+    pcall(function() 
+        RF_ChargeFishingRod:InvokeServer(timestamp) 
+    end)
+
+    -- 3. Trigger Minigame Start (Simulates fish biting)
+    pcall(function() 
+        RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) 
+    end)
+
+    -- 4. Wait for the legitimate catch duration (From Config)
+    task.wait(currentDelay)
+
+    -- 5. Complete Fishing (Simulates winning the minigame)
+    pcall(function() 
+        RE_FishingCompleted:InvokeServer() 
+    end)
+
+    -- 6. Reset Inputs (Cleanup)
+    pcall(function() 
+        RF_CancelFishingInputs:InvokeServer() 
+    end)
 end
 
 local function RunAutoUnfavoriteRubies()
@@ -420,10 +406,14 @@ end
 function StartFishingV1()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end) end
     
     table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do RunInstantFish(); task.wait(0.05) end
+        while FishingState.IsFishing do 
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                RunInstantFish()
+            end
+            task.wait(0.1) 
+        end
     end))
     
     table.insert(FishingThreads, task.spawn(function()
@@ -484,7 +474,6 @@ end
 
 function StopFishingV1()
     FishingState.IsFishing = false
-    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
     pcall(function() RF_CancelFishingInputs:InvokeServer() end)
     FishingThreads = {}
 end
@@ -570,29 +559,19 @@ local function ScanInventoryForTrade()
     
     for _, items in pairs(inv) do
         for _, item in ipairs(items) do
-            -- Filter: Hanya Secret atau Ruby Gemstone
             local name, rarity = GetFishNameAndRarity(item)
             local mutation = GetMutation(item)
-            
             local isSecret = (tostring(rarity):upper() == "SECRET")
             local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
             
             if isSecret or isRubyGem then
-                -- Prioritas: Secret (Angka 2) > Ruby Gem (Angka 1)
                 local priority = 1
                 if isSecret then priority = 2 end
-                
-                table.insert(tradeList, {
-                    uuid = item.UUID,
-                    priority = priority
-                })
+                table.insert(tradeList, { uuid = item.UUID, priority = priority })
             end
         end
     end
-    
-    -- Urutkan: Secret didahulukan
     table.sort(tradeList, function(a, b) return a.priority > b.priority end)
-    
     return tradeList
 end
 
@@ -613,43 +592,33 @@ function RunAutoTrade()
 
     TradingState.Thread = task.spawn(function()
         while MasterConfig.AutoTrade and TradingState.IsTrading do
-            -- [STEP 1] Update Stats di GUI setiap loop agar angka real-time
             pcall(UpdateStatsFromInventory)
             
             local targetName = MasterConfig.TargetUsername
-            -- Cek apakah player ada di server (Refresh Ingame)
             local targetPlayer = Services.Players:FindFirstChild(targetName)
 
             if targetPlayer then
                 MasterConfig.TargetId = targetPlayer.UserId 
-
                 local itemsToTrade = ScanInventoryForTrade()
                 
                 if #itemsToTrade > 0 then
                     local targetItem = itemsToTrade[1]
-                    
-                    -- Langsung Trade (Force Trade)
                     pcall(function() 
                         RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) 
                     end)
                     
-                    -- Tunggu proses trade selesai (atau gagal/timeout)
                     local start = os.clock()
                     repeat 
                         task.wait(0.5) 
                     until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
                     
-                    -- [STEP 2] Update Stats lagi segera setelah trade selesai
                     pcall(UpdateStatsFromInventory)
                 else
-                    -- Jika inventory kosong dari item target, cek cepat lagi nanti
                     task.wait(1)
                 end
             else
-                -- Target tidak ada, standby
                 task.wait(3)
             end
-            
             task.wait(MasterConfig.TradeDelay)
         end
         TradingState.IsTrading = false
@@ -704,7 +673,6 @@ function CreateDashboard()
     local L_Mode   = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
     local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
     local L_Stats  = Text("0 Fish", 0.06, Color3.fromRGB(255, 255, 255)) 
-    -- [BARU] Menampilkan Secret & Ruby Gem
     local L_Info   = Text("Sec: 0 | Gem: 0", 0.06, Color3.fromRGB(255, 100, 255)) 
     local L_Time   = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
     local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
@@ -729,10 +697,7 @@ function CreateDashboard()
 
                 local elapsed = os.time() - SessionStartTime
                 L_Stats.Text = string.format("Caught: %d", TotalFishCaught)
-                
-                -- [BARU] Update Label Info dengan data Secret & Ruby Gem
                 L_Info.Text = "Sec: " .. TotalSecretsFound .. " | Gem: " .. TotalRubyGemstones
-                
                 L_Time.Text = FormatTime(elapsed)
                 
                 local currentStatus = "Idle"
@@ -753,7 +718,6 @@ local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         TotalFishCaught = TotalFishCaught + 1
-        
         task.spawn(function()
             if not item then return end
             local name, rarity, mutation, displayName, isSecret = "Unknown", "Common", "None", "Unknown", false
@@ -764,7 +728,7 @@ if RE_ObtainedNewFishNotification then
             end)
 
             if isSecret then
-                pcall(UpdateStatsFromInventory) -- Auto update jika dapet secret
+                pcall(UpdateStatsFromInventory) 
                 if MasterConfig.DiscordWebhookEnabled then
                     local weight = (item.Metadata and item.Metadata.Weight) or 0
                     SendDiscordSecretNotification(name, rarity, mutation, weight)
@@ -784,7 +748,7 @@ task.spawn(function()
 end)
 
 -- ===============================
--- 8. LEGACY WEBHOOK (WEIGHT ADDED)
+-- LEGACY WEBHOOK
 -- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
@@ -822,10 +786,10 @@ if MasterConfig.WebhookEnabled then
 end
 
 -- ===============================
--- [TAMBAHAN] WALK ON WATER FEATURE
+-- WALK ON WATER FEATURE
 -- ===============================
 local walkOnWaterConnection = nil
-local isWalkOnWater = true -- Set auto true
+local isWalkOnWater = true 
 local waterPlatform = nil
 
 local function ToggleWalkOnWater(state)
@@ -873,7 +837,6 @@ local function ToggleWalkOnWater(state)
                 local waterSurfaceHeight = result.Position.Y
                 waterPlatform.Position = Vector3.new(hrp.Position.X, waterSurfaceHeight, hrp.Position.Z)
                 
-                -- Anti-Tenggelam
                 if hrp.Position.Y < (waterSurfaceHeight + 2) and hrp.Position.Y > (waterSurfaceHeight - 5) then
                     if not game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then
                         hrp.CFrame = CFrame.new(hrp.Position.X, waterSurfaceHeight + 3.2, hrp.Position.Z)
@@ -892,24 +855,20 @@ end
 -- ===============================
 -- AUTO-START EXECUTION (WITH 10s DELAY)
 -- ===============================
-task.delay(10, function() -- Mengubah delay dari 2 detik menjadi 10 detik 
+task.delay(10, function()
     print("[AutoStart] Memulai eksekusi setelah menunggu 10 detik...")
 
-    -- [1] START DASHBOARD & LOAD CONFIG
     CreateDashboard()
     LoadWebConfig()
     
     print("[AutoStart] Config Web Loaded. Lokasi: " .. MasterConfig.SelectedLocation)
     
-    -- [2] Hitung Stats Awal
     pcall(UpdateStatsFromInventory)
 
-    -- [3] Jalankan Fitur Walk On Water (Auto True)
     task.spawn(function()
         ToggleWalkOnWater(true)
     end)
 
-    -- [4] Notifikasi Discord (Jika aktif)
     if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
        pcall(function() 
            req({ 
@@ -924,7 +883,6 @@ task.delay(10, function() -- Mengubah delay dari 2 detik menjadi 10 detik
        end)
     end
 
-    -- [5] Jalankan Fungsi Utama Lainnya
     if MasterConfig.AutoTeleport then 
         TeleportToFishingLocation()
         task.wait(1) 
