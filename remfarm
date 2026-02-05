@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V5.1 (MERCHANT UPDATE)
+-- # ULTIMATE HUB: FINAL V5.3 (BLIND ALL WEATHER 15m)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -52,6 +52,7 @@ local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
+local LastWeatherBuyTime = 0 -- Timer untuk Blind Buy
 
 -- FORWARD DECLARATION
 local StartFishingV1, StopFishingV1, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
@@ -80,7 +81,6 @@ local function LoadWebConfig()
                 end
             end
 
-            -- DYNAMIC SWITCHING
             if settingsChanged then
                 if locationChanged and MasterConfig.AutoTeleport then
                     if TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
@@ -150,7 +150,7 @@ local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
 local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
 local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
 local PlayerData = Replion:WaitReplion("Data", 10)
-local MerchantReplion = Replion:WaitReplion("Merchant", 10) -- Added Merchant Data
+local MerchantReplion = Replion:WaitReplion("Merchant", 10)
 
 local function GetRemote(name)
     local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
@@ -603,10 +603,11 @@ function RunAutoTrade()
 end
 
 -- ===============================
--- WEATHER SYSTEM LOGIC
+-- WEATHER SYSTEM LOGIC (UPDATED V5.3)
 -- ===============================
 local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 local WeatherTargets = {"Storm", "Cloudy", "Wind"}
+local BLIND_BUY_INTERVAL = 900 -- Detik (15 Menit)
 
 local function ScanWeatherUI()
     local activeList = {}
@@ -638,21 +639,40 @@ end
 
 local function StartWeatherAutoBuy()
     task.spawn(function()
-        print("⚡ [Weather] Auto Buy Started...")
+        print("⚡ [Weather] Auto Buy Started (Smart + Blind 15m Mode)...")
         while true do
             local active, status = ScanWeatherUI()
             
             if status == "OK" then
+                -- MODE SMART: Cek UI dan beli yang kurang
                 local activeStr = table.concat(active, ", "):lower()
-                
                 for _, target in ipairs(WeatherTargets) do
                      if not activeStr:find(target:lower()) then
                          if RF_PurchaseWeatherEvent then
-                             print("⚡ [Weather] Membeli: " .. target)
+                             print("⚡ [Weather-Smart] Membeli: " .. target)
                              pcall(function() RF_PurchaseWeatherEvent:InvokeServer(target) end)
                              task.wait(2) 
                          end
                      end
+                end
+            else
+                -- MODE BLIND: Jika UI Tertutup, paksa beli SEMUA setiap 15 Menit
+                if os.time() - LastWeatherBuyTime > BLIND_BUY_INTERVAL then
+                    if RF_PurchaseWeatherEvent then
+                        print("⚡ [Weather-Blind] UI Tertutup. Mengeksekusi Batch Storm, Cloudy, Wind...")
+                        
+                        -- Loop beli ketiganya
+                        for _, wTarget in ipairs(WeatherTargets) do
+                            pcall(function() 
+                                RF_PurchaseWeatherEvent:InvokeServer(wTarget) 
+                                print("   > Membeli " .. wTarget)
+                            end)
+                            task.wait(2) -- Jeda aman antar request
+                        end
+                        
+                        LastWeatherBuyTime = os.time()
+                        print("✅ [Weather-Blind] Batch Selesai. Menunggu 15 Menit.")
+                    end
                 end
             end
             task.wait(5)
@@ -661,7 +681,7 @@ local function StartWeatherAutoBuy()
 end
 
 -- ===============================
--- MERCHANT AUTO BUY LOGIC (NEW)
+-- MERCHANT AUTO BUY LOGIC
 -- ===============================
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local MUTATION_TOTEM_ID = 8
@@ -723,7 +743,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v5.1 (Merchant Upd)"
+    toggleBtn.Text = "W - v5.3 (Blind 15m)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -803,7 +823,12 @@ function CreateDashboard()
                 local activeW, wStatus = ScanWeatherUI()
                 local wText = "None"
                 if #activeW > 0 then wText = table.concat(activeW, ", ") end
-                if wStatus == "CLOSED" then wText = "UI Closed" end
+                
+                -- UPDATE TEXT UNTUK UI CLOSED
+                if wStatus == "CLOSED" or wStatus == "NO_GUI" then
+                     local remaining = math.max(0, BLIND_BUY_INTERVAL - (os.time() - LastWeatherBuyTime))
+                     wText = "Blind: Next Batch in " .. remaining .. "s"
+                end
                 L_Weather.Text = "Weather: " .. wText
             end
         end
@@ -962,7 +987,7 @@ task.delay(10, function()
     
     pcall(UpdateStatsFromInventory)
     StartWeatherAutoBuy() 
-    StartMerchantAutoBuy() -- [NEW] Start Merchant Loop
+    StartMerchantAutoBuy()
 
     task.spawn(function()
         ToggleWalkOnWater(true)
