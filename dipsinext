@@ -85,7 +85,30 @@ local function EnablePotatoMode()
         end
     end)
 end
-
+-- ===============================
+-- DISABLE AUDIO
+-- ===============================
+local function DisableAudio()
+    task.spawn(function()
+        local SoundService = game:GetService("SoundService")
+        -- Force volume to 0 initially
+        SoundService.Volume = 0
+        
+        -- Loop to ensure it stays muted (incase game resets it)
+        while task.wait(5) do
+            pcall(function()
+                SoundService.Volume = 0
+                -- Optional: Mute individual sounds if global volume fails
+                for _, sound in ipairs(workspace:GetDescendants()) do
+                    if sound:IsA("Sound") then
+                        sound.Volume = 0
+                        sound.Playing = false
+                    end
+                end
+            end)
+        end
+    end)
+end
 -- ===============================
 -- REMOTES & DATA
 -- ===============================
@@ -603,6 +626,7 @@ local function CreateDashboard()
 end
 
 task.spawn(EnablePotatoMode)
+task.spawn(DisableAudio) -- <-- ADD THIS LINE
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
