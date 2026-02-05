@@ -86,27 +86,36 @@ local function EnablePotatoMode()
     end)
 end
 -- ===============================
--- DISABLE AUDIO
+-- DISABLE AUDIO (NUCLEAR METHOD)
 -- ===============================
 local function DisableAudio()
-    task.spawn(function()
-        local SoundService = game:GetService("SoundService")
-        -- Force volume to 0 initially
+    local SoundService = game:GetService("SoundService")
+    local RunService = game:GetService("RunService")
+
+    -- 1. Force Master Volume to 0 every single frame
+    -- This beats game scripts that try to turn music back on
+    RunService.RenderStepped:Connect(function()
         SoundService.Volume = 0
-        
-        -- Loop to ensure it stays muted (incase game resets it)
-        while task.wait(5) do
-            pcall(function()
-                SoundService.Volume = 0
-                -- Optional: Mute individual sounds if global volume fails
-                for _, sound in ipairs(workspace:GetDescendants()) do
-                    if sound:IsA("Sound") then
-                        sound.Volume = 0
-                        sound.Playing = false
-                    end
-                end
-            end)
+    end)
+
+    -- 2. Aggressively mute any specific sound that spawns
+    -- (Covering Workspace, SoundService, and UI)
+    local function MuteSound(instance)
+        if instance:IsA("Sound") then
+            instance.Volume = 0
+            instance.Looped = false
+            if instance.Playing then instance:Stop() end
         end
+    end
+
+    -- Mute all existing sounds immediately
+    for _, v in pairs(game:GetDescendants()) do
+        pcall(MuteSound, v)
+    end
+
+    -- Watch for ANY new sound entering the game and mute it instantly
+    game.DescendantAdded:Connect(function(v)
+        pcall(MuteSound, v)
     end)
 end
 -- ===============================
