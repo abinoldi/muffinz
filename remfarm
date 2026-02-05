@@ -607,7 +607,7 @@ end
 -- ===============================
 local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 local WeatherTargets = {"Storm", "Cloudy", "Wind"}
-local BLIND_BUY_INTERVAL = 900 -- Detik (15 Menit)
+local BLIND_BUY_INTERVAL = 950 -- Detik (15 Menit)
 
 local function ScanWeatherUI()
     local activeList = {}
