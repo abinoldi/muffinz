@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V6.3 (AUTO EQUIP RESTORED)
+-- # ULTIMATE HUB: RE-FARM V6.4 (BLATANT EXACT COPY)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -23,9 +23,12 @@ local MasterConfig = {
     FishingEnabled = true,
     FishingMode = "INSTANT", -- Options: "INSTANT" or "BLATANT"
     AutoEquip = true,
-    CatchDelay = 1.0,        -- Delay for Instant Mode
-    BlatantCastDelay = 1.97, -- Delay for Blatant Mode
-    BlatantCompleteDelay = 1.0, -- Completion delay for Blatant
+    CatchDelay = 1.0,        -- Delay for INSTANT
+    
+    -- BLATANT SETTINGS (Sesuai snippet kamu)
+    BlatantCastDelay = 1.97, 
+    BlatantCompleteDelay = 1.0, 
+    
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
@@ -98,6 +101,7 @@ local function LoadWebConfig()
                     if TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
                 end
 
+                -- Restart Fishing if needed
                 local shouldRestart = false
                 
                 if modeChanged and FishingState.IsFishing then
@@ -129,7 +133,7 @@ local function LoadWebConfig()
 end
 
 -- ======================================================
--- [DATASET LOKASI FISHING LENGKAP]
+-- [DATASET LOKASI]
 -- ======================================================
 local FishingLocations = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
@@ -227,9 +231,6 @@ local function FormatTime(seconds)
     return string.format("%02dh %02dm %02ds", h, m, s)
 end
 
--- ===============================
--- HELPER: UPDATE STATS (SECRET & GEM)
--- ===============================
 UpdateStatsFromInventory = function()
     local secretCount = 0
     local rubyGemCount = 0
@@ -279,7 +280,7 @@ local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
 end
 
 -- ===============================
--- EXTREME INVISIBLE POTATO MODE
+-- POTATO MODE
 -- ===============================
 local VFXControllerModule
 pcall(function()
@@ -342,7 +343,7 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- FISHING SYSTEM (BLATANT & INSTANT)
+-- FISHING SYSTEM (BLATANT + INSTANT)
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
@@ -364,8 +365,9 @@ local function PreciseWait(seconds)
     end
 end
 
--- // --- HELPER: DISABLE NATIVE AUTOFISH --- //
+-- // --- DISABLE NATIVE --- //
 local function DisableNativeAutoFish()
+    -- 1. Client Controller
     local success, AutoFishCtrl = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
     end)
@@ -374,6 +376,7 @@ local function DisableNativeAutoFish()
         if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
         AutoFishCtrl.Start = function() return end 
     end
+    -- 2. UI Controller
     local s2, FishingController = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.FishingController) 
     end)
@@ -381,68 +384,52 @@ local function DisableNativeAutoFish()
         FishingController.RequestChargeFishingRod = function() end
         FishingController.SendFishingRequestToServer = function() return false end
     end
+    -- 3. Server State
     if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
+    print("[-] Native Auto-Fish Disabled.")
 end
 
 -- // --- INSTANT FISHING LOGIC --- //
 local function RunInstantFish()
     local currentDelay = MasterConfig.CatchDelay or 1.0
-    pcall(function() 
-        if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
-    end)
+    pcall(function() if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end end)
     local timestamp = os.time() + os.clock()
-    pcall(function() 
-        if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(timestamp) end
-    end)
-    pcall(function() 
-        if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end
-    end)
+    pcall(function() if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(timestamp) end end)
+    pcall(function() if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end end)
     PreciseWait(currentDelay)
-    pcall(function() 
-        if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end
-    end)
-    pcall(function() 
-        if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end
-    end)
+    pcall(function() if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end end)
+    pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
 end
 
--- // --- BLATANT FISHING LOGIC (ASYNC FIX) --- //
-local function ExecuteBlatantCycle()
-    -- Important: Using exact nil arguments as per your request
-    local timestamp = os.time() + os.clock()
-
-    -- We use task.spawn so the main loop doesn't get blocked
+-- // --- BLATANT FISHING LOGIC (THE EXACT SNIPPET COPY) --- //
+local function RunBlatantCycle()
+    -- Logic ini persis meniru "blatantFishv1" dari script kamu
+    -- Dijalankan via task.spawn di loop utama, jadi "Async" (tidak menunggu)
     task.spawn(function()
-        -- 1. Fast Spam Phase
+        local timestamp = os.time() + os.clock()
+        
+        -- Spam Charge & Start (4x)
         for i = 1, 4 do
             task.wait(0.035)
             if not FishingState.IsFishing then break end
             
             task.spawn(function()
-                if RF_ChargeFishingRod then 
-                    -- ARGS: nil, nil, nil, timestamp
-                    RF_ChargeFishingRod:InvokeServer(nil, nil, nil, timestamp) 
-                end
+                -- Args: nil, nil, nil, timestamp (SESUAI REQUEST)
+                if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(nil, nil, nil, timestamp) end
             end)
             task.spawn(function()
-                if RF_RequestFishingMinigameStarted then 
-                    -- ARGS: 1, 1, timestamp
-                    RF_RequestFishingMinigameStarted:InvokeServer(1, 1, timestamp) 
-                end
+                -- Args: 1, 1, timestamp (SESUAI REQUEST)
+                if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(1, 1, timestamp) end
             end)
         end
         
-        -- 2. Wait Phase
-        task.wait(MasterConfig.BlatantCompleteDelay or 1)
+        -- Wait Complete Delay
+        task.wait(MasterConfig.BlatantCompleteDelay or 1.0)
         
-        -- 3. Finish Phase
+        -- Catch
         if FishingState.IsFishing then
-            task.spawn(function()
-                if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end
-            end)
-            task.spawn(function()
-                if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end
-            end)
+            task.spawn(function() if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end end)
+            task.spawn(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
         end
     end)
 end
@@ -465,16 +452,11 @@ local function StartBlatantFishing()
     print("🎣 [Info] Starting BLATANT Fishing Mode")
     FishingState.CurrentMode = "BLATANT"
     
+    -- 1. Matikan Native
     DisableNativeAutoFish()
     task.wait(0.5)
 
-    -- Force Equip ONCE 
-    if MasterConfig.AutoEquip and lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
-         pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
-         task.wait(0.5)
-    end
-
-    -- WARMUP SPAM
+    -- 2. Warmup Spam (7x) - Persis Snippet
     local timestamp = os.time() + os.clock()
     for i = 1, 7 do
         task.wait(0.035)
@@ -483,36 +465,13 @@ local function StartBlatantFishing()
     end
     task.wait(0.1)
 
-    -- MAIN LOOP
+    -- 3. Main Loop
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            ExecuteBlatantCycle()
-            task.wait(MasterConfig.BlatantCastDelay or 1.97)
+            RunBlatantCycle() -- Jalan di thread terpisah (Async)
+            task.wait(MasterConfig.BlatantCastDelay or 1.97) -- Interval Loop
         end
     end))
-end
-
-local function RunAutoUnfavoriteRubies()
-    if not MasterConfig.AutoUnfavoriteRubies then return end
-    local inv = PlayerData:Get("Inventory")
-    if inv then
-        for _, items in pairs(inv) do
-            for _, item in ipairs(items) do
-                if item.IsFavorite or item.Favorited or item.Locked then
-                    local name, _ = GetFishNameAndRarity(item) 
-                    if name == "Ruby" then
-                        local mutation = GetMutation(item)
-                        if mutation ~= "Gemstone" then
-                            pcall(function()
-                                if RE_FavoriteItem then RE_FavoriteItem:FireServer(item.UUID) end
-                            end)
-                            task.wait(0.2)
-                        end
-                    end
-                end
-            end
-        end
-    end
 end
 
 -- // --- MAIN ROUTER --- //
@@ -526,10 +485,10 @@ function StartFishingRouter()
         StartInstantFishing()
     end
 
-    -- [AUTO EQUIP] -> RE-ENABLED FOR ALL MODES (User Request)
+    -- [THREAD 1] AUTO EQUIP (SELALU AKTIF - FIX MASALAH ROD TIDAK DIPEGANG)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-             if MasterConfig.AutoEquip then
+            if MasterConfig.AutoEquip then
                 if lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
                     pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
                 end
@@ -538,7 +497,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- [AUTO SELL]
+    -- [THREAD 2] AUTO SELL
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -551,8 +510,8 @@ function StartFishingRouter()
             task.wait(MasterConfig.SellDelay)
         end
     end))
-   
-    -- [AUTO FAVORITE]
+
+    -- [THREAD 3] AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -579,10 +538,26 @@ function StartFishingRouter()
             task.wait(0.5)
         end
     end))
-
+    
+    -- [THREAD 4] UNFAVORITE RUBY
     table.insert(FishingThreads, task.spawn(function()
-       while FishingState.IsFishing do
-            if MasterConfig.AutoUnfavoriteRubies then RunAutoUnfavoriteRubies() end
+        while FishingState.IsFishing do
+            if MasterConfig.AutoUnfavoriteRubies then 
+                 local inv = PlayerData:Get("Inventory")
+                 if inv then
+                     for _, items in pairs(inv) do
+                         for _, item in ipairs(items) do
+                             if item.IsFavorite or item.Favorited or item.Locked then
+                                 local name, _ = GetFishNameAndRarity(item) 
+                                 if name == "Ruby" and GetMutation(item) ~= "Gemstone" then
+                                     pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                     task.wait(0.2)
+                                 end
+                             end
+                         end
+                     end
+                 end
+            end
             task.wait(5)
         end
     end))
@@ -602,7 +577,7 @@ function StopFishing()
 end
 
 -- ===============================
--- TELEPORT & TOTEM LOGIC
+-- TELEPORT & TOTEM
 -- ===============================
 local TOTEM_ID = 2
 local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
@@ -740,7 +715,7 @@ function RunAutoTrade()
 end
 
 -- ===============================
--- WEATHER SYSTEM LOGIC
+-- WEATHER SYSTEM
 -- ===============================
 local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 local WeatherTargets = {"Storm", "Cloudy", "Wind"}
@@ -812,7 +787,7 @@ local function StartWeatherAutoBuy()
 end
 
 -- ===============================
--- MERCHANT AUTO BUY LOGIC
+-- MERCHANT AUTO BUY
 -- ===============================
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local MUTATION_TOTEM_ID = 8
@@ -837,7 +812,7 @@ local function StartMerchantAutoBuy()
 
                 if isTotemInStock then
                     print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
-                    while currentCoins > 1000000 then
+                    while currentCoins > 1000000 do
                         if RF_PurchaseMarketItem then
                              pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
                         end
@@ -853,7 +828,7 @@ local function StartMerchantAutoBuy()
 end
 
 -- ===============================
--- GUI (DASHBOARD)
+-- GUI DASHBOARD
 -- ===============================
 function CreateDashboard()
     if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
@@ -867,7 +842,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v6.3 (Equip Fix)"
+    toggleBtn.Text = "W - v6.4 (Full)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -957,7 +932,7 @@ function CreateDashboard()
     end)
 end
 
--- REMOTE LISTENER FOR FISH COUNT
+-- REMOTE LISTENER
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
@@ -982,7 +957,7 @@ if RE_ObtainedNewFishNotification then
     end)
 end
 
--- CONFIG AUTO-UPDATE LOOP
+-- CONFIG LOOP
 task.spawn(function()
     LoadWebConfig() 
     while true do
@@ -991,9 +966,7 @@ task.spawn(function()
     end
 end)
 
--- ===============================
 -- LEGACY WEBHOOK
--- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
         local function SendHook(pName, data)
@@ -1029,9 +1002,7 @@ if MasterConfig.WebhookEnabled then
     end)
 end
 
--- ===============================
--- WALK ON WATER FEATURE
--- ===============================
+-- WALK ON WATER
 local walkOnWaterConnection = nil
 local isWalkOnWater = true 
 local waterPlatform = nil
@@ -1097,7 +1068,7 @@ local function ToggleWalkOnWater(state)
 end
 
 -- ===============================
--- AUTO-START EXECUTION (WITH 10s DELAY)
+-- AUTO-START (WITH DELAY)
 -- ===============================
 task.delay(10, function()
     print("[AutoStart] Memulai eksekusi setelah menunggu 10 detik...")
