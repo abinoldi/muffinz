@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V6.2 (FULL RELEASE)
+-- # ULTIMATE HUB: FINAL V6.3 (AUTO EQUIP RESTORED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -98,7 +98,6 @@ local function LoadWebConfig()
                     if TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
                 end
 
-                -- Logic to restart fishing if Mode changes or Enabled toggle changes
                 local shouldRestart = false
                 
                 if modeChanged and FishingState.IsFishing then
@@ -133,31 +132,31 @@ end
 -- [DATASET LOKASI FISHING LENGKAP]
 -- ======================================================
 local FishingLocations = {
-    [cite_start]["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696) [cite: 10]},
-    [cite_start]["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176) [cite: 10]},
-    [cite_start]["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342) [cite: 10]},
-    [cite_start]["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863) [cite: 10]},
-    [cite_start]["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000) [cite: 10]},
-    [cite_start]["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229) [cite: 10]},
-    [cite_start]["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615) [cite: 10]},
-    [cite_start]["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000) [cite: 10]},
-    [cite_start]["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994) [cite: 10, 11]},
-    [cite_start]["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949) [cite: 11]},
-    [cite_start]["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000) [cite: 11]},
-    [cite_start]["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11]},
-    [cite_start]["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11]},
-    [cite_start]["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11]},
-    [cite_start]["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11, 12]},
-    [cite_start]["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458) [cite: 12]},
-    [cite_start]["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433) [cite: 12]},
-    [cite_start]["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143) [cite: 12]},
-    [cite_start]["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955) [cite: 12]},
-    [cite_start]["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951) [cite: 12]},
-    [cite_start]["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998) [cite: 12]},
-    [cite_start]["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925) [cite: 13]},
-    [cite_start]["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521) [cite: 13]},
-    [cite_start]["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520) [cite: 13]},
-    [cite_start]["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999) [cite: 13]},
+    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
+    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
+    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
+    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
+    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
+    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
+    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
+    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
+    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
+    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
+    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
+    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
+    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
+    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},
+    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
+    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
+    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
 }
 
 -- ===============================
@@ -172,14 +171,14 @@ end)
 -- ===============================
 -- SHARED MODULES & HELPERS
 -- ===============================
-[cite_start]local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client [cite: 13, 14]
-[cite_start]local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility) [cite: 14]
-[cite_start]local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility) [cite: 14]
-[cite_start]local PlayerData = Replion:WaitReplion("Data", 10) [cite: 14]
-[cite_start]local MerchantReplion = Replion:WaitReplion("Merchant", 10) [cite: 14]
+local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
+local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
+local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
+local PlayerData = Replion:WaitReplion("Data", 10)
+local MerchantReplion = Replion:WaitReplion("Merchant", 10)
 
 local function GetRemote(name)
-    [cite_start]local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"} [cite: 14]
+    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
     local current = Services.ReplicatedStorage
     for _, child in ipairs(path) do
         current = current:WaitForChild(child, 5)
@@ -189,8 +188,8 @@ local function GetRemote(name)
 end
 
 local function GetFishNameAndRarity(item)
-    [cite_start]local name = item.Identifier or "Unknown" [cite: 14]
-    [cite_start]local rarity = item.Metadata and item.Metadata.Rarity or "COMMON" [cite: 14]
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
     local itemID = item.Id
     local itemData
     if ItemUtility and itemID then
@@ -212,7 +211,7 @@ end
 
 local function GetMutation(item)
     if not item.Metadata then return "None" end
-    [cite_start]if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end [cite: 17]
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
     if item.Metadata.Shiny == true then return "Shiny" end
     return "None"
 end
@@ -234,14 +233,14 @@ end
 UpdateStatsFromInventory = function()
     local secretCount = 0
     local rubyGemCount = 0
-    [cite_start]local inv = PlayerData:Get("Inventory") [cite: 18]
+    local inv = PlayerData:Get("Inventory")
     if inv then
         for _, items in pairs(inv) do
             for _, item in ipairs(items) do
                  local name, r = GetFishNameAndRarity(item)
                  local mut = GetMutation(item)
-                 [cite_start]if tostring(r):upper() == "SECRET" then secretCount = secretCount + 1 end [cite: 19]
-                 [cite_start]if name == "Ruby" and mut == "Gemstone" then rubyGemCount = rubyGemCount + 1 end [cite: 19]
+                 if tostring(r):upper() == "SECRET" then secretCount = secretCount + 1 end
+                 if name == "Ruby" and mut == "Gemstone" then rubyGemCount = rubyGemCount + 1 end
             end
         end
     end
@@ -253,7 +252,7 @@ end
 -- DISCORD WEBHOOK LOGIC
 -- ===============================
 local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
-    [cite_start]if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end [cite: 19, 20]
+    if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end
     if not req then return end
     local mutationText = (mutation ~= "" and mutation ~= "None" and mutation or "None")
     req({
@@ -263,7 +262,7 @@ local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
         Body = Services.HttpService:JSONEncode({
             username = "Webhak Enok",
             embeds = {{
-                [cite_start]title = "🚨 " .. tostring(rarity) .. " FISH CAUGHT! 🚨", [cite: 21, 22]
+                title = "🚨 " .. tostring(rarity) .. " FISH CAUGHT! 🚨",
                 color = 16711680,
                 fields = {
                     { name = "Pemain", value = "`" .. lp.Name .. "`", inline = true },
@@ -284,7 +283,7 @@ end
 -- ===============================
 local VFXControllerModule
 pcall(function()
-    [cite_start]VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) [cite: 25]
+    VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController)
 end)
 
 local function DisableAnimations()
@@ -300,7 +299,7 @@ end
 
 local function ApplyExtremePotato()
     if VFXControllerModule then
-        [cite_start]VFXControllerModule.Handle = function(...) return nil end [cite: 26]
+        VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
         local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
@@ -312,7 +311,7 @@ local function ApplyExtremePotato()
     DisableAnimations()
     pcall(function()
         local Lighting = game:GetService("Lighting")
-        [cite_start]Lighting.GlobalShadows = false [cite: 27]
+        Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
         Lighting.Brightness = 0
         if workspace.Terrain then
@@ -322,13 +321,13 @@ local function ApplyExtremePotato()
         end
     end)
     for _, v in ipairs(workspace:GetDescendants()) do
-        [cite_start]if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false [cite: 28, 29]
+        if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v:Destroy()
         end
     end
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
-            [cite_start]if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0 [cite: 29, 30]
+            if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0
             elseif v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
             if v:IsA("MeshPart") then v.Transparency = 1 end
         end
@@ -412,7 +411,7 @@ local function ExecuteBlatantCycle()
     -- Important: Using exact nil arguments as per your request
     local timestamp = os.time() + os.clock()
 
-    -- We use task.spawn so the main loop doesn't get blocked by the internal delays of this cycle
+    -- We use task.spawn so the main loop doesn't get blocked
     task.spawn(function()
         -- 1. Fast Spam Phase
         for i = 1, 4 do
@@ -469,7 +468,7 @@ local function StartBlatantFishing()
     DisableNativeAutoFish()
     task.wait(0.5)
 
-    -- Force Equip ONCE (We disable the auto-equip loop in Blatant to avoid conflicts)
+    -- Force Equip ONCE 
     if MasterConfig.AutoEquip and lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
          pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
          task.wait(0.5)
@@ -527,10 +526,10 @@ function StartFishingRouter()
         StartInstantFishing()
     end
 
-    -- [AUTO EQUIP] -> Disabled in BLATANT mode to prevent tool desync
+    -- [AUTO EQUIP] -> RE-ENABLED FOR ALL MODES (User Request)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-             if MasterConfig.AutoEquip and FishingState.CurrentMode ~= "BLATANT" then
+             if MasterConfig.AutoEquip then
                 if lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
                     pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
                 end
@@ -868,7 +867,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v6.2 (Blatant Fix)"
+    toggleBtn.Text = "W - v6.3 (Equip Fix)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
