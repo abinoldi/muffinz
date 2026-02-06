@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V6.4 (BLATANT EXACT COPY)
+-- # ULTIMATE HUB: RE-FARM V6.7 (LEGIT HOOK INTEGRATED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -12,7 +12,9 @@ local Services = {
     ReplicatedStorage = game:GetService("ReplicatedStorage"),
     RunService = game:GetService("RunService"),
     HttpService = game:GetService("HttpService"),
-    CoreGui = game:GetService("CoreGui")
+    CoreGui = game:GetService("CoreGui"),
+    Lighting = game:GetService("Lighting"),
+    UserInputService = game:GetService("UserInputService")
 }
 
 local lp = Services.Players.LocalPlayer
@@ -21,11 +23,14 @@ local req = request or http_request or syn.request
 -- [2] DEFAULT CONFIG
 local MasterConfig = {
     FishingEnabled = true,
-    FishingMode = "INSTANT", -- Options: "INSTANT" or "BLATANT"
+    FishingMode = "LEGIT", -- Options: "LEGIT", "INSTANT", "BLATANT"
     AutoEquip = true,
-    CatchDelay = 1.0,        -- Delay for INSTANT
     
-    -- BLATANT SETTINGS (Sesuai snippet kamu)
+    -- [NEW] LEGIT SETTINGS (From your Standalone Script)
+    LegitReactionTimeDelay = 0.15,
+    
+    -- OLD SETTINGS
+    CatchDelay = 1.0,  
     BlatantCastDelay = 1.97, 
     BlatantCompleteDelay = 1.0, 
     
@@ -53,7 +58,8 @@ local FishingState = {
     CurrentMode = "NONE", 
     Teleporting = false, 
     TotalCoins = 0, 
-    SessionEarnings = 0 
+    SessionEarnings = 0,
+    HooksInstalled = false -- [NEW] Track Hook Status
 }
 local TradingState = { IsTrading = false, Thread = nil }
 local FishingThreads = {}
@@ -206,7 +212,8 @@ local function GetFishNameAndRarity(item)
         end)
     end
     if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
-    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity 
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
     elseif itemData and itemData.Probability and TierUtility then 
         pcall(function() rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name end) 
     end
@@ -238,10 +245,10 @@ UpdateStatsFromInventory = function()
     if inv then
         for _, items in pairs(inv) do
             for _, item in ipairs(items) do
-                 local name, r = GetFishNameAndRarity(item)
-                 local mut = GetMutation(item)
-                 if tostring(r):upper() == "SECRET" then secretCount = secretCount + 1 end
-                 if name == "Ruby" and mut == "Gemstone" then rubyGemCount = rubyGemCount + 1 end
+                local name, r = GetFishNameAndRarity(item)
+                local mut = GetMutation(item)
+                if tostring(r):upper() == "SECRET" then secretCount = secretCount + 1 end
+                if name == "Ruby" and mut == "Gemstone" then rubyGemCount = rubyGemCount + 1 end
             end
         end
     end
@@ -311,10 +318,9 @@ local function ApplyExtremePotato()
     end)
     DisableAnimations()
     pcall(function()
-        local Lighting = game:GetService("Lighting")
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        Lighting.Brightness = 0
+        Services.Lighting.GlobalShadows = false
+        Services.Lighting.FogEnd = 9e9
+        Services.Lighting.Brightness = 0
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
             workspace.Terrain.WaterTransparency = 1
@@ -322,14 +328,19 @@ local function ApplyExtremePotato()
         end
     end)
     for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
-        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v:Destroy()
+        if v:IsA("BasePart") then 
+            v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then 
+            v:Destroy()
         end
     end
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
-            if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0
-            elseif v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
+            if v:IsA("BasePart") then 
+                v.Transparency = 1; v.Reflectance = 0
+            elseif v:IsA("Decal") or v:IsA("Texture") then 
+                v:Destroy() 
+            end
             if v:IsA("MeshPart") then v.Transparency = 1 end
         end
     end
@@ -343,11 +354,11 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- FISHING SYSTEM (BLATANT + INSTANT)
+-- FISHING SYSTEM (BLATANT + INSTANT + LEGIT)
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted")
+local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
 local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
 local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
@@ -365,9 +376,9 @@ local function PreciseWait(seconds)
     end
 end
 
--- // --- DISABLE NATIVE --- //
+-- // --- 1. NATIVE KILLER (Untuk Instant & Blatant) --- //
 local function DisableNativeAutoFish()
-    -- 1. Client Controller
+    -- Fungsi ini mematikan controller game agar kita bisa spam remote sendiri (Brutal Mode)
     local success, AutoFishCtrl = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
     end)
@@ -376,20 +387,63 @@ local function DisableNativeAutoFish()
         if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
         AutoFishCtrl.Start = function() return end 
     end
-    -- 2. UI Controller
+    
     local s2, FishingController = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.FishingController) 
     end)
     if s2 and FishingController then
+        -- Kita matikan fungsi native agar tidak bentrok saat Instant Mode
         FishingController.RequestChargeFishingRod = function() end
         FishingController.SendFishingRequestToServer = function() return false end
     end
-    -- 3. Server State
+    
     if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
-    print("[-] Native Auto-Fish Disabled.")
+    print("[-] Native Controller Disabled (Brutal Mode)")
 end
 
--- // --- INSTANT FISHING LOGIC --- //
+-- // --- 2. LEGIT HOOK (Dari Script Standalone) --- //
+local function EnableLegitHook()
+    if FishingState.HooksInstalled then return end
+    
+    local success, FishingController = pcall(function() 
+        return require(Services.ReplicatedStorage.Controllers.FishingController) 
+    end)
+    
+    if success and FishingController then
+        local oldStart = FishingController.FishingRodStarted
+        
+        -- HOOK: SAAT MINIGAME MULAI
+        FishingController.FishingRodStarted = function(self, ...)
+            oldStart(self, ...) -- Biarkan UI Game berjalan normal
+            
+            if MasterConfig.FishingEnabled and MasterConfig.FishingMode == "LEGIT" then
+                task.spawn(function()
+                    -- LOGIKA STANDALONE (ReactionTime = 0.15)
+                    task.wait(MasterConfig.LegitReactionTimeDelay or 0.15)
+                    
+                    -- Kirim sinyal menang
+                    if RE_FishingCompleted then
+                        pcall(function() RE_FishingCompleted:InvokeServer() end)
+                    end
+                    
+                    -- Bersihkan input
+                    if RF_CancelFishingInputs then
+                        pcall(function() RF_CancelFishingInputs:InvokeServer() end)
+                    end
+                end)
+            end
+        end
+        
+        FishingState.HooksInstalled = true
+        print("✅ [System] Legit Hooks Installed! (Safe Mode Active)")
+    else
+        warn("❌ [System] Gagal install hooks. Controller tidak ditemukan.")
+    end
+end
+
+-- // --- MODES EXECUTION --- //
+
+-- [MODE 1] INSTANT (Loop Based)
 local function RunInstantFish()
     local currentDelay = MasterConfig.CatchDelay or 1.0
     pcall(function() if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end end)
@@ -401,32 +455,17 @@ local function RunInstantFish()
     pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
 end
 
--- // --- BLATANT FISHING LOGIC (THE EXACT SNIPPET COPY) --- //
+-- [MODE 2] BLATANT (Loop Based)
 local function RunBlatantCycle()
-    -- Logic ini persis meniru "blatantFishv1" dari script kamu
-    -- Dijalankan via task.spawn di loop utama, jadi "Async" (tidak menunggu)
     task.spawn(function()
         local timestamp = os.time() + os.clock()
-        
-        -- Spam Charge & Start (4x)
         for i = 1, 4 do
             task.wait(0.035)
             if not FishingState.IsFishing then break end
-            
-            task.spawn(function()
-                -- Args: nil, nil, nil, timestamp (SESUAI REQUEST)
-                if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(nil, nil, nil, timestamp) end
-            end)
-            task.spawn(function()
-                -- Args: 1, 1, timestamp (SESUAI REQUEST)
-                if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(1, 1, timestamp) end
-            end)
+            task.spawn(function() if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(nil, nil, nil, timestamp) end end)
+            task.spawn(function() if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(1, 1, timestamp) end end)
         end
-        
-        -- Wait Complete Delay
         task.wait(MasterConfig.BlatantCompleteDelay or 1.0)
-        
-        -- Catch
         if FishingState.IsFishing then
             task.spawn(function() if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end end)
             task.spawn(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
@@ -435,9 +474,9 @@ local function RunBlatantCycle()
 end
 
 local function StartInstantFishing()
-    print("🎣 [Info] Starting INSTANT Fishing Mode")
+    print("🎣 [Info] Starting INSTANT Mode (Brutal)")
+    DisableNativeAutoFish() -- Matikan sistem game
     FishingState.CurrentMode = "INSTANT"
-    
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do 
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
@@ -449,27 +488,38 @@ local function StartInstantFishing()
 end
 
 local function StartBlatantFishing()
-    print("🎣 [Info] Starting BLATANT Fishing Mode")
+    print("🎣 [Info] Starting BLATANT Mode (Spam)")
+    DisableNativeAutoFish() -- Matikan sistem game
     FishingState.CurrentMode = "BLATANT"
-    
-    -- 1. Matikan Native
-    DisableNativeAutoFish()
-    task.wait(0.5)
-
-    -- 2. Warmup Spam (7x) - Persis Snippet
     local timestamp = os.time() + os.clock()
-    for i = 1, 7 do
+    for i = 1, 7 do -- Warmup
         task.wait(0.035)
         task.spawn(function() if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(nil, nil, nil, timestamp) end end)
         task.spawn(function() if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(1, 1, timestamp) end end)
     end
-    task.wait(0.1)
-
-    -- 3. Main Loop
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            RunBlatantCycle() -- Jalan di thread terpisah (Async)
-            task.wait(MasterConfig.BlatantCastDelay or 1.97) -- Interval Loop
+            RunBlatantCycle()
+            task.wait(MasterConfig.BlatantCastDelay or 1.97)
+        end
+    end))
+end
+
+-- [MODE 3] LEGIT (Hook Based - EXACT STANDALONE COPY)
+local function StartLegitFishing()
+    print("🎣 [Info] Starting LEGIT Mode (Hook Controller)")
+    FishingState.CurrentMode = "LEGIT"
+    
+    -- 1. Install Hooks (Hanya sekali, sesuai script standalone)
+    EnableLegitHook() 
+    
+    -- 2. Aktifkan status "Auto Fishing" native (Agar game mengira kita pakai fitur resmi)
+    table.insert(FishingThreads, task.spawn(function()
+        while FishingState.IsFishing do
+            if RF_UpdateAutoFishingState then
+                pcall(function() RF_UpdateAutoFishingState:InvokeServer(true) end)
+            end
+            task.wait(3.0) -- Refresh status setiap 3 detik
         end
     end))
 end
@@ -479,13 +529,15 @@ function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
-    if MasterConfig.FishingMode == "BLATANT" then
+    if MasterConfig.FishingMode == "LEGIT" then
+        StartLegitFishing()
+    elseif MasterConfig.FishingMode == "BLATANT" then
         StartBlatantFishing()
     else
         StartInstantFishing()
     end
 
-    -- [THREAD 1] AUTO EQUIP (SELALU AKTIF - FIX MASALAH ROD TIDAK DIPEGANG)
+    -- [THREAD 1] AUTO EQUIP (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoEquip then
@@ -493,11 +545,11 @@ function StartFishingRouter()
                     pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
                 end
             end
-            task.wait(0.5) 
+            task.wait(2.0)
         end
     end))
 
-    -- [THREAD 2] AUTO SELL
+    -- [THREAD 2] AUTO SELL (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -511,7 +563,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- [THREAD 3] AUTO FAVORITE
+    -- [THREAD 3] AUTO FAVORITE (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -519,19 +571,23 @@ function StartFishingRouter()
                 if inv then
                     for _, items in pairs(inv) do
                          for _, item in ipairs(items) do
-                             if item.UUID then
+                            if item.UUID then
                                 local itemName, rarity = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
                                 local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
                                 local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby")
                                 local isRare = string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage")
+                                
                                 if (isRuby or isRare) and not isLocked then
                                       task.spawn(function()
-                                        for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID); task.wait(0.05) end
-                                    end)
+                                          for i = 1, 3 do 
+                                              RE_FavoriteItem:FireServer(item.UUID)
+                                              task.wait(0.05) 
+                                          end
+                                      end)
                                 end
                             end
-                         end
+                        end
                     end
                 end
             end
@@ -539,7 +595,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- [THREAD 4] UNFAVORITE RUBY
+    -- [THREAD 4] UNFAVORITE RUBY (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -570,6 +626,9 @@ function StopFishing()
     
     pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
     
+    -- Matikan status native auto fish jika pakai mode Legit
+    if RF_UpdateAutoFishingState then pcall(function() RF_UpdateAutoFishingState:InvokeServer(false) end) end
+
     for _, thread in ipairs(FishingThreads) do
         if thread then task.cancel(thread) end
     end
@@ -619,7 +678,10 @@ local function SpawnMutationTotem()
     if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
     local success = false
     if uuid then
-        pcall(function() RE_SpawnTotem:FireServer(uuid); success = true end)
+        pcall(function() 
+            RE_SpawnTotem:FireServer(uuid)
+            success = true 
+        end)
         if success then
             local originalCF = hrp.CFrame
             hrp.CFrame = originalCF + Vector3.new(0, 5, 0)
@@ -757,7 +819,7 @@ local function StartWeatherAutoBuy()
             if status == "OK" then
                 local activeStr = table.concat(active, ", "):lower()
                 for _, target in ipairs(WeatherTargets) do
-                     if not activeStr:find(target:lower()) then
+                    if not activeStr:find(target:lower()) then
                         if RF_PurchaseWeatherEvent then
                              print("⚡ [Weather-Smart] Membeli: " .. target)
                              pcall(function() RF_PurchaseWeatherEvent:InvokeServer(target) end)
@@ -842,7 +904,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v6.4 (Full)"
+    toggleBtn.Text = "W - v6.7 (Legit Hook)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -988,6 +1050,7 @@ if MasterConfig.WebhookEnabled then
                             local dName = n
                             if mut ~= "None" then dName = "["..mut.."] "..n end
                             exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                            
                             table.insert(exportData.Details, {
                                 Name = dName, Rarity = r, Weight = item.Metadata and item.Metadata.Weight or 0,
                                 Mutation = mut, UniqueId = item.UUID or item.Id
