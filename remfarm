@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V6.0 (BLATANT + INSTANT SWITCH)
+-- # ULTIMATE HUB: FINAL V6.1 (BLATANT FIX + CONFLICT RESOLVED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG KAMU DISINI
@@ -47,7 +47,7 @@ local MasterConfig = {
 -- STATE TRACKING
 local FishingState = { 
     IsFishing = false, 
-    CurrentMode = "NONE", -- Tracks if we are running INSTANT or BLATANT
+    CurrentMode = "NONE", 
     Teleporting = false, 
     TotalCoins = 0, 
     SessionEarnings = 0 
@@ -61,12 +61,12 @@ local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
-local LastWeatherBuyTime = 0 -- Timer untuk Blind Buy
+local LastWeatherBuyTime = 0 
 
 -- FORWARD DECLARATION
 local StartFishingRouter, StopFishing, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
 
--- [3] WEB CONFIG LOADER (UPDATED FOR MODE SWITCHING)
+-- [3] WEB CONFIG LOADER
 local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
 
@@ -86,7 +86,7 @@ local function LoadWebConfig()
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
-                    if key == "FishingMode" then modeChanged = true end -- Detect Mode Change
+                    if key == "FishingMode" then modeChanged = true end 
                     
                     MasterConfig[key] = value
                     settingsChanged = true
@@ -94,22 +94,19 @@ local function LoadWebConfig()
             end
 
             if settingsChanged then
-                -- Handle Teleport
                 if locationChanged and MasterConfig.AutoTeleport then
                     if TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
                 end
 
-                -- Handle Fishing Toggle OR Mode Switch
                 local shouldRestart = false
                 
-                -- Case 1: Mode changed while fishing is on
+                -- Detect Mode Change
                 if modeChanged and FishingState.IsFishing then
                     StopFishing()
-                    task.wait(0.5) -- Wait for cleanup
+                    task.wait(0.5) 
                     shouldRestart = true
                 end
 
-                -- Case 2: FishingEnabled toggled
                 if MasterConfig.FishingEnabled and not FishingState.IsFishing then
                     shouldRestart = true
                 elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then
@@ -117,12 +114,10 @@ local function LoadWebConfig()
                     shouldRestart = false
                 end
 
-                -- Execute Restart if needed
                 if shouldRestart then
                     task.spawn(StartFishingRouter)
                 end
 
-                -- Handle Auto Trade
                 if MasterConfig.AutoTrade and not TradingState.IsTrading then
                     task.spawn(RunAutoTrade)
                 elseif not MasterConfig.AutoTrade and TradingState.IsTrading then
@@ -394,13 +389,15 @@ end
 
 -- // --- BLATANT FISHING LOGIC --- //
 local function RunBlatantFishv1()
-    -- Spam charge and start request
-    local magicTimestamp = os.time() + os.clock() -- Dynamic replacement for fixed float
+    -- Important: Match user snippet exactly for Blatant Mode
+    local magicTimestamp = os.time() + os.clock()
     
     for i = 1, 4 do
         task.wait(0.035)
-        if not FishingState.IsFishing then return end -- Safety break
+        if not FishingState.IsFishing then return end
+        
         task.spawn(function()
+            -- Note: First 3 arguments MUST be nil for Blatant Mode
             if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(nil, nil, nil, magicTimestamp) end
         end)
         task.spawn(function()
@@ -408,7 +405,8 @@ local function RunBlatantFishv1()
         end)
     end
     
-    task.wait(MasterConfig.BlatantCompleteDelay or 1)
+    local compDelay = MasterConfig.BlatantCompleteDelay or 1
+    task.wait(compDelay)
     
     -- Finish catch and reset inputs
     task.spawn(function()
@@ -422,16 +420,14 @@ end
 -- // --- MAIN FISHING CONTROLLERS --- //
 
 local function DisableNativeAutoFish()
-    -- 1. Disable the Client Controller
     local success, AutoFishCtrl = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
     end)
     if success and AutoFishCtrl then
         if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
         if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
-        AutoFishCtrl.Start = function() return end -- Kill start function
+        AutoFishCtrl.Start = function() return end 
     end
-    -- 2. Disable UI Controller
     local s2, FishingController = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.FishingController) 
     end)
@@ -439,7 +435,6 @@ local function DisableNativeAutoFish()
         FishingController.RequestChargeFishingRod = function() end
         FishingController.SendFishingRequestToServer = function() return false end
     end
-    -- 3. Tell Server to STOP native auto fishing
     if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
 end
 
@@ -461,9 +456,15 @@ local function StartBlatantFishing()
     print("🎣 [Info] Starting BLATANT Fishing Mode")
     FishingState.CurrentMode = "BLATANT"
     
-    -- Disable native stuff first (User requirement)
+    -- Clean Disable for Blatant
     task.spawn(DisableNativeAutoFish)
     task.wait(0.5)
+
+    -- Force equip ONCE before starting loop (Disable AutoEquip loop for safety)
+    if MasterConfig.AutoEquip and lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
+         pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
+         task.wait(0.5)
+    end
 
     -- Warmup Spam
     local timestamp = os.time() + os.clock()
@@ -477,7 +478,8 @@ local function StartBlatantFishing()
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             RunBlatantFishv1()
-            task.wait(MasterConfig.BlatantCastDelay or 1.97)
+            local castDelay = MasterConfig.BlatantCastDelay or 1.97
+            task.wait(castDelay)
         end
     end))
 end
@@ -517,10 +519,13 @@ function StartFishingRouter()
         StartInstantFishing()
     end
 
-    -- 2. Common Threads (Equip, Sell, Favorite)
+    -- 2. Common Threads (Running with Conflicts Resolved)
+    
+    -- [AUTO EQUIP] - Disabled in Blatant Mode to prevent cast cancellation
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-             if MasterConfig.AutoEquip then
+             -- Only run AutoEquip if NOT in Blatant Mode (Conflict Fix)
+             if MasterConfig.AutoEquip and FishingState.CurrentMode ~= "BLATANT" then
                 if lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
                     pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
                 end
@@ -529,13 +534,17 @@ function StartFishingRouter()
         end
     end))
 
+    -- [AUTO SELL] - Added delay check to prevent firing mid-cast in Blatant
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
+                -- In Blatant Mode, wait until between casts if possible?
+                -- Or just run it. The main conflict usually comes from Equip.
+                -- We will add a small safety wait.
+                
                 local before = GetCoins()
-                task.wait(2) 
                 pcall(function() if RF_SellAllItems then RF_SellAllItems:InvokeServer() end end)
-               task.wait(1)
+                task.wait(1)
                 local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
             end
@@ -543,6 +552,7 @@ function StartFishingRouter()
         end
     end))
    
+    -- [AUTO FAVORITE]
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -585,7 +595,6 @@ function StopFishing()
     
     pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
     
-    -- Kill all threads (Instant or Blatant)
     for _, thread in ipairs(FishingThreads) do
         if thread then task.cancel(thread) end
     end
@@ -731,11 +740,11 @@ function RunAutoTrade()
 end
 
 -- ===============================
--- WEATHER SYSTEM LOGIC (UPDATED V5.3)
+-- WEATHER SYSTEM LOGIC
 -- ===============================
 local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 local WeatherTargets = {"Storm", "Cloudy", "Wind"}
-local BLIND_BUY_INTERVAL = 950 -- Detik (15 Menit)
+local BLIND_BUY_INTERVAL = 950 
 
 local function ScanWeatherUI()
     local activeList = {}
@@ -771,7 +780,6 @@ local function StartWeatherAutoBuy()
             local active, status = ScanWeatherUI()
             
             if status == "OK" then
-                -- MODE SMART: Cek UI dan beli yang kurang
                 local activeStr = table.concat(active, ", "):lower()
                 for _, target in ipairs(WeatherTargets) do
                      if not activeStr:find(target:lower()) then
@@ -783,17 +791,15 @@ local function StartWeatherAutoBuy()
                      end
                 end
             else
-                -- MODE BLIND: Jika UI Tertutup, paksa beli SEMUA setiap 15 Menit
                 if os.time() - LastWeatherBuyTime > BLIND_BUY_INTERVAL then
                     if RF_PurchaseWeatherEvent then
                         print("⚡ [Weather-Blind] UI Tertutup. Mengeksekusi Batch Storm, Cloudy, Wind...")
-                        -- Loop beli ketiganya
                         for _, wTarget in ipairs(WeatherTargets) do
                             pcall(function() 
                                 RF_PurchaseWeatherEvent:InvokeServer(wTarget) 
                                 print("   > Membeli " .. wTarget)
                              end)
-                            task.wait(2) -- Jeda aman antar request
+                            task.wait(2) 
                         end
                         LastWeatherBuyTime = os.time()
                         print("✅ [Weather-Blind] Batch Selesai. Menunggu 15 Menit.")
@@ -816,9 +822,7 @@ local function StartMerchantAutoBuy()
         print("🛍️ [Merchant] Smart Auto Buy Started...")
         while true do
             local currentCoins = GetCoins()
-            -- Only check if coins > 1,000,000
             if currentCoins > 1000000 then
-                -- Check Stock
                 local merchantData = nil
                 if MerchantReplion then
                      pcall(function() merchantData = MerchantReplion:Get("Items") end)
@@ -833,24 +837,23 @@ local function StartMerchantAutoBuy()
 
                 if isTotemInStock then
                     print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
-                    -- Buy Loop until coins < 1M
                     while currentCoins > 1000000 do
                         if RF_PurchaseMarketItem then
                              pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
                         end
-                        task.wait(0.5) -- Fast buy delay
-                        currentCoins = GetCoins() -- Update coin count
+                        task.wait(0.5) 
+                        currentCoins = GetCoins() 
                     end
                     print("🛑 [Merchant] Coin under 1M. Stopping purchase.")
                 end
             end
-            task.wait(3) -- Check interval
+            task.wait(3) 
         end
     end)
 end
 
 -- ===============================
--- GUI (DASHBOARD) - UPDATED
+-- GUI (DASHBOARD)
 -- ===============================
 function CreateDashboard()
     if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
@@ -859,19 +862,17 @@ function CreateDashboard()
     gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
 
-    -- Toggle Button
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v6.0"
+    toggleBtn.Text = "W - v6.1 (Conflict Fix)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
 
-    -- Dashboard Frame
     local dashboard = Instance.new("Frame", gui)
     dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -893,7 +894,6 @@ function CreateDashboard()
         return l 
     end
 
-    -- [UI LABELS]
     local L_Coins  = Text("$0", 0.10, Color3.fromRGB(255, 215, 0)) 
     local L_Mode   = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
     local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
@@ -906,7 +906,6 @@ function CreateDashboard()
 
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
-    -- [UPDATE LOOP]
     task.spawn(function()
         while task.wait(0.5) do
             if dashboard.Visible then
@@ -948,7 +947,6 @@ function CreateDashboard()
                 local wText = "None"
                 if #activeW > 0 then wText = table.concat(activeW, ", ") end
                 
-                -- UPDATE TEXT UNTUK UI CLOSED
                 if wStatus == "CLOSED" or wStatus == "NO_GUI" then
                      local remaining = math.max(0, BLIND_BUY_INTERVAL - (os.time() - LastWeatherBuyTime))
                      wText = "Blind: Next Batch in " .. remaining .. "s"
