@@ -1,10 +1,10 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: FINAL V6.2 (BLATANT ASYNC FIX)
+-- # ULTIMATE HUB: FINAL V6.2 (FULL RELEASE)
 -- ======================================================
 
--- [1] CONFIG URL
+-- [1] SETUP URL CONFIG
 local OnlineConfigUrl = "http://43.134.116.2:5000/config.json"
 
 local Services = {
@@ -18,14 +18,14 @@ local Services = {
 local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
 
--- [2] CONFIG
+-- [2] DEFAULT CONFIG
 local MasterConfig = {
     FishingEnabled = true,
-    FishingMode = "INSTANT", -- "INSTANT" or "BLATANT"
+    FishingMode = "INSTANT", -- Options: "INSTANT" or "BLATANT"
     AutoEquip = true,
-    CatchDelay = 1.0,      
-    BlatantCastDelay = 1.97, -- Default from your snippet
-    BlatantCompleteDelay = 1, 
+    CatchDelay = 1.0,        -- Delay for Instant Mode
+    BlatantCastDelay = 1.97, -- Delay for Blatant Mode
+    BlatantCompleteDelay = 1.0, -- Completion delay for Blatant
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
@@ -44,13 +44,19 @@ local MasterConfig = {
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
--- STATE
-local FishingState = { IsFishing = false, CurrentMode = "NONE", Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
+-- STATE TRACKING
+local FishingState = { 
+    IsFishing = false, 
+    CurrentMode = "NONE", 
+    Teleporting = false, 
+    TotalCoins = 0, 
+    SessionEarnings = 0 
+}
 local TradingState = { IsTrading = false, Thread = nil }
 local FishingThreads = {}
 local PotatoLoopThread = nil
 
--- GLOBALS
+-- GLOBAL VARIABLES
 local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
@@ -60,12 +66,17 @@ local LastWeatherBuyTime = 0
 -- FORWARD DECLARATION
 local StartFishingRouter, StopFishing, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
 
--- [3] CONFIG LOADER
+-- [3] WEB CONFIG LOADER
 local function LoadWebConfig()
     if not OnlineConfigUrl or OnlineConfigUrl == "" or OnlineConfigUrl:find("example.com") then return end
-    local success, response = pcall(function() return game:HttpGet(OnlineConfigUrl, true) end)
+
+    local success, response = pcall(function()
+        return game:HttpGet(OnlineConfigUrl, true)
+    end)
+
     if success then
         local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
+    
         if decodeSuccess then
             local settingsChanged = false
             local locationChanged = false
@@ -76,6 +87,7 @@ local function LoadWebConfig()
                     if key == "SelectedLocation" then locationChanged = true end
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
                     if key == "FishingMode" then modeChanged = true end 
+                    
                     MasterConfig[key] = value
                     settingsChanged = true
                 end
@@ -86,7 +98,9 @@ local function LoadWebConfig()
                     if TeleportToFishingLocation then task.spawn(TeleportToFishingLocation) end
                 end
 
+                -- Logic to restart fishing if Mode changes or Enabled toggle changes
                 local shouldRestart = false
+                
                 if modeChanged and FishingState.IsFishing then
                     StopFishing()
                     task.wait(0.5) 
@@ -100,7 +114,9 @@ local function LoadWebConfig()
                     shouldRestart = false
                 end
 
-                if shouldRestart then task.spawn(StartFishingRouter) end
+                if shouldRestart then
+                    task.spawn(StartFishingRouter)
+                end
 
                 if MasterConfig.AutoTrade and not TradingState.IsTrading then
                     task.spawn(RunAutoTrade)
@@ -113,48 +129,57 @@ local function LoadWebConfig()
     end
 end
 
--- ===============================
--- DATASETS
--- ===============================
+-- ======================================================
+-- [DATASET LOKASI FISHING LENGKAP]
+-- ======================================================
 local FishingLocations = {
-    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
-    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
-    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
-    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
-    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
-    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
-    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
-    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
-    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
-    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
-    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
-    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
-    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
-    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
-    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
-    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},
-    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
-    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
-    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
-    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
+    [cite_start]["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696) [cite: 10]},
+    [cite_start]["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176) [cite: 10]},
+    [cite_start]["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342) [cite: 10]},
+    [cite_start]["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863) [cite: 10]},
+    [cite_start]["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000) [cite: 10]},
+    [cite_start]["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229) [cite: 10]},
+    [cite_start]["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615) [cite: 10]},
+    [cite_start]["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000) [cite: 10]},
+    [cite_start]["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994) [cite: 10, 11]},
+    [cite_start]["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949) [cite: 11]},
+    [cite_start]["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000) [cite: 11]},
+    [cite_start]["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11]},
+    [cite_start]["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11]},
+    [cite_start]["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11]},
+    [cite_start]["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000) [cite: 11, 12]},
+    [cite_start]["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458) [cite: 12]},
+    [cite_start]["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433) [cite: 12]},
+    [cite_start]["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143) [cite: 12]},
+    [cite_start]["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955) [cite: 12]},
+    [cite_start]["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951) [cite: 12]},
+    [cite_start]["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998) [cite: 12]},
+    [cite_start]["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925) [cite: 13]},
+    [cite_start]["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521) [cite: 13]},
+    [cite_start]["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520) [cite: 13]},
+    [cite_start]["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999) [cite: 13]},
 }
 
 -- ===============================
--- HELPERS & REMOTES
+-- GLOBAL SERVICES & BYPASSES
 -- ===============================
-local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
-local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
-local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
-local PlayerData = Replion:WaitReplion("Data", 10)
-local MerchantReplion = Replion:WaitReplion("Merchant", 10)
+pcall(function()
+    for i, v in pairs(getconnections(lp.Idled)) do
+        if v.Disable then v:Disable() end
+    end
+end)
+
+-- ===============================
+-- SHARED MODULES & HELPERS
+-- ===============================
+[cite_start]local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client [cite: 13, 14]
+[cite_start]local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility) [cite: 14]
+[cite_start]local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility) [cite: 14]
+[cite_start]local PlayerData = Replion:WaitReplion("Data", 10) [cite: 14]
+[cite_start]local MerchantReplion = Replion:WaitReplion("Merchant", 10) [cite: 14]
 
 local function GetRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
+    [cite_start]local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"} [cite: 14]
     local current = Services.ReplicatedStorage
     for _, child in ipairs(path) do
         current = current:WaitForChild(child, 5)
@@ -164,32 +189,59 @@ local function GetRemote(name)
 end
 
 local function GetFishNameAndRarity(item)
-    local name, rarity = item.Identifier or "Unknown", "COMMON"
-    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity end
+    [cite_start]local name = item.Identifier or "Unknown" [cite: 14]
+    [cite_start]local rarity = item.Metadata and item.Metadata.Rarity or "COMMON" [cite: 14]
+    local itemID = item.Id
+    local itemData
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+            end
+        end)
+    end
+    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+    if item.Metadata and item.Metadata.Rarity then rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        pcall(function() rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name end) 
+    end
     return name, rarity
 end
 
 local function GetMutation(item)
     if not item.Metadata then return "None" end
-    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+    [cite_start]if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end [cite: 17]
     if item.Metadata.Shiny == true then return "Shiny" end
     return "None"
 end
 
-local function FormatNumber(n) return tostring(n):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "") end
-local function FormatTime(s) return string.format("%02dh %02dm %02ds", math.floor(s/3600), math.floor((s%3600)/60), s%60) end
-local function GetCoins() return PlayerData and (PlayerData:Get("Coins") or 0) or 0 end
+local function FormatNumber(n)
+    return tostring(n):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "")
+end
 
+local function FormatTime(seconds)
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = seconds % 60
+    return string.format("%02dh %02dm %02ds", h, m, s)
+end
+
+-- ===============================
+-- HELPER: UPDATE STATS (SECRET & GEM)
+-- ===============================
 UpdateStatsFromInventory = function()
-    local secretCount, rubyGemCount = 0, 0
-    local inv = PlayerData:Get("Inventory")
+    local secretCount = 0
+    local rubyGemCount = 0
+    [cite_start]local inv = PlayerData:Get("Inventory") [cite: 18]
     if inv then
         for _, items in pairs(inv) do
             for _, item in ipairs(items) do
                  local name, r = GetFishNameAndRarity(item)
                  local mut = GetMutation(item)
-                 if tostring(r):upper() == "SECRET" then secretCount = secretCount + 1 end
-                 if name == "Ruby" and mut == "Gemstone" then rubyGemCount = rubyGemCount + 1 end
+                 [cite_start]if tostring(r):upper() == "SECRET" then secretCount = secretCount + 1 end [cite: 19]
+                 [cite_start]if name == "Ruby" and mut == "Gemstone" then rubyGemCount = rubyGemCount + 1 end [cite: 19]
             end
         end
     end
@@ -198,7 +250,100 @@ UpdateStatsFromInventory = function()
 end
 
 -- ===============================
--- FISHING SYSTEM (BLATANT FIX)
+-- DISCORD WEBHOOK LOGIC
+-- ===============================
+local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
+    [cite_start]if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end [cite: 19, 20]
+    if not req then return end
+    local mutationText = (mutation ~= "" and mutation ~= "None" and mutation or "None")
+    req({
+        Url = MasterConfig.DiscordWebhookUrl,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = Services.HttpService:JSONEncode({
+            username = "Webhak Enok",
+            embeds = {{
+                [cite_start]title = "🚨 " .. tostring(rarity) .. " FISH CAUGHT! 🚨", [cite: 21, 22]
+                color = 16711680,
+                fields = {
+                    { name = "Pemain", value = "`" .. lp.Name .. "`", inline = true },
+                    { name = "Ikan", value = "**" .. fishName .. "**", inline = true },
+                    { name = "Rarity", value = "`" .. rarity .. "`", inline = true },
+                    { name = "Mutasi", value = "`" .. mutationText .. "`", inline = true },
+                    { name = "Berat", value = "`" .. string.format("%.2fkg", weight or 0) .. "`", inline = true }
+                },
+                footer = { text = "Ultimate Hub - Webhak Enok" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }}
+        })
+    })
+end
+
+-- ===============================
+-- EXTREME INVISIBLE POTATO MODE
+-- ===============================
+local VFXControllerModule
+pcall(function()
+    [cite_start]VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) [cite: 25]
+end)
+
+local function DisableAnimations()
+    local character = lp.Character
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then animateScript.Enabled = false end
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if animator then animator:Destroy() end
+end
+
+local function ApplyExtremePotato()
+    if VFXControllerModule then
+        [cite_start]VFXControllerModule.Handle = function(...) return nil end [cite: 26]
+        if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
+    end
+    pcall(function()
+        local CutsceneController = require(Services.ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+        if CutsceneController and CutsceneController.Play then CutsceneController.Play = function() return end end
+    end)
+    DisableAnimations()
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        [cite_start]Lighting.GlobalShadows = false [cite: 27]
+        Lighting.FogEnd = 9e9
+        Lighting.Brightness = 0
+        if workspace.Terrain then
+            workspace.Terrain.WaterWaveSize = 0
+            workspace.Terrain.WaterTransparency = 1
+            workspace.Terrain.WaterReflectance = 0
+        end
+    end)
+    for _, v in ipairs(workspace:GetDescendants()) do
+        [cite_start]if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false [cite: 28, 29]
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v:Destroy()
+        end
+    end
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetDescendants()) do
+            [cite_start]if v:IsA("BasePart") then v.Transparency = 1; v.Reflectance = 0 [cite: 29, 30]
+            elseif v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
+            if v:IsA("MeshPart") then v.Transparency = 1 end
+        end
+    end
+    if setfpscap then pcall(function() setfpscap(20) end) end
+end
+
+local function StartPotatoLoop()
+    if PotatoLoopThread then return end
+    ApplyExtremePotato()
+    PotatoLoopThread = task.spawn(function() while task.wait(5) do ApplyExtremePotato() end end)
+end
+
+-- ===============================
+-- FISHING SYSTEM (BLATANT & INSTANT)
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
@@ -209,19 +354,30 @@ local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
-local function PreciseWait(seconds)
-    local targetTime = os.clock() + seconds
-    while os.clock() < targetTime do Services.RunService.Heartbeat:Wait() end
+local function GetCoins()
+    return PlayerData and (PlayerData:Get("Coins") or 0) or 0
 end
 
+local function PreciseWait(seconds)
+    local targetTime = os.clock() + seconds
+    while os.clock() < targetTime do
+        Services.RunService.Heartbeat:Wait()
+    end
+end
+
+-- // --- HELPER: DISABLE NATIVE AUTOFISH --- //
 local function DisableNativeAutoFish()
-    local success, AutoFishCtrl = pcall(function() return require(Services.ReplicatedStorage.Controllers.AutoFishingController) end)
+    local success, AutoFishCtrl = pcall(function() 
+        return require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
+    end)
     if success and AutoFishCtrl then
         if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
         if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
         AutoFishCtrl.Start = function() return end 
     end
-    local s2, FishingController = pcall(function() return require(Services.ReplicatedStorage.Controllers.FishingController) end)
+    local s2, FishingController = pcall(function() 
+        return require(Services.ReplicatedStorage.Controllers.FishingController) 
+    end)
     if s2 and FishingController then
         FishingController.RequestChargeFishingRod = function() end
         FishingController.SendFishingRequestToServer = function() return false end
@@ -229,78 +385,97 @@ local function DisableNativeAutoFish()
     if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
 end
 
--- // INSTANT MODE
+-- // --- INSTANT FISHING LOGIC --- //
 local function RunInstantFish()
-    pcall(function() if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end end)
-    pcall(function() if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(os.time() + os.clock()) end end)
-    pcall(function() if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end end)
-    PreciseWait(MasterConfig.CatchDelay or 1.0)
-    pcall(function() if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end end)
-    pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
+    local currentDelay = MasterConfig.CatchDelay or 1.0
+    pcall(function() 
+        if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(false) end
+    end)
+    local timestamp = os.time() + os.clock()
+    pcall(function() 
+        if RF_ChargeFishingRod then RF_ChargeFishingRod:InvokeServer(timestamp) end
+    end)
+    pcall(function() 
+        if RF_RequestFishingMinigameStarted then RF_RequestFishingMinigameStarted:InvokeServer(-139.63, 0.99) end
+    end)
+    PreciseWait(currentDelay)
+    pcall(function() 
+        if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end
+    end)
+    pcall(function() 
+        if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end
+    end)
 end
 
--- // BLATANT MODE (Replicated EXACTLY from your snippet)
+-- // --- BLATANT FISHING LOGIC (ASYNC FIX) --- //
 local function ExecuteBlatantCycle()
-    -- 1. Use the EXACT timestamp logic (or os.time+os.clock)
-    -- Your snippet used a fixed value, but dynamic is usually needed. 
-    -- We will use dynamic but ensure args are NIL as per snippet.
+    -- Important: Using exact nil arguments as per your request
     local timestamp = os.time() + os.clock()
 
-    -- 2. "ASYNCHRONOUS" Execution (Fire and Forget)
+    -- We use task.spawn so the main loop doesn't get blocked by the internal delays of this cycle
     task.spawn(function()
-        -- Loop 4 times inside the spawn (Fast spam)
+        -- 1. Fast Spam Phase
         for i = 1, 4 do
             task.wait(0.035)
             if not FishingState.IsFishing then break end
             
             task.spawn(function()
                 if RF_ChargeFishingRod then 
-                    -- Args: nil, nil, nil, timestamp
+                    -- ARGS: nil, nil, nil, timestamp
                     RF_ChargeFishingRod:InvokeServer(nil, nil, nil, timestamp) 
                 end
             end)
             task.spawn(function()
                 if RF_RequestFishingMinigameStarted then 
-                    -- Args: 1, 1, timestamp
+                    -- ARGS: 1, 1, timestamp
                     RF_RequestFishingMinigameStarted:InvokeServer(1, 1, timestamp) 
                 end
             end)
         end
         
-        -- Wait for completion delay (Async from main loop)
+        -- 2. Wait Phase
         task.wait(MasterConfig.BlatantCompleteDelay or 1)
         
+        -- 3. Finish Phase
         if FishingState.IsFishing then
-            task.spawn(function() if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end end)
-            task.spawn(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
+            task.spawn(function()
+                if RE_FishingCompleted then RE_FishingCompleted:InvokeServer() end
+            end)
+            task.spawn(function()
+                if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end
+            end)
         end
     end)
 end
 
 local function StartInstantFishing()
-    print("🎣 [Info] Starting INSTANT Mode")
+    print("🎣 [Info] Starting INSTANT Fishing Mode")
     FishingState.CurrentMode = "INSTANT"
+    
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do 
-            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then RunInstantFish() end
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                RunInstantFish()
+            end
             PreciseWait(0.5)
         end
     end))
 end
 
 local function StartBlatantFishing()
-    print("🎣 [Info] Starting BLATANT Mode")
+    print("🎣 [Info] Starting BLATANT Fishing Mode")
     FishingState.CurrentMode = "BLATANT"
+    
     DisableNativeAutoFish()
     task.wait(0.5)
 
-    -- Force Equip ONCE (Disable auto-equip loop later)
+    -- Force Equip ONCE (We disable the auto-equip loop in Blatant to avoid conflicts)
     if MasterConfig.AutoEquip and lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
          pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
          task.wait(0.5)
     end
 
-    -- WARMUP (Exact copy from snippet)
+    -- WARMUP SPAM
     local timestamp = os.time() + os.clock()
     for i = 1, 7 do
         task.wait(0.035)
@@ -309,22 +484,50 @@ local function StartBlatantFishing()
     end
     task.wait(0.1)
 
-    -- MAIN BLATANT LOOP
+    -- MAIN LOOP
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            ExecuteBlatantCycle() -- Calls task.spawn inside, doesn't block!
-            task.wait(MasterConfig.BlatantCastDelay or 1.97) -- Main interval
+            ExecuteBlatantCycle()
+            task.wait(MasterConfig.BlatantCastDelay or 1.97)
         end
     end))
 end
 
+local function RunAutoUnfavoriteRubies()
+    if not MasterConfig.AutoUnfavoriteRubies then return end
+    local inv = PlayerData:Get("Inventory")
+    if inv then
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if item.IsFavorite or item.Favorited or item.Locked then
+                    local name, _ = GetFishNameAndRarity(item) 
+                    if name == "Ruby" then
+                        local mutation = GetMutation(item)
+                        if mutation ~= "Gemstone" then
+                            pcall(function()
+                                if RE_FavoriteItem then RE_FavoriteItem:FireServer(item.UUID) end
+                            end)
+                            task.wait(0.2)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- // --- MAIN ROUTER --- //
 function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     
-    if MasterConfig.FishingMode == "BLATANT" then StartBlatantFishing() else StartInstantFishing() end
+    if MasterConfig.FishingMode == "BLATANT" then
+        StartBlatantFishing()
+    else
+        StartInstantFishing()
+    end
 
-    -- [AUTO EQUIP] -> DISABLED FOR BLATANT (Conflict Fix)
+    -- [AUTO EQUIP] -> Disabled in BLATANT mode to prevent tool desync
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
              if MasterConfig.AutoEquip and FishingState.CurrentMode ~= "BLATANT" then
@@ -349,82 +552,591 @@ function StartFishingRouter()
             task.wait(MasterConfig.SellDelay)
         end
     end))
-
-    -- [AUTO FAVORITE/UNFAVORITE]
-    -- (Standard favorite logic here, simplified for length)
+   
+    -- [AUTO FAVORITE]
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
-            if MasterConfig.AutoFavorite and PlayerData:Get("Inventory") then
-                for _, items in pairs(PlayerData:Get("Inventory")) do
-                    for _, item in ipairs(items) do
-                        if item.UUID and not (item.IsFavorite or item.Favorited or item.Locked) then
-                             local name, r = GetFishNameAndRarity(item)
-                             local mut = GetMutation(item)
-                             local isRuby = (name == "Ruby" or item.Identifier == "Ruby")
-                             local isRare = string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage")
-                             if isRuby or isRare then
-                                 task.spawn(function() for i=1,3 do RE_FavoriteItem:FireServer(item.UUID) task.wait(0.05) end end)
-                             end
-                        end
+            if MasterConfig.AutoFavorite then
+                local inv = PlayerData:GetExpect("Inventory")
+                if inv then
+                    for _, items in pairs(inv) do
+                         for _, item in ipairs(items) do
+                             if item.UUID then
+                                local itemName, rarity = GetFishNameAndRarity(item)
+                                local mutation = GetMutation(item)
+                                local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
+                                local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby")
+                                local isRare = string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage")
+                                if (isRuby or isRare) and not isLocked then
+                                      task.spawn(function()
+                                        for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID); task.wait(0.05) end
+                                    end)
+                                end
+                            end
+                         end
                     end
                 end
             end
             task.wait(0.5)
         end
     end))
+
+    table.insert(FishingThreads, task.spawn(function()
+       while FishingState.IsFishing do
+            if MasterConfig.AutoUnfavoriteRubies then RunAutoUnfavoriteRubies() end
+            task.wait(5)
+        end
+    end))
 end
 
 function StopFishing()
+    print("🛑 [Info] Stopping Fishing (" .. FishingState.CurrentMode .. ")")
     FishingState.IsFishing = false
     FishingState.CurrentMode = "NONE"
+    
     pcall(function() if RF_CancelFishingInputs then RF_CancelFishingInputs:InvokeServer() end end)
-    for _, thread in ipairs(FishingThreads) do if thread then task.cancel(thread) end end
+    
+    for _, thread in ipairs(FishingThreads) do
+        if thread then task.cancel(thread) end
+    end
     FishingThreads = {}
 end
 
 -- ===============================
--- DASHBOARD & EXTRAS
+-- TELEPORT & TOTEM LOGIC
 -- ===============================
--- (Dashboard, WalkOnWater, Weather, Merchant, AutoTrade preserved exactly as previous version)
--- For brevity, assuming standard RemFarm functions here.
+local TOTEM_ID = 2
+local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
+local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
+local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
--- ===============================
--- TELEPORT
--- ===============================
 function TeleportToFishingLocation()
     if FishingState.Teleporting then return end
     local loc = FishingLocations[MasterConfig.SelectedLocation]
-    if loc then
-        FishingState.Teleporting = true
-        pcall(function()
-            local char = lp.Character or lp.CharacterAdded:Wait()
-            local root = char:WaitForChild("HumanoidRootPart", 5)
-            if root then root.CFrame = CFrame.new(loc.Pos, loc.Pos + loc.Look) end
+    if not loc then warn("Lokasi tidak ditemukan!") return end
+    
+    FishingState.Teleporting = true
+    pcall(function()
+        local char = lp.Character or lp.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart", 5)
+        if root then root.CFrame = CFrame.new(loc.Pos, loc.Pos + loc.Look) end
+    end)
+    task.wait(0.5)
+    FishingState.Teleporting = false
+end
+
+local function GetTotemUUID(targetId)
+    local success, inventoryData = pcall(function() return PlayerData:GetExpect("Inventory").Totems end)
+    if success and inventoryData then 
+        for _, item in ipairs(inventoryData) do 
+            if tonumber(item.Id) == targetId and (item.Count or 1) >= 1 then return item.UUID end
+        end 
+    end
+    return nil
+end
+
+local function SpawnMutationTotem()
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local uuid = GetTotemUUID(TOTEM_ID)
+    if not uuid then return false end
+
+    if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
+    local success = false
+    if uuid then
+        pcall(function() RE_SpawnTotem:FireServer(uuid); success = true end)
+        if success then
+            local originalCF = hrp.CFrame
+            hrp.CFrame = originalCF + Vector3.new(0, 5, 0)
+            task.wait(0.2)
+            hrp.CFrame = originalCF
+        end
+    end
+    task.wait(0.5)
+    if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
+    return success
+end
+
+local function StartAutoTotemLoop()
+    task.spawn(function()
+        task.wait(3)
+        SpawnMutationTotem()
+        while true do
+            local waitTime = 3780
+            for i = waitTime, 1, -1 do task.wait(1) end
+            SpawnMutationTotem()
+        end
+    end)
+end
+
+-- ===============================
+-- TRADING LOGIC
+-- ===============================
+local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
+
+local function ScanInventoryForTrade()
+    local tradeList = {}
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return tradeList end
+    
+    for _, items in pairs(inv) do
+        for _, item in ipairs(items) do
+            local name, rarity = GetFishNameAndRarity(item)
+            local mutation = GetMutation(item)
+            local isSecret = (tostring(rarity):upper() == "SECRET")
+            local isRubyGem = (name == "Ruby" and mutation == "Gemstone")
+            
+            if isSecret or isRubyGem then
+                local priority = 1
+                if isSecret then priority = 2 end
+                table.insert(tradeList, { uuid = item.UUID, priority = priority })
+            end
+        end
+    end
+    table.sort(tradeList, function(a, b) return a.priority > b.priority end)
+    return tradeList
+end
+
+local function IsItemStillInInventory(uuid)
+    local inv = PlayerData:GetExpect("Inventory")
+    if not inv then return false end
+    for _, items in pairs(inv) do
+        for _, item in ipairs(items) do if item.UUID == uuid then return true end end
+    end
+    return false
+end
+
+function RunAutoTrade()
+    if TradingState.IsTrading then return end
+    TradingState.IsTrading = true
+    
+    TradingState.Thread = task.spawn(function()
+        while MasterConfig.AutoTrade and TradingState.IsTrading do
+            pcall(UpdateStatsFromInventory)
+            
+            local targetName = MasterConfig.TargetUsername
+            local targetPlayer = Services.Players:FindFirstChild(targetName)
+
+            if targetPlayer then
+                MasterConfig.TargetId = targetPlayer.UserId 
+                local itemsToTrade = ScanInventoryForTrade()
+                
+                if #itemsToTrade > 0 then
+                    local targetItem = itemsToTrade[1]
+                    pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) end)
+                    local start = os.clock()
+                    repeat task.wait(0.5) until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
+                    pcall(UpdateStatsFromInventory)
+                else
+                    task.wait(1)
+                 end
+            else
+                task.wait(3)
+            end
+            task.wait(MasterConfig.TradeDelay)
+        end
+        TradingState.IsTrading = false
+    end)
+end
+
+-- ===============================
+-- WEATHER SYSTEM LOGIC
+-- ===============================
+local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
+local WeatherTargets = {"Storm", "Cloudy", "Wind"}
+local BLIND_BUY_INTERVAL = 950 
+
+local function ScanWeatherUI()
+    local activeList = {}
+    local pGui = Services.Players.LocalPlayer:FindFirstChild("PlayerGui")
+    if not pGui then return activeList, "NO_GUI" end
+
+    local gui = pGui:FindFirstChild("Weather Machine")
+    if not gui then return activeList, "CLOSED" end
+
+    local grid = gui:FindFirstChild("Frame")
+    if grid then grid = grid:FindFirstChild("Frame") end
+    if grid then grid = grid:FindFirstChild("Left") end
+    if grid then grid = grid:FindFirstChild("Frame") end
+    if grid then grid = grid:FindFirstChild("Grid") end
+    if not grid then return activeList, "ERROR" end
+
+    for _, tile in ipairs(grid:GetChildren()) do
+        local content = tile:FindFirstChild("Content")
+        if content then
+            local itemName = content:FindFirstChild("ItemName")
+            if itemName then
+                table.insert(activeList, itemName.Text)
+            end
+        end
+    end
+    return activeList, "OK"
+end
+
+local function StartWeatherAutoBuy()
+    task.spawn(function()
+        print("⚡ [Weather] Auto Buy Started (Smart + Blind 15m Mode)...")
+        while true do
+            local active, status = ScanWeatherUI()
+            
+            if status == "OK" then
+                local activeStr = table.concat(active, ", "):lower()
+                for _, target in ipairs(WeatherTargets) do
+                     if not activeStr:find(target:lower()) then
+                        if RF_PurchaseWeatherEvent then
+                             print("⚡ [Weather-Smart] Membeli: " .. target)
+                             pcall(function() RF_PurchaseWeatherEvent:InvokeServer(target) end)
+                             task.wait(2) 
+                         end
+                     end
+                end
+            else
+                if os.time() - LastWeatherBuyTime > BLIND_BUY_INTERVAL then
+                    if RF_PurchaseWeatherEvent then
+                        print("⚡ [Weather-Blind] UI Tertutup. Mengeksekusi Batch Storm, Cloudy, Wind...")
+                        for _, wTarget in ipairs(WeatherTargets) do
+                            pcall(function() 
+                                RF_PurchaseWeatherEvent:InvokeServer(wTarget) 
+                                print("   > Membeli " .. wTarget)
+                             end)
+                            task.wait(2) 
+                        end
+                        LastWeatherBuyTime = os.time()
+                        print("✅ [Weather-Blind] Batch Selesai. Menunggu 15 Menit.")
+                    end
+                end
+            end
+            task.wait(5)
+        end
+    end)
+end
+
+-- ===============================
+-- MERCHANT AUTO BUY LOGIC
+-- ===============================
+local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
+local MUTATION_TOTEM_ID = 8
+
+local function StartMerchantAutoBuy()
+    task.spawn(function()
+        print("🛍️ [Merchant] Smart Auto Buy Started...")
+        while true do
+            local currentCoins = GetCoins()
+            if currentCoins > 1000000 then
+                local merchantData = nil
+                if MerchantReplion then
+                     pcall(function() merchantData = MerchantReplion:Get("Items") end)
+                end
+                
+                local isTotemInStock = false
+                if merchantData then
+                    for _, id in ipairs(merchantData) do
+                       if id == MUTATION_TOTEM_ID then isTotemInStock = true break end
+                    end
+                end
+
+                if isTotemInStock then
+                    print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
+                    while currentCoins > 1000000 then
+                        if RF_PurchaseMarketItem then
+                             pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
+                        end
+                        task.wait(0.5) 
+                        currentCoins = GetCoins() 
+                    end
+                    print("🛑 [Merchant] Coin under 1M. Stopping purchase.")
+                end
+            end
+            task.wait(3) 
+        end
+    end)
+end
+
+-- ===============================
+-- GUI (DASHBOARD)
+-- ===============================
+function CreateDashboard()
+    if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
+    
+    local gui = Instance.new("ScreenGui", Services.CoreGui)
+    gui.Name = "EnochDashboard"
+    gui.IgnoreGuiInset = true
+
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "W - v6.2 (Blatant Fix)"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+
+    local dashboard = Instance.new("Frame", gui)
+    dashboard.Size = UDim2.fromScale(1, 1)
+    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dashboard.Visible = true
+
+    local layout = Instance.new("UIListLayout", dashboard)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0.015, 0)
+
+    local function Text(txt, h, col) 
+        local l = Instance.new("TextLabel", dashboard)
+        l.Text = txt
+        l.TextColor3 = col
+        l.Size = UDim2.new(1,0,h,0)
+        l.BackgroundTransparency = 1
+        l.Font = Enum.Font.GothamBold
+        l.TextScaled = true
+        return l 
+    end
+
+    local L_Coins  = Text("$0", 0.10, Color3.fromRGB(255, 215, 0)) 
+    local L_Mode   = Text("LOC: ...", 0.06, Color3.fromRGB(0, 255, 255)) 
+    local L_Target = Text("TARGET: ...", 0.06, Color3.fromRGB(200, 200, 200)) 
+    local L_Stats  = Text("0 Fish", 0.06, Color3.fromRGB(255, 255, 255)) 
+    local L_FPM    = Text("0.0 F/M", 0.06, Color3.fromRGB(0, 255, 127)) 
+    local L_Info   = Text("Sec: 0 | Gem: 0", 0.06, Color3.fromRGB(255, 100, 255)) 
+    local L_Time   = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180)) 
+    local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100)) 
+    local L_Weather = Text("Weather: -", 0.05, Color3.fromRGB(135, 206, 235))
+
+    toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
+
+    task.spawn(function()
+        while task.wait(0.5) do
+            if dashboard.Visible then
+                L_Coins.Text = "$" .. FormatNumber(GetCoins())
+                L_Mode.Text = "LOC: " .. (MasterConfig.SelectedLocation or "None")
+                
+                local tName = MasterConfig.TargetUsername or "???"
+                local tPlayer = Services.Players:FindFirstChild(tName)
+                if tPlayer then
+                    L_Target.Text = "TARGET: " .. tName .. " [✅]"
+                    L_Target.TextColor3 = Color3.fromRGB(0, 255, 100)
+                else
+                    L_Target.Text = "TARGET: " .. tName .. " [❌]"
+                    L_Target.TextColor3 = Color3.fromRGB(255, 50, 50)
+                end
+
+                local elapsed = os.time() - SessionStartTime
+                local fpm = 0
+                if elapsed > 0 and TotalFishCaught > 0 then
+                    fpm = TotalFishCaught / (elapsed / 60)
+                end
+                L_FPM.Text = string.format("%.1f F/M", fpm)
+
+                L_Stats.Text = string.format("Caught: %d", TotalFishCaught)
+                L_Info.Text = "Sec: " .. TotalSecretsFound .. " | Gem: " .. TotalRubyGemstones
+                L_Time.Text = FormatTime(elapsed)
+                
+                local currentStatus = "Idle"
+                if FishingState.IsFishing then 
+                    currentStatus = "Fishing [" .. MasterConfig.FishingMode .. "]" 
+                end
+                if TradingState.IsTrading then 
+                   currentStatus = tPlayer and "Trading (Active)" or "Trading (Waiting)"
+                end
+                if FishingState.Teleporting then currentStatus = "Teleporting" end
+                L_Status.Text = "Status: " .. currentStatus
+
+                local activeW, wStatus = ScanWeatherUI()
+                local wText = "None"
+                if #activeW > 0 then wText = table.concat(activeW, ", ") end
+                
+                if wStatus == "CLOSED" or wStatus == "NO_GUI" then
+                     local remaining = math.max(0, BLIND_BUY_INTERVAL - (os.time() - LastWeatherBuyTime))
+                     wText = "Blind: Next Batch in " .. remaining .. "s"
+                end
+                L_Weather.Text = "Weather: " .. wText
+            end
+        end
+    end)
+end
+
+-- REMOTE LISTENER FOR FISH COUNT
+local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+if RE_ObtainedNewFishNotification then
+    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
+        TotalFishCaught = TotalFishCaught + 1
+        task.spawn(function()
+            if not item then return end
+            local name, rarity, mutation, displayName, isSecret = "Unknown", "Common", "None", "Unknown", false
+            pcall(function()
+                name, rarity = GetFishNameAndRarity(item)
+                mutation = GetMutation(item)
+                isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
+            end)
+
+            if isSecret then
+                pcall(UpdateStatsFromInventory) 
+                if MasterConfig.DiscordWebhookEnabled then
+                    local weight = (item.Metadata and item.Metadata.Weight) or 0
+                    SendDiscordSecretNotification(name, rarity, mutation, weight)
+                end
+            end
         end)
-        task.wait(0.5)
-        FishingState.Teleporting = false
+    end)
+end
+
+-- CONFIG AUTO-UPDATE LOOP
+task.spawn(function()
+    LoadWebConfig() 
+    while true do
+        task.wait(60)
+        LoadWebConfig()
+    end
+end)
+
+-- ===============================
+-- LEGACY WEBHOOK
+-- ===============================
+if MasterConfig.WebhookEnabled then
+    task.spawn(function()
+        local function SendHook(pName, data)
+            local json = Services.HttpService:JSONEncode(data)
+            local url = MasterConfig.WebhookUrl .. "?player=" .. Services.HttpService:UrlEncode(pName) .. "&data=" .. Services.HttpService:UrlEncode(json)
+            pcall(function() game:HttpGet(url) end)
+        end
+        local dataR = Replion:WaitReplion("Data")
+        while true do
+            local inv = dataR:GetExpect("Inventory")
+            local exportData = { Summary = {}, Details = {} }
+
+            if inv then
+                for _, items in pairs(inv) do
+                    for _, item in ipairs(items) do
+                        local n, r = GetFishNameAndRarity(item)
+                        local mut = GetMutation(item)
+                        if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
+                            local dName = n
+                            if mut ~= "None" then dName = "["..mut.."] "..n end
+                            exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                            table.insert(exportData.Details, {
+                                Name = dName, Rarity = r, Weight = item.Metadata and item.Metadata.Weight or 0,
+                                Mutation = mut, UniqueId = item.UUID or item.Id
+                            })
+                        end
+                    end
+                end
+            end
+            SendHook(lp.Name, exportData)
+            task.wait(15)
+        end
+    end)
+end
+
+-- ===============================
+-- WALK ON WATER FEATURE
+-- ===============================
+local walkOnWaterConnection = nil
+local isWalkOnWater = true 
+local waterPlatform = nil
+
+local function ToggleWalkOnWater(state)
+    isWalkOnWater = state
+    if state then
+        if not waterPlatform then
+            waterPlatform = Instance.new("Part")
+            waterPlatform.Name = "WaterPlatform"
+            waterPlatform.Anchored = true
+            waterPlatform.CanCollide = true
+            waterPlatform.Transparency = 1 
+            waterPlatform.Size = Vector3.new(15, 1, 15)
+            waterPlatform.Parent = workspace
+        end
+
+        if walkOnWaterConnection then walkOnWaterConnection:Disconnect() end
+
+        walkOnWaterConnection = Services.RunService.RenderStepped:Connect(function()
+            local character = lp.Character
+            if not isWalkOnWater or not character then return end
+            
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            if not waterPlatform or not waterPlatform.Parent then
+                waterPlatform = Instance.new("Part")
+                waterPlatform.Name = "WaterPlatform"
+                waterPlatform.Anchored = true
+                waterPlatform.CanCollide = true
+                waterPlatform.Transparency = 1 
+                waterPlatform.Size = Vector3.new(15, 1, 15)
+                waterPlatform.Parent = workspace
+            end
+
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = {workspace.Terrain} 
+            rayParams.FilterType = Enum.RaycastFilterType.Include
+            rayParams.IgnoreWater = false 
+
+            local rayOrigin = hrp.Position + Vector3.new(0, 5, 0) 
+            local rayDirection = Vector3.new(0, -500, 0)
+            local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+
+            if result and result.Material == Enum.Material.Water then
+                local waterSurfaceHeight = result.Position.Y
+                waterPlatform.Position = Vector3.new(hrp.Position.X, waterSurfaceHeight, hrp.Position.Z)
+                
+                if hrp.Position.Y < (waterSurfaceHeight + 2) and hrp.Position.Y > (waterSurfaceHeight - 5) then
+                    if not game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then
+                        hrp.CFrame = CFrame.new(hrp.Position.X, waterSurfaceHeight + 3.2, hrp.Position.Z)
+                    end
+                end
+            else
+                waterPlatform.Position = Vector3.new(hrp.Position.X, -500, hrp.Position.Z)
+            end
+        end)
+    else
+        if walkOnWaterConnection then walkOnWaterConnection:Disconnect() walkOnWaterConnection = nil end
+        if waterPlatform then waterPlatform:Destroy() waterPlatform = nil end
     end
 end
 
 -- ===============================
--- STARTUP
+-- AUTO-START EXECUTION (WITH 10s DELAY)
 -- ===============================
 task.delay(10, function()
-    print("🚀 [AutoStart] Loaded.")
+    print("[AutoStart] Memulai eksekusi setelah menunggu 10 detik...")
+
+    CreateDashboard()
     LoadWebConfig()
+    
+    print("[AutoStart] Config Web Loaded. Lokasi: " .. MasterConfig.SelectedLocation)
+    
     pcall(UpdateStatsFromInventory)
     StartWeatherAutoBuy() 
     StartMerchantAutoBuy()
-    -- Start Extras
-    local walkOnWaterPlatform = Instance.new("Part", workspace)
-    walkOnWaterPlatform.Anchored, walkOnWaterPlatform.Transparency, walkOnWaterPlatform.Size = true, 1, Vector3.new(20,1,20)
-    Services.RunService.RenderStepped:Connect(function()
-        if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            walkOnWaterPlatform.CFrame = CFrame.new(lp.Character.HumanoidRootPart.Position.X, -3, lp.Character.HumanoidRootPart.Position.Z)
-        end
+
+    task.spawn(function()
+        ToggleWalkOnWater(true)
     end)
-    -- Main Logic
-    if MasterConfig.AutoTeleport then TeleportToFishingLocation(); task.wait(1) end
+
+    if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
+       pcall(function() 
+           req({ 
+               Url = MasterConfig.DiscordWebhookUrl, 
+               Method = "POST", 
+               Headers = {["Content-Type"] = "application/json"},
+               Body = Services.HttpService:JSONEncode({ 
+                   username = "Webhak Enok", 
+                   content = "✅ **" .. lp.Name .. " - Script Started after 10s Delay at " .. MasterConfig.SelectedLocation .. "**" 
+                }) 
+           })
+       end)
+    end
+
+    if MasterConfig.AutoTeleport then 
+        TeleportToFishingLocation()
+        task.wait(1) 
+    end
+    
+    if MasterConfig.AutoTotem then StartAutoTotemLoop() end
+    if MasterConfig.PotatoMode then StartPotatoLoop() end
     if MasterConfig.FishingEnabled then StartFishingRouter() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
 end)
