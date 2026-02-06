@@ -6,7 +6,7 @@
 
 # Konfigurasi Lokasi
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
-BASE_URL="http://146.190.147.43:88"
+BASE_URL="http://43.134.116.2:5555/uploaded"
 
 # Fungsi cek Root (Dibutuhkan untuk pm install silent)
 check_root() {
