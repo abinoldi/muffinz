@@ -174,8 +174,8 @@ local ROD_DELAYS = {
     [5]   = 2,    -- Astral Rod
     [126] = 1.7,  -- Ares Rod
     [168] = 1.6,  -- Angler Rod
-    [169] = 1.23, -- Ghostfin Rod
-    [257] = 1.0,  -- Element Rod
+    [169] = 1.35, -- Ghostfin Rod
+    [257] = 1.25,  -- Element Rod
 }
 
 -- ===============================
