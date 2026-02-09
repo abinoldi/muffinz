@@ -223,7 +223,7 @@ end
 -- ==============================================================================
 
 local CleanConfig = {}
-CleanConfig.ReactionTime = 0.8
+CleanConfig.ReactionTime = 1
 local HooksInstalled = false
 
 local function InstallLegitHook()
