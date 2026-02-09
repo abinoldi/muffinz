@@ -394,7 +394,7 @@ local function FireRemote(remote)
     end)
 end
 
--- // --- MAIN ROUTER --- //
+-- // --- MAIN ROUTER (UPDATED) --- //
 function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
@@ -402,51 +402,48 @@ function StartFishingRouter()
 
     DisableNativeAutoFish()
 
-    -- [THREAD 1] INSTANT RE-CHARGE BOT (The User's Logic)
+    -- [THREAD 1] INSTANT RE-CHARGE BOT (+ AUTO EQUIP INTEGRATED)
     table.insert(FishingThreads, task.spawn(function()
         print("⚡ [Instant Bot] Started - Charge -> " .. MasterConfig.DelayChargeToReq .. "s -> Req -> " .. MasterConfig.DelayReqToCatch .. "s -> Catch")
         
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 
-                -- [1] CHARGE (Awal Siklus)
+                -- [1] AUTO EQUIP (Cek Langsung di Loop Utama)
+                -- Ini memastikan pancingan dipegang SEBELUM mencoba Charge
+                if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
+                    if RE_EquipToolFromHotbar then
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+                    end
+                    task.wait(0.3) -- Beri waktu sedikit untuk animasi equip
+                end
+
+                -- [2] CHARGE (Awal Siklus)
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                 
                 -- Tunggu (Charge -> Request)
                 task.wait(MasterConfig.DelayChargeToReq)
                 if not FishingState.IsFishing then break end
 
-                -- [2] REQUEST MINIGAME
+                -- [3] REQUEST MINIGAME
                 if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
 
                 -- Tunggu (Request -> Catch)
                 task.wait(MasterConfig.DelayReqToCatch)
                 if not FishingState.IsFishing then break end
 
-                -- [3] CATCH (Akhir Siklus)
+                -- [4] CATCH (Akhir Siklus)
                 if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
                 
-                -- [!!!] NO WAIT HERE [!!!] - Langsung loop ke Charge
+                -- [!!!] NO WAIT HERE [!!!] - Langsung loop kembali ke atas
             end
             
-            -- Safety check to avoid crashing if character nil
+            -- Safety check jika karakter mati/nil
             if not lp.Character then task.wait(1) end
         end
     end))
 
-    -- [THREAD 2] AUTO EQUIP (Global)
-    table.insert(FishingThreads, task.spawn(function()
-        while FishingState.IsFishing do
-            if MasterConfig.AutoEquip then
-                if lp.Character and not lp.Character:FindFirstChildOfClass("Tool") then
-                    pcall(function() if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end end)
-                end
-            end
-            task.wait(2.0)
-        end
-    end))
-
-    -- [THREAD 3] AUTO SELL (Global)
+    -- [THREAD 2] AUTO SELL (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -460,7 +457,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- [THREAD 4] AUTO FAVORITE (Global)
+    -- [THREAD 3] AUTO FAVORITE (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -492,7 +489,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- [THREAD 5] UNFAVORITE RUBY (Global)
+    -- [THREAD 4] UNFAVORITE RUBY (Global)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
