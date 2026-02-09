@@ -1,6 +1,6 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.4 (Super Potato Fix + Clean Legit)
+-- VERSION: v1.3.5 (Fix Visual Rod + Clean Legit)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -69,7 +69,7 @@ local STATE = {
 }
 
 -- ===============================
--- [[ NEW ]] SUPER POTATO MODE
+-- [[ REVISED ]] SUPER POTATO MODE
 -- ===============================
 local function EnablePotatoMode()
     -- 1. Seting Dasar
@@ -79,43 +79,36 @@ local function EnablePotatoMode()
     Lighting.FogEnd = 9e9
     Lighting.Brightness = 0
     
-    -- Hapus Efek Post-Processing (Blur, Bloom, SunRays)
+    -- Hapus Efek Post-Processing (Blur, Bloom, SunRays) - Ini aman dihapus
     for _, v in pairs(Lighting:GetChildren()) do
         if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") then
             v:Destroy()
         end
     end
 
-    -- 2. MATIKAN OMBAK AIR (Terrain Fix)
+    -- 2. MATIKAN OMBAK AIR (Terrain Fix) - Ini bikin ringan tapi tidak merusak visual rod
     local Terrain = workspace:FindFirstChildOfClass("Terrain")
     if Terrain then
         Terrain.WaterWaveSize = 0   -- Hapus tinggi ombak
         Terrain.WaterWaveSpeed = 0  -- Hapus gerakan air
         Terrain.WaterReflectance = 0 -- Hapus pantulan cahaya air
-        Terrain.WaterTransparency = 0 -- Opsional: Ubah jadi 1 jika ingin air hilang total
     end
 
-    -- 3. Loop Agresif untuk Objek (Part, Mesh, Texture, Particle)
+    -- 3. Loop Ringan (Hanya Texture & Material)
+    -- SAYA SUDAH MENGHAPUS BAGIAN YANG MENGHANCURKAN PARTICLE/LIGHT
     task.spawn(function()
-        while task.wait(5) do -- Loop setiap 5 detik untuk membersihkan objek baru
+        while task.wait(5) do 
             pcall(function()
                 for _, v in pairs(workspace:GetDescendants()) do
-                    -- HAPUS EFEK CAHAYA & PARTIKEL (Bikin Rod Berat)
-                    if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                        v:Destroy()
-                    elseif v:IsA("Light") then -- PointLight, SpotLight, SurfaceLight
+                    -- HANYA HAPUS DECAL/TEXTURE (Lukisan di tembok/lantai)
+                    if v:IsA("Decal") or v:IsA("Texture") then
                         v:Destroy()
                     
-                    -- HAPUS TEXTURE BERAT
-                    elseif v:IsA("Decal") or v:IsA("Texture") then
-                        v:Destroy()
-                    
-                    -- SEDERHANAKAN PART/MESH
+                    -- SEDERHANAKAN MATERIAL TEMBOK/LANTAI
                     elseif v:IsA("BasePart") and not v:IsA("Terrain") then
                         v.Material = Enum.Material.SmoothPlastic
                         v.Reflectance = 0
                         v.CastShadow = false
-                        -- v.Transparency = 1 -- Aktifkan ini jika ingin WALLHACK/INVISIBLE MODE (Sangat ringan tapi gelap)
                     end
                 end
             end)
@@ -192,7 +185,7 @@ end
 -- ==============================================================================
 
 local CleanConfig = {}
-CleanConfig.ReactionTime = 1
+CleanConfig.ReactionTime = 0.8
 local HooksInstalled = false
 
 local function InstallLegitHook()
@@ -643,7 +636,7 @@ local function CreateDashboard()
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0);
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242);
-    toggleBtn.Text = "E - v1.3.4"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Text = "E - v1.3.5"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true;
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1);
@@ -682,5 +675,5 @@ task.spawn(DisableAudio)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub CLEAN LEGIT + POTATO FIX (v1.3.4) Started!")
+print("🚀 EnochHub CLEAN LEGIT + VISUAL FIX (v1.3.5) Started!")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
