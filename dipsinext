@@ -1,6 +1,6 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.7 (FULL GREEN / TEXTURELESS MODE)
+-- VERSION: v1.3.8 (Fix Quest Logic + Green Mode)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -69,13 +69,16 @@ local STATE = {
 }
 
 -- ==========================================================
--- [[ NEW ]] GREEN WORLD MODE (NO TEXTURE, NO CLOTHES)
+-- [[ FIXED ]] GREEN WORLD MODE (Quest Logic Safe)
 -- ==========================================================
 local function ActivateGreenMode()
-    local GreenColor = Color3.fromRGB(0, 255, 0) -- Warna Hijau Stabilo
+    local GreenColor = Color3.fromRGB(0, 255, 0) 
     local Material = Enum.Material.SmoothPlastic
+    
+    -- JANGAN UBAH WARNA DI FOLDER INI AGAR QUEST TERBACA
+    local QuestFolder = workspace:WaitForChild("JUNGLE INTERACTIONS", 5)
 
-    -- 1. SETTING RENDERING (Internal)
+    -- 1. SETTING RENDERING
     settings().Rendering.QualityLevel = 1
     game:GetService("Lighting").GlobalShadows = false
     game:GetService("Lighting").FogEnd = 9e9
@@ -86,60 +89,59 @@ local function ActivateGreenMode()
     
     -- Helper: Mengubah Part jadi Hijau
     local function Greenify(v)
+        -- [FIX] Jika part adalah bagian dari Quest Lever, JANGAN diubah warnanya
+        if QuestFolder and v:IsDescendantOf(QuestFolder) then
+            return 
+        end
+
         if v:IsA("BasePart") and not v:IsA("Terrain") then
             v.Material = Material
             v.Color = GreenColor
             v.Reflectance = 0
             v.CastShadow = false
-            -- Hapus Texture Mesh jika ada
             if v:IsA("MeshPart") then v.TextureID = "" end
         elseif v:IsA("Decal") or v:IsA("Texture") then
-            v:Destroy() -- Hapus gambar tempelan
+            v:Destroy()
         elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
-            v.Enabled = false -- Matikan efek (Jangan destroy agar tidak error script game)
+            v.Enabled = false 
         end
     end
 
-    -- 2. GREENIFY MAP (Workspace)
+    -- 2. GREENIFY MAP
     task.spawn(function()
         for _, v in pairs(workspace:GetDescendants()) do
             Greenify(v)
         end
-        -- Pantau object baru (Map Load)
         workspace.DescendantAdded:Connect(function(v)
             Greenify(v)
         end)
     end)
 
-    -- 3. GREENIFY PLAYER & ROD (Character)
+    -- 3. GREENIFY PLAYER (Tetap Hijau)
     local function GreenifyCharacter(char)
         if not char then return end
-        task.wait(0.5) -- Tunggu load sebentar
+        task.wait(0.5) 
         
         for _, v in pairs(char:GetDescendants()) do
-            -- Hapus Baju & Aksesori
             if v:IsA("Clothing") or v:IsA("ShirtGraphic") or v:IsA("Accessory") or v:IsA("CharacterMesh") then
                 v:Destroy()
-            -- Ubah warna kulit/badan
             elseif v:IsA("BasePart") then
                 v.Material = Material
                 v.Color = GreenColor
-                v.Transparency = 0 -- Pastikan terlihat (Hijau Solid)
+                v.Transparency = 0 
             end
         end
         
-        -- Pantau saat Equip Rod (Tool)
         char.ChildAdded:Connect(function(child)
             if child:IsA("Tool") then
-                task.wait(0.1) -- Tunggu tool load
+                task.wait(0.1)
                 for _, part in pairs(child:GetDescendants()) do
-                    Greenify(part) -- Ubah rod jadi hijau & matikan efek
+                    Greenify(part) 
                 end
             end
         end)
     end
 
-    -- Jalankan untuk karakter saat ini & nanti
     GreenifyCharacter(lp.Character)
     lp.CharacterAdded:Connect(GreenifyCharacter)
 
@@ -148,7 +150,7 @@ local function ActivateGreenMode()
     if Terrain then
         Terrain.WaterWaveSize = 0
         Terrain.WaterWaveSpeed = 0
-        Terrain.WaterTransparency = 1 -- Air jadi invisible (Full FPS)
+        Terrain.WaterTransparency = 1 
     end
 end
 
@@ -672,7 +674,7 @@ local function CreateDashboard()
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0);
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242);
-    toggleBtn.Text = "E - v1.3.7"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Text = "E - v1.3.8"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true;
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1);
@@ -711,5 +713,5 @@ task.spawn(DisableAudio)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub FULL GREEN MODE (v1.3.7) Started!")
+print("🚀 EnochHub LOGIC FIX (v1.3.8) Started!")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
