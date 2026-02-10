@@ -19,6 +19,26 @@ local Services = {
 
 local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
+-- ===============================
+-- 1. AUTO RECONNECT
+-- ===============================
+local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
+local Players = game:GetService("Players")
+
+local placeId = game.PlaceId
+local serverId = game.JobId 
+
+GuiService.ErrorMessageChanged:Connect(function()
+    task.wait(5)
+    local errorMessage = GuiService:GetErrorMessage()
+    if #errorMessage > 0 then
+        warn("Disconnect detected: " .. errorMessage)
+        TeleportService:TeleportToPlaceInstance(placeId, serverId, Players.LocalPlayer)
+        task.wait(10)
+        TeleportService:Teleport(placeId, Players.LocalPlayer)
+    end
+end)
 
 -- [2] DEFAULT CONFIG
 local MasterConfig = {
