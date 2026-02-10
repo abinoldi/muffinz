@@ -229,19 +229,19 @@ _G.FishBotActive = true
 local function GetRodDelay(rodID)
     -- Konfigurasi delay berdasarkan rod ID
     local rodDelays = {
-        [5] = 1.5,    -- Astral Rod
+        [5] = 1.8,    -- Astral Rod
         [169] = 1.2,  -- Ghostfin Rod
-        [80] = 1.0,   -- Midnight Rod
-        [4] = 0.8,    -- Lucky Rod
-        [78] = 0.7,   -- Ice Rod
-        [77] = 0.6,   -- Demascus Rod
-        [85] = 0.5,   -- Grass Rod
-        [76] = 0.4,   -- Carbon Rod
-        [79] = 0.3,   -- Luck Rod
+        [80] = 2,   -- Midnight Rod
+        [4] = 2,    -- Lucky Rod
+        [78] = 2,   -- Ice Rod
+        [77] = 2,   -- Demascus Rod
+        [85] = 2,   -- Grass Rod
+        [76] = 2,   -- Carbon Rod
+        [79] = 2,   -- Luck Rod
     }
     
     -- Default delay jika rod tidak ditemukan
-    return rodDelays[rodID] or 0.3
+    return rodDelays[rodID] or 2
 end
 
 local function Fire(remote)
