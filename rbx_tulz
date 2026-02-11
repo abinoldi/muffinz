@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v2.8 (SEQUENTIAL RESTORE)
+# ROBLOX CLONE MANAGER v3.1 (CLEAN START + FAST DL)
 # ==========================================================
 
 BACKUP_DIR="/sdcard/RobloxBackups"
@@ -38,15 +38,12 @@ do_backup() {
     echo "Selesai! $count database tersimpan."
 }
 
-# Fungsi Restore Berdasarkan Urutan (Tanpa Cek Nama Paket)
 do_restore_sequential() {
     echo "=========================================="
     echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
     echo "=========================================="
     
-    # Ambil daftar file backup ke dalam array
     backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
-    # Ambil daftar aplikasi terinstall ke dalam array
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
@@ -60,7 +57,6 @@ do_restore_sequential() {
     echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
     echo "------------------------------------------"
 
-    # Loop menggunakan indeks agar urut
     i=0
     while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
         current_db="${backups[$i]}"
@@ -70,21 +66,18 @@ do_restore_sequential() {
         target_dir_parent="$target_folder/app_webview/Default"
         target_path="$target_dir_parent/Cookies"
 
-        echo "🔄 Merestore [$(basename "$current_db")] ke [$current_pkg]..."
+        echo "🔄 Restore [$(basename "$current_db")] -> [$current_pkg]"
 
         mkdir -p "$target_dir_parent"
         cp "$current_db" "$target_path"
         
-        # Perbaikan Izin Akses
         app_uid=$(stat -c "%u:%g" "$target_folder")
         chown -R "$app_uid" "$target_folder/app_webview"
         chmod 660 "$target_path"
         
-        echo "✅ Berhasil."
         i=$((i + 1))
     done
-    echo "------------------------------------------"
-    echo "Selesai! $i akun dipulihkan."
+    echo "✅ Restore Selesai."
 }
 
 do_uninstall() {
@@ -98,29 +91,58 @@ do_uninstall() {
     read confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         for pkg in $pkgs; do
-            pm uninstall "$pkg" > /dev/null 2>&1 && echo "✅ $pkg Terhapus."
+            pm uninstall "$pkg" > /dev/null 2>&1 && echo "🗑️ $pkg Terhapus."
         done
     fi
 }
 
 do_auto_process() {
     echo "=========================================="
-    echo "       PROSES OTOMATIS BERJALAN           "
+    echo "   🚀 PROSES OTOMATIS (CLEAN & FAST) 🚀   "
     echo "=========================================="
+    
     total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
-    [ "$total_backup" -eq 0 ] && echo "❌ Tidak ada backup." && return
+    
+    if [ "$total_backup" -eq 0 ]; then
+        echo "❌ Tidak ada backup ditemukan. Batalkan." 
+        return
+    fi
 
+    # --- BAGIAN HAPUS FILE LAMA ---
+    if [ -d "$DOWNLOAD_DIR" ]; then
+        echo "🧹 Membersihkan folder $DOWNLOAD_DIR..."
+        rm -rf "$DOWNLOAD_DIR"
+    fi
+    # Buat folder baru yang bersih
     mkdir -p "$DOWNLOAD_DIR"
+    # ------------------------------
+
+    echo "📡 [PHASE 1] Mendownload $total_backup file SEKALIGUS..."
+    
     for i in $(seq 1 "$total_backup"); do
-        echo "------------------------------------------"
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
-        [ ! -f "$SAVE_PATH" ] && curl -L --progress-bar "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
+        
+        # Langsung download paralel tanpa cek file ada/tidak (karena folder sudah dibersihkan)
+        echo "   ⬇️  Mulai download: $APK_NAME"
+        (curl -L -s "$BASE_URL/$APK_NAME" -o "$SAVE_PATH" && echo "   ✅ Selesai download: $APK_NAME") &
+    done
+
+    echo "⏳ Menunggu semua download selesai..."
+    wait
+    echo "✅ Semua download tuntas!"
+    echo "------------------------------------------"
+
+    echo "📦 [PHASE 2] Menginstall Aplikasi..."
+    for i in $(seq 1 "$total_backup"); do
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
         
         if [ -f "$SAVE_PATH" ]; then
-            echo "⏳ Memasang $APK_NAME..."
+            echo "   💿 Menginstall $APK_NAME..."
             pm install -r "$SAVE_PATH" > /dev/null 2>&1
-            sleep 3
+        else
+            echo "   ⚠️ $APK_NAME Gagal didownload."
         fi
     done
 
@@ -133,12 +155,12 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX CLONE MANAGER v2.8 (ROOT)      "
+    echo "    ROBLOX CLONE MANAGER v3.1 (ROOT)      "
     echo "=========================================="
     echo "1. Backup Akun"
     echo "2. Restore Akun (Urutan Sequential)"
     echo "3. Hapus Semua Aplikasi Clone"
-    echo "4. PROSES OTOMATIS (Download+Install+Restore)"
+    echo "4. PROSES OTOMATIS (Clean -> Download -> Install)"
     echo "5. Keluar"
     echo "------------------------------------------"
     echo -n "Pilih menu [1-5]: "
