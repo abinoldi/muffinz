@@ -1,12 +1,16 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v3.1 (CLEAN START + FAST DL)
+# ROBLOX CLONE MANAGER v3.4 (ANTI-STUCK + BATCHING)
 # ==========================================================
 
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
 BASE_URL="http://43.134.116.2:5555/uploaded"
+
+# KONFIGURASI PENTING
+MAX_PARALLEL=5       # Cuma boleh download 5 file barengan
+TIMEOUT_SEC=180      # Maksimal 3 menit per file (kalau macet, kill)
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -24,56 +28,43 @@ do_backup() {
     for folder in /data/data/com.roblox.clien*; do
         [ -e "$folder" ] || continue
         pkg_name=$(basename "$folder")
-        cookie_path=""
-        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_path="$folder/app_webview/Default/Cookies"
-        [ -f "$folder/app_webview/Cookies" ] && [ -z "$cookie_path" ] && cookie_path="$folder/app_webview/Cookies"
+        
+        cookie_file=""
+        [ -f "$folder/app_webview/Default/Cookies" ] && cookie_file="$folder/app_webview/Default/Cookies"
+        [ -f "$folder/app_webview/Cookies" ] && cookie_file="$folder/app_webview/Cookies"
 
-        if [ -n "$cookie_path" ]; then
-            cp "$cookie_path" "$BACKUP_DIR/${pkg_name}.db"
-            echo "✅ Backup SUKSES: $pkg_name"
-            count=$((count + 1))
+        if [ -n "$cookie_file" ]; then
+             cp "$cookie_file" "$BACKUP_DIR/${pkg_name}.db"
+             count=$((count + 1))
         fi
     done
-    echo "------------------------------------------"
-    echo "Selesai! $count database tersimpan."
+    echo "✅ Backup Selesai! $count akun tersimpan."
 }
 
 do_restore_sequential() {
+    echo ""
     echo "=========================================="
     echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
     echo "=========================================="
-    
     backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
-    total_pkgs=${#pkgs[@]}
-
-    if [ "$total_backups" -eq 0 ] || [ "$total_pkgs" -eq 0 ]; then
-        echo "❌ Data backup atau aplikasi tidak ditemukan."
-        return 1
-    fi
-
-    echo "ℹ️ Ditemukan $total_backups backup dan $total_pkgs aplikasi."
-    echo "------------------------------------------"
+    if [ "$total_backups" -eq 0 ]; then echo "❌ Tidak ada backup."; return 1; fi
 
     i=0
-    while [ $i -lt $total_backups ] && [ $i -lt $total_pkgs ]; do
+    while [ $i -lt $total_backups ] && [ $i -lt ${#pkgs[@]} ]; do
         current_db="${backups[$i]}"
         current_pkg="${pkgs[$i]}"
+        target_dir="/data/data/$current_pkg/app_webview/Default"
         
-        target_folder="/data/data/$current_pkg"
-        target_dir_parent="$target_folder/app_webview/Default"
-        target_path="$target_dir_parent/Cookies"
-
-        echo "🔄 Restore [$(basename "$current_db")] -> [$current_pkg]"
-
-        mkdir -p "$target_dir_parent"
-        cp "$current_db" "$target_path"
+        echo "🔄 Restore: $current_pkg"
+        mkdir -p "$target_dir"
+        cp "$current_db" "$target_dir/Cookies"
         
-        app_uid=$(stat -c "%u:%g" "$target_folder")
-        chown -R "$app_uid" "$target_folder/app_webview"
-        chmod 660 "$target_path"
+        uid=$(stat -c "%u" "/data/data/$current_pkg")
+        chown -R "$uid:$uid" "/data/data/$current_pkg/app_webview"
+        chmod 660 "$target_dir/Cookies"
         
         i=$((i + 1))
     done
@@ -81,73 +72,78 @@ do_restore_sequential() {
 }
 
 do_uninstall() {
-    echo "=========================================="
-    echo "       MENGHAPUS APLIKASI CLONE...        "
-    echo "=========================================="
-    pkgs=$(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":")
-    [ -z "$pkgs" ] && echo "❌ Tidak ada aplikasi." && return
-    
-    echo -n "❓ Yakin hapus SEMUA? (y/n): "
-    read confirm
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        for pkg in $pkgs; do
-            pm uninstall "$pkg" > /dev/null 2>&1 && echo "🗑️ $pkg Terhapus."
-        done
-    fi
+    echo "🗑️ Menghapus aplikasi..."
+    for pkg in $(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"); do
+        pm uninstall "$pkg" > /dev/null 2>&1
+    done
+    echo "✅ Bersih."
 }
 
 do_auto_process() {
     echo "=========================================="
-    echo "   🚀 PROSES OTOMATIS (CLEAN & FAST) 🚀   "
+    echo "   🚀 PROSES OTOMATIS (ANTI-STUCK) 🚀     "
     echo "=========================================="
     
-    total_backup=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
-    
-    if [ "$total_backup" -eq 0 ]; then
-        echo "❌ Tidak ada backup ditemukan. Batalkan." 
-        return
-    fi
+    total_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
+    if [ "$total_files" -eq 0 ]; then echo "❌ Tidak ada backup."; return; fi
 
-    # --- BAGIAN HAPUS FILE LAMA ---
-    if [ -d "$DOWNLOAD_DIR" ]; then
-        echo "🧹 Membersihkan folder $DOWNLOAD_DIR..."
-        rm -rf "$DOWNLOAD_DIR"
-    fi
-    # Buat folder baru yang bersih
+    rm -rf "$DOWNLOAD_DIR"
     mkdir -p "$DOWNLOAD_DIR"
-    # ------------------------------
 
-    echo "📡 [PHASE 1] Mendownload $total_backup file SEKALIGUS..."
-    
-    for i in $(seq 1 "$total_backup"); do
-        APK_NAME="$i.apk"
-        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
-        
-        # Langsung download paralel tanpa cek file ada/tidak (karena folder sudah dibersihkan)
-        echo "   ⬇️  Mulai download: $APK_NAME"
-        (curl -L -s "$BASE_URL/$APK_NAME" -o "$SAVE_PATH" && echo "   ✅ Selesai download: $APK_NAME") &
-    done
-
-    echo "⏳ Menunggu semua download selesai..."
-    wait
-    echo "✅ Semua download tuntas!"
+    echo "📡 Mendownload $total_files file..."
+    echo "⚠️  Mode: Batch (Max $MAX_PARALLEL download bersamaan)"
+    echo "⚠️  Timeout: ${TIMEOUT_SEC} detik (Anti-Macet)"
     echo "------------------------------------------"
 
-    echo "📦 [PHASE 2] Menginstall Aplikasi..."
-    for i in $(seq 1 "$total_backup"); do
+    # --- LOGIKA BATCHING DOWNLOAD ---
+    counter=0
+    for i in $(seq 1 "$total_files"); do
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
         
-        if [ -f "$SAVE_PATH" ]; then
-            echo "   💿 Menginstall $APK_NAME..."
+        # Perintah CURL yang dimodifikasi agar TIDAK MACET
+        # -m $TIMEOUT_SEC : Mati paksa kalau lebih dari 3 menit
+        # --retry 3 : Coba ulang 3x kalau gagal
+        # --connect-timeout 10 : Kalau 10 detik server gak nyaut, skip.
+        
+        (curl -L -s --retry 3 --retry-delay 2 --connect-timeout 10 -m $TIMEOUT_SEC "$BASE_URL/$APK_NAME" -o "$SAVE_PATH" && echo "   ✅ OK: $APK_NAME") &
+        
+        # Hitung proses yang berjalan
+        counter=$((counter + 1))
+        
+        # Jika sisa bagi counter dengan MAX_PARALLEL adalah 0 (misal 5, 10, 15)
+        # Maka script akan PAUSE (wait) sampai 5 file itu selesai dulu.
+        if [ $((counter % MAX_PARALLEL)) -eq 0 ]; then
+            echo "   ⏳ Menunggu batch selesai..."
+            wait
+            echo "   🚀 Lanjut batch berikutnya..."
+        fi
+    done
+
+    # Tunggu sisa file (misal total 12, sisa 2 terakhir)
+    wait
+    echo "✅ Semua proses download selesai/berhenti."
+    echo "------------------------------------------"
+
+    # --- VALIDASI & INSTALL ---
+    echo "📦 Menginstall Aplikasi Valid..."
+    installed_count=0
+    for i in $(seq 1 "$total_files"); do
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+        
+        # Cek apakah file berhasil didownload dan ukurannya wajar (>1KB)
+        if [ -f "$SAVE_PATH" ] && [ $(stat -c%s "$SAVE_PATH") -gt 1024 ]; then
+            echo "   💿 Install: $APK_NAME"
             pm install -r "$SAVE_PATH" > /dev/null 2>&1
+            installed_count=$((installed_count + 1))
         else
-            echo "   ⚠️ $APK_NAME Gagal didownload."
+            echo "   ❌ Gagal/Corrupt: $APK_NAME (Dilewati)"
         fi
     done
 
     do_restore_sequential
-    echo "✨ SEMUA PROSES SELESAI!"
+    echo "✨ SELESAI! ($installed_count berhasil diinstall)"
 }
 
 # --- MAIN MENU ---
@@ -155,15 +151,14 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX CLONE MANAGER v3.1 (ROOT)      "
+    echo "    ROBLOX MANAGER v3.4 (STABLE)          "
     echo "=========================================="
     echo "1. Backup Akun"
-    echo "2. Restore Akun (Urutan Sequential)"
-    echo "3. Hapus Semua Aplikasi Clone"
-    echo "4. PROSES OTOMATIS (Clean -> Download -> Install)"
+    echo "2. Restore Akun"
+    echo "3. Hapus Semua Aplikasi"
+    echo "4. MULAI DOWNLOAD & INSTALL (ANTI-LAG)"
     echo "5. Keluar"
-    echo "------------------------------------------"
-    echo -n "Pilih menu [1-5]: "
+    echo -n "Pilih: "
     read choice
     case $choice in
         1) do_backup ;;
@@ -171,6 +166,6 @@ while true; do
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) exit 0 ;;
-        *) echo "⚠️ Pilihan salah." ;;
+        *) echo "⚠️ Salah." ;;
     esac
 done
