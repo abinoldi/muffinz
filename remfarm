@@ -406,12 +406,6 @@ local function FireRemote(remote)
             if remote:IsA("RemoteFunction") then remote:InvokeServer(1) else remote:FireServer(1) end
         end)
     end)
-    -- Kirim Boolean True (Backup)
-    task.spawn(function()
-        pcall(function()
-            if remote:IsA("RemoteFunction") then remote:InvokeServer(true) else remote:FireServer(true) end
-        end)
-    end)
 end
 
 -- // --- MAIN ROUTER (UPDATED) --- //
