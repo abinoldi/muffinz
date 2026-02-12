@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V6.8 (INSTANT RE-CHARGE ONLY)
+-- # ULTIMATE HUB: RE-FARM V6.9.2 (FULL REPORT ON TRIGGER)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -19,6 +19,7 @@ local Services = {
 
 local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
+
 -- ===============================
 -- 1. AUTO RECONNECT
 -- ===============================
@@ -43,8 +44,6 @@ end)
 -- [2] DEFAULT CONFIG
 local MasterConfig = {
     FishingEnabled = true,
-    -- Removed Mode Selection (Forced Instant Re-Charge)
-    
     AutoEquip = true,
     
     -- INSTANT TIMINGS
@@ -55,7 +54,9 @@ local MasterConfig = {
     SellDelay = 65,
     AutoFavorite = true,
     AutoUnfavoriteRubies = false,
-    DiscordWebhookEnabled = false,
+    
+    -- DISCORD DIHAPUS (CLEANED)
+    DiscordWebhookEnabled = false, 
     DiscordWebhookUrl = "",
    
     AutoTeleport = true,
@@ -66,6 +67,8 @@ local MasterConfig = {
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST",
     TradeDelay = 6.5,
+    
+    -- LEGACY WEBHOOK (OPTIMIZED)
     WebhookEnabled = true,
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
@@ -123,7 +126,6 @@ local function LoadWebConfig()
                 end
 
                 local shouldRestart = false
-                
                 if MasterConfig.FishingEnabled and not FishingState.IsFishing then
                     shouldRestart = true
                 elseif not MasterConfig.FishingEnabled and FishingState.IsFishing then
@@ -265,36 +267,6 @@ UpdateStatsFromInventory = function()
 end
 
 -- ===============================
--- DISCORD WEBHOOK LOGIC
--- ===============================
-local function SendDiscordSecretNotification(fishName, rarity, mutation, weight)
-    if not MasterConfig.DiscordWebhookEnabled or not MasterConfig.DiscordWebhookUrl or MasterConfig.DiscordWebhookUrl == "" then return end
-    if not req then return end
-    local mutationText = (mutation ~= "" and mutation ~= "None" and mutation or "None")
-    req({
-        Url = MasterConfig.DiscordWebhookUrl,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = Services.HttpService:JSONEncode({
-            username = "Webhak Enok",
-            embeds = {{
-                title = "🚨 " .. tostring(rarity) .. " FISH CAUGHT! 🚨",
-                color = 16711680,
-                fields = {
-                    { name = "Pemain", value = "`" .. lp.Name .. "`", inline = true },
-                    { name = "Ikan", value = "**" .. fishName .. "**", inline = true },
-                    { name = "Rarity", value = "`" .. rarity .. "`", inline = true },
-                    { name = "Mutasi", value = "`" .. mutationText .. "`", inline = true },
-                    { name = "Berat", value = "`" .. string.format("%.2fkg", weight or 0) .. "`", inline = true }
-                },
-                footer = { text = "Ultimate Hub - Webhak Enok" },
-                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-            }}
-        })
-    })
-end
-
--- ===============================
 -- POTATO MODE
 -- ===============================
 local VFXControllerModule
@@ -376,7 +348,6 @@ local function GetCoins()
 end
 
 local function DisableNativeAutoFish()
-    -- Fungsi ini mematikan controller game agar kita bisa spam remote sendiri
     local success, AutoFishCtrl = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
     end)
@@ -397,10 +368,8 @@ local function DisableNativeAutoFish()
     print("[-] Native Controller Disabled (Brutal Mode)")
 end
 
--- // --- FUNGSI TEMBAK CEPAT (NON-BLOCKING) --- //
 local function FireRemote(remote)
     if not remote then return end
-    -- Kirim Angka 1
     task.spawn(function()
         pcall(function()
             if remote:IsA("RemoteFunction") then remote:InvokeServer(1) else remote:FireServer(1) end
@@ -408,7 +377,6 @@ local function FireRemote(remote)
     end)
 end
 
--- // --- MAIN ROUTER (UPDATED) --- //
 function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
@@ -416,48 +384,34 @@ function StartFishingRouter()
 
     DisableNativeAutoFish()
 
-    -- [THREAD 1] INSTANT RE-CHARGE BOT (+ AUTO EQUIP INTEGRATED)
+    -- [THREAD 1] INSTANT RE-CHARGE BOT
     table.insert(FishingThreads, task.spawn(function()
-        print("⚡ [Instant Bot] Started - Charge -> " .. MasterConfig.DelayChargeToReq .. "s -> Req -> " .. MasterConfig.DelayReqToCatch .. "s -> Catch")
+        print("⚡ [Instant Bot] Started")
         
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                
-                -- [1] AUTO EQUIP (Cek Langsung di Loop Utama)
-                -- Ini memastikan pancingan dipegang SEBELUM mencoba Charge
                 if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
                     if RE_EquipToolFromHotbar then
                         pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
                     end
-                    task.wait(0.3) -- Beri waktu sedikit untuk animasi equip
+                    task.wait(0.3)
                 end
 
-                -- [2] CHARGE (Awal Siklus)
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
-                
-                -- Tunggu (Charge -> Request)
                 task.wait(MasterConfig.DelayChargeToReq)
                 if not FishingState.IsFishing then break end
 
-                -- [3] REQUEST MINIGAME
                 if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
-
-                -- Tunggu (Request -> Catch)
                 task.wait(MasterConfig.DelayReqToCatch)
                 if not FishingState.IsFishing then break end
 
-                -- [4] CATCH (Akhir Siklus)
                 if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
-                
-                -- [!!!] NO WAIT HERE [!!!] - Langsung loop kembali ke atas
             end
-            
-            -- Safety check jika karakter mati/nil
             if not lp.Character then task.wait(1) end
         end
     end))
 
-    -- [THREAD 2] AUTO SELL (Global)
+    -- [THREAD 2] AUTO SELL
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -471,7 +425,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- [THREAD 3] AUTO FAVORITE (Global)
+    -- [THREAD 3] AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -503,7 +457,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- [THREAD 4] UNFAVORITE RUBY (Global)
+    -- [THREAD 4] UNFAVORITE RUBY
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -516,7 +470,7 @@ function StartFishingRouter()
                                  if name == "Ruby" and GetMutation(item) ~= "Gemstone" then
                                      pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
                                      task.wait(0.2)
-                                 end
+                                end
                              end
                          end
                      end
@@ -671,7 +625,7 @@ function RunAutoTrade()
                     task.wait(1)
                  end
             else
-                 task.wait(3)
+                task.wait(3)
             end
             task.wait(MasterConfig.TradeDelay)
         end
@@ -729,7 +683,7 @@ local function StartWeatherAutoBuy()
                              task.wait(2) 
                          end
                      end
-                end
+                 end
             else
                 if os.time() - LastWeatherBuyTime > BLIND_BUY_INTERVAL then
                     if RF_PurchaseWeatherEvent then
@@ -767,7 +721,6 @@ local function StartMerchantAutoBuy()
                 if MerchantReplion then
                      pcall(function() merchantData = MerchantReplion:Get("Items") end)
                 end
-                
                 local isTotemInStock = false
                 if merchantData then
                     for _, id in ipairs(merchantData) do
@@ -807,7 +760,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v6.8 (INSTANT BOT)"
+    toggleBtn.Text = "W - v6.9.2 (FULL REPORT)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -886,7 +839,6 @@ function CreateDashboard()
                 local activeW, wStatus = ScanWeatherUI()
                 local wText = "None"
                 if #activeW > 0 then wText = table.concat(activeW, ", ") end
-                
                 if wStatus == "CLOSED" or wStatus == "NO_GUI" then
                      local remaining = math.max(0, BLIND_BUY_INTERVAL - (os.time() - LastWeatherBuyTime))
                      wText = "Blind: Next Batch in " .. remaining .. "s"
@@ -897,26 +849,98 @@ function CreateDashboard()
     end)
 end
 
--- REMOTE LISTENER
+-- ===============================
+-- SMART LEGACY WEBHOOK (FULL REPORT ON TRIGGER)
+-- ===============================
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+
+-- Fungsi Kirim ke Server Custom (Pengganti Loop 15 Detik)
+local function SendSmartLegacyHook(pName, data)
+    -- Pastikan URL ada di config
+    if not MasterConfig.WebhookEnabled or not MasterConfig.WebhookUrl or MasterConfig.WebhookUrl == "" then return end
+    
+    -- Encode data ke JSON
+    local success, json = pcall(function() return Services.HttpService:JSONEncode(data) end)
+    
+    if success then
+        -- Kirim via GET Request (Sesuai format asli script)
+        local url = MasterConfig.WebhookUrl .. "?player=" .. Services.HttpService:UrlEncode(pName) .. "&data=" .. Services.HttpService:UrlEncode(json)
+        
+        task.spawn(function()
+            pcall(function() 
+                game:HttpGet(url) 
+                print("✅ [Legacy Hook] Laporan Full Inventory (Secret/Ruby) terkirim!")
+            end)
+        end)
+    end
+end
+
+-- Listener Event (Hanya jalan saat dapat ikan)
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         TotalFishCaught = TotalFishCaught + 1
+        
         task.spawn(function()
             if not item then return end
-            local name, rarity, mutation, displayName, isSecret = "Unknown", "Common", "None", "Unknown", false
+            
+            local newItemName, newItemRarity, newItemMutation = "Unknown", "Common", "None"
+            local isTriggerSecret = false
+            local isTriggerRubyGem = false
+            
+            -- 1. Cek apakah ikan BARU ini adalah trigger
             pcall(function()
-                name, rarity = GetFishNameAndRarity(item)
-                mutation = GetMutation(item)
-                isSecret = (rarity and string.upper(tostring(rarity)) == "SECRET")
+                newItemName, newItemRarity = GetFishNameAndRarity(item)
+                newItemMutation = GetMutation(item)
+                
+                if newItemRarity and string.upper(tostring(newItemRarity)) == "SECRET" then
+                    isTriggerSecret = true
+                end
+                
+                if newItemName == "Ruby" and newItemMutation == "Gemstone" then
+                    isTriggerRubyGem = true
+                end
             end)
 
-            if isSecret then
+            -- 2. Jika Trigger Aktif -> Scan SEMUA inventory
+            if isTriggerSecret or isTriggerRubyGem then
                 pcall(UpdateStatsFromInventory) 
-                if MasterConfig.DiscordWebhookEnabled then
-                    local weight = (item.Metadata and item.Metadata.Weight) or 0
-                    SendDiscordSecretNotification(name, rarity, mutation, weight)
+                
+                local exportData = { Summary = {}, Details = {} }
+                local inv = PlayerData:Get("Inventory")
+                
+                if inv then
+                    for _, items in pairs(inv) do
+                        for _, invItem in ipairs(items) do
+                            local n, r = GetFishNameAndRarity(invItem)
+                            local mut = GetMutation(invItem)
+                            
+                            -- Filter: Hanya masukkan Secret atau Ruby Gemstone ke laporan
+                            local isSec = (tostring(r):upper() == "SECRET")
+                            local isGem = (n == "Ruby" and mut == "Gemstone")
+                            
+                            if isSec or isGem then
+                                -- Format Name
+                                local dName = n
+                                if mut ~= "None" then dName = "["..mut.."] "..n end
+                                
+                                -- Update Summary
+                                exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                                
+                                -- Update Details
+                                table.insert(exportData.Details, {
+                                    Name = dName,
+                                    Rarity = r,
+                                    Weight = invItem.Metadata and invItem.Metadata.Weight or 0,
+                                    Mutation = mut,
+                                    UniqueId = invItem.UUID or invItem.Id
+                                })
+                            end
+                        end
+                    end
                 end
+                
+                -- 3. Eksekusi Webhook dengan data FULL
+                SendSmartLegacyHook(lp.Name, exportData)
             end
         end)
     end)
@@ -930,43 +954,6 @@ task.spawn(function()
         LoadWebConfig()
     end
 end)
-
--- LEGACY WEBHOOK
-if MasterConfig.WebhookEnabled then
-    task.spawn(function()
-        local function SendHook(pName, data)
-            local json = Services.HttpService:JSONEncode(data)
-            local url = MasterConfig.WebhookUrl .. "?player=" .. Services.HttpService:UrlEncode(pName) .. "&data=" .. Services.HttpService:UrlEncode(json)
-            pcall(function() game:HttpGet(url) end)
-        end
-        local dataR = Replion:WaitReplion("Data")
-        while true do
-            local inv = dataR:GetExpect("Inventory")
-            local exportData = { Summary = {}, Details = {} }
-
-            if inv then
-                for _, items in pairs(inv) do
-                    for _, item in ipairs(items) do
-                        local n, r = GetFishNameAndRarity(item)
-                        local mut = GetMutation(item)
-                        if r == "SECRET" or string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage") or (n == "Ruby" and mut == "Gemstone") then
-                            local dName = n
-                            if mut ~= "None" then dName = "["..mut.."] "..n end
-                            exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
-                            
-                            table.insert(exportData.Details, {
-                                Name = dName, Rarity = r, Weight = item.Metadata and item.Metadata.Weight or 0,
-                                Mutation = mut, UniqueId = item.UUID or item.Id
-                            })
-                        end
-                    end
-                end
-            end
-            SendHook(lp.Name, exportData)
-            task.wait(15)
-        end
-    end)
-end
 
 -- WALK ON WATER
 local walkOnWaterConnection = nil
@@ -1044,6 +1031,15 @@ task.delay(10, function()
     
     print("[AutoStart] Config Web Loaded. Lokasi: " .. MasterConfig.SelectedLocation)
     
+    -- [NEW FEATURE] AUTO SET SELL THRESHOLD TO MYTHIC (6)
+    local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
+    if RF_UpdateAutoSellThreshold then
+        pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
+        print("✅ [AutoSell] Threshold set to Mythic (6)")
+    else
+        warn("❌ [AutoSell] Remote RF/UpdateAutoSellThreshold not found")
+    end
+
     pcall(UpdateStatsFromInventory)
     StartWeatherAutoBuy() 
     StartMerchantAutoBuy()
@@ -1051,20 +1047,6 @@ task.delay(10, function()
     task.spawn(function()
         ToggleWalkOnWater(true)
     end)
-
-    if req and MasterConfig.DiscordWebhookEnabled and MasterConfig.DiscordWebhookUrl ~= "" then
-       pcall(function() 
-           req({ 
-               Url = MasterConfig.DiscordWebhookUrl, 
-               Method = "POST", 
-               Headers = {["Content-Type"] = "application/json"},
-               Body = Services.HttpService:JSONEncode({ 
-                   username = "Webhak Enok", 
-                   content = "✅ **" .. lp.Name .. " - Script Started after 10s Delay at " .. MasterConfig.SelectedLocation .. "**" 
-                }) 
-           })
-       end)
-    end
 
     if MasterConfig.AutoTeleport then 
         TeleportToFishingLocation()
