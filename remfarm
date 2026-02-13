@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.6 (FULL SCREEN GRID + 15s SCAN)
+-- # ULTIMATE HUB: RE-FARM V7.7 (RESPONSIVE GRID + 15s SCAN)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -757,7 +757,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "TOGGLE GUI (v7.6)"
+    toggleBtn.Text = "TOGGLE GUI (v7.7 Responsive)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -765,8 +765,9 @@ function CreateDashboard()
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
     -- CONTAINER (Tengah Layar) untuk Grid
+    -- MENGGUNAKAN SKALA 0.95 (95%) SUPAYA FIT SAAT SPLIT SCREEN
     local gridContainer = Instance.new("Frame", dashboard)
-    gridContainer.Size = UDim2.new(0.4, 0, 0.3, 0) -- Atur ukuran tabel di sini
+    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0) -- Lebar 95% layar
     gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
     gridContainer.AnchorPoint = Vector2.new(0.5, 0.5)
     gridContainer.BackgroundTransparency = 1
