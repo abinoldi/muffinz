@@ -1,0 +1,123 @@
+-- ======================================================
+-- # STANDALONE LEGACY WEBHOOK (FISCH)
+-- ======================================================
+
+local Services = {
+    Players = game:GetService("Players"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage"),
+    HttpService = game:GetService("HttpService"),
+    RunService = game:GetService("RunService")
+}
+
+local lp = Services.Players.LocalPlayer
+
+-- [KONFIGURASI]
+local WebhookUrl = "http://43.134.116.2:5000/webhook/fishit" -- Ganti dengan URL Webhook kamu jika berbeda
+local LoopDelay = 15 -- Waktu jeda antar pengiriman data (detik)
+
+-- ===============================
+-- MODULES & DEPENDENCIES
+-- ===============================
+local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
+local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
+local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
+local PlayerData = Replion:WaitReplion("Data", 10)
+
+-- ===============================
+-- HELPER FUNCTIONS
+-- ===============================
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
+    local itemID = item.Id
+    local itemData
+    
+    if ItemUtility and itemID then
+        pcall(function()
+            itemData = ItemUtility:GetItemData(itemID)
+            if not itemData then
+                local numericID = tonumber(item.Id) or tonumber(item.Identifier)
+                if numericID then itemData = ItemUtility:GetItemData(numericID) end
+            end
+        end)
+    end
+    
+    if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+    if item.Metadata and item.Metadata.Rarity then 
+        rarity = item.Metadata.Rarity 
+    elseif itemData and itemData.Probability and TierUtility then 
+        pcall(function() rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name end) 
+    end
+    return name, rarity
+end
+
+local function GetMutation(item)
+    if not item.Metadata then return "None" end
+    if item.Metadata.VariantId and item.Metadata.VariantId ~= "" then return item.Metadata.VariantId end
+    if item.Metadata.Shiny == true then return "Shiny" end
+    return "None"
+end
+
+-- ===============================
+-- MAIN WEBHOOK LOGIC
+-- ===============================
+task.spawn(function()
+    print("✅ Legacy Webhook System Started...")
+    
+    local function SendHook(pName, data)
+        if not WebhookUrl or WebhookUrl == "" then return end
+        
+        -- Format Data sesuai Legacy System
+        local json = Services.HttpService:JSONEncode(data)
+        local encodedName = Services.HttpService:UrlEncode(pName)
+        local encodedData = Services.HttpService:UrlEncode(json)
+        
+        local finalUrl = WebhookUrl .. "?player=" .. encodedName .. "&data=" .. encodedData
+        
+        pcall(function() 
+            game:HttpGet(finalUrl) 
+            print("📤 Data sent to webhook")
+        end)
+    end
+
+    while task.wait(LoopDelay) do
+        local inv = PlayerData:GetExpect("Inventory")
+        local exportData = { Summary = {}, Details = {} }
+        local foundInterestingItem = false
+
+        if inv then
+            for _, items in pairs(inv) do
+                for _, item in ipairs(items) do
+                    local n, r = GetFishNameAndRarity(item)
+                    local mut = GetMutation(item)
+                    
+                    -- Filter: Secret, Leviathan/Rage Mutation, atau Ruby Gemstone
+                    local isSecret = (tostring(r):upper() == "SECRET")
+                    local isRareMut = (string.find(mut:lower(), "leviathan") or string.find(mut:lower(), "rage"))
+                    local isRubyGem = (n == "Ruby" and mut == "Gemstone")
+
+                    if isSecret or isRareMut or isRubyGem then
+                        foundInterestingItem = true
+                        local dName = n
+                        if mut ~= "None" then dName = "["..mut.."] "..n end
+                        
+                        -- Update Summary Count
+                        exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                        
+                        -- Insert Detail
+                        table.insert(exportData.Details, {
+                            Name = dName, 
+                            Rarity = r, 
+                            Weight = item.Metadata and item.Metadata.Weight or 0,
+                            Mutation = mut, 
+                            UniqueId = item.UUID or item.Id
+                        })
+                    end
+                end
+            end
+        end
+
+        -- Kirim data (Bahkan jika kosong, sesuai logika asli script mengirim status update)
+        SendHook(lp.Name, exportData)
+    end
+end)
