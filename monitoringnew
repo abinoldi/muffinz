@@ -13,7 +13,7 @@ local lp = Services.Players.LocalPlayer
 
 -- [KONFIGURASI]
 local WebhookUrl = "http://43.134.116.2:5000/webhook/fishit" -- Ganti dengan URL Webhook kamu jika berbeda
-local LoopDelay = 15 -- Waktu jeda antar pengiriman data (detik)
+local LoopDelay = 30 -- Waktu jeda antar pengiriman data (detik)
 
 -- ===============================
 -- MODULES & DEPENDENCIES
