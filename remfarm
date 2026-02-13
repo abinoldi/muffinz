@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.3 (DIRECT SCAN - NO TIME LIMIT)
+-- # ULTIMATE HUB: RE-FARM V7.5 (GRID GUI + 15s SCAN)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -22,7 +22,7 @@ local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
 
 -- ===============================
--- 1. AUTO RECONNECT (CRASH/DISCONNECT HANDLER ONLY)
+-- 1. AUTO RECONNECT (CRASH HANDLER ONLY)
 -- ===============================
 local GuiService = game:GetService("GuiService")
 local placeId = game.PlaceId
@@ -79,7 +79,7 @@ local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
 local LastWeatherBuyTime = 0 
-local StartFishingRouter, StopFishing, RunAutoTrade, TeleportToFishingLocation, UpdateStatsFromInventory
+local StartFishingRouter, StopFishing, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
 
 -- [3] WEB CONFIG LOADER
 local function LoadWebConfig()
@@ -214,6 +214,17 @@ local function GetMutation(item)
     return "None"
 end
 
+local function FormatNumber(n)
+    return tostring(n):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "")
+end
+
+local function FormatTime(seconds)
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = seconds % 60
+    return string.format("%02dh %02dm %02ds", h, m, s)
+end
+
 -- Update Internal Stats Variable (Counter)
 UpdateStatsFromInventory = function()
     local secretCount = 0
@@ -245,13 +256,9 @@ end
 -- DIRECT SCANNER & SENDER (NO CACHE)
 -- ===============================
 local function ScanInventoryAndReport()
-    -- 1. Update Counter Internal
     pcall(UpdateStatsFromInventory) 
     
-    -- 2. Jika Webhook Mati, Stop di sini (Hemat Resource)
-    if not MasterConfig.WebhookEnabled then 
-        return 
-    end
+    if not MasterConfig.WebhookEnabled then return end
 
     local exportData = { Summary = {}, Details = {} }
     local inv = PlayerData:Get("Inventory")
@@ -261,19 +268,13 @@ local function ScanInventoryAndReport()
             for _, invItem in ipairs(items) do
                 local n, r = GetFishNameAndRarity(invItem)
                 local mut = GetMutation(invItem)
-                
-                -- Filter: Ambil SEMUA Secret & Ruby Gemstone
                 local isSec = (tostring(r):upper() == "SECRET")
                 local isGem = (n == "Ruby" and mut == "Gemstone")
                 
                 if isSec or isGem then
                     local dName = n
                     if mut ~= "None" then dName = "["..mut.."] "..n end
-                    
-                    -- Update Summary
                     exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
-                    
-                    -- Update Details
                     table.insert(exportData.Details, {
                         Name = dName,
                         Rarity = r,
@@ -286,7 +287,6 @@ local function ScanInventoryAndReport()
         end
     end
     
-    -- 3. KIRIM LANGSUNG (DIRECT)
     if (next(exportData.Summary) ~= nil) then
         SendHook(lp.Name, exportData)
         print("📤 [Direct] Data sent to Webhook.")
@@ -361,7 +361,7 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- FISHING SYSTEM (INSTANT ONLY)
+-- FISHING SYSTEM
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
@@ -383,7 +383,6 @@ local function DisableNativeAutoFish()
         if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
         AutoFishCtrl.Start = function() return end 
     end
-    
     local s2, FishingController = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.FishingController) 
     end)
@@ -407,18 +406,15 @@ function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     FishingState.CurrentMode = "INSTANT_RECHARGE"
-
     DisableNativeAutoFish()
 
-    -- [THREAD 1] INSTANT RE-CHARGE BOT
+    -- INSTANT BOT
     table.insert(FishingThreads, task.spawn(function()
         print("⚡ [Instant Bot] Started")
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
-                    if RE_EquipToolFromHotbar then
-                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
-                    end
+                    if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
                     task.wait(0.3)
                 end
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
@@ -433,7 +429,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- [THREAD 2] AUTO SELL
+    -- AUTO SELL
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
@@ -447,7 +443,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- [THREAD 3] AUTO FAVORITE
+    -- AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -461,13 +457,9 @@ function StartFishingRouter()
                                 local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
                                 local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby")
                                 local isRare = string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage")
-                                
                                 if (isRuby or isRare) and not isLocked then
                                       task.spawn(function()
-                                          for i = 1, 3 do 
-                                              RE_FavoriteItem:FireServer(item.UUID)
-                                              task.wait(0.05) 
-                                          end
+                                          for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID) task.wait(0.05) end
                                       end)
                                 end
                             end
@@ -479,7 +471,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- [THREAD 4] UNFAVORITE RUBY
+    -- UNFAVORITE RUBY
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -507,9 +499,7 @@ function StopFishing()
     print("🛑 [Info] Stopping Instant Bot")
     FishingState.IsFishing = false
     FishingState.CurrentMode = "NONE"
-    for _, thread in ipairs(FishingThreads) do
-        if thread then task.cancel(thread) end
-    end
+    for _, thread in ipairs(FishingThreads) do if thread then task.cancel(thread) end end
     FishingThreads = {}
 end
 
@@ -554,10 +544,7 @@ local function SpawnMutationTotem()
     if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
     local success = false
     if uuid then
-        pcall(function() 
-            RE_SpawnTotem:FireServer(uuid)
-            success = true 
-        end)
+        pcall(function() RE_SpawnTotem:FireServer(uuid) success = true end)
         if success then
             local originalCF = hrp.CFrame
             hrp.CFrame = originalCF + Vector3.new(0, 5, 0)
@@ -669,9 +656,7 @@ local function ScanWeatherUI()
         local content = tile:FindFirstChild("Content")
         if content then
             local itemName = content:FindFirstChild("ItemName")
-            if itemName then
-                table.insert(activeList, itemName.Text)
-            end
+            if itemName then table.insert(activeList, itemName.Text) end
         end
     end
     return activeList, "OK"
@@ -698,10 +683,7 @@ local function StartWeatherAutoBuy()
                     if RF_PurchaseWeatherEvent then
                         print("⚡ [Weather-Blind] UI Tertutup. Mengeksekusi Batch Storm, Cloudy, Wind...")
                         for _, wTarget in ipairs(WeatherTargets) do
-                            pcall(function() 
-                                RF_PurchaseWeatherEvent:InvokeServer(wTarget) 
-                                print("   > Membeli " .. wTarget)
-                             end)
+                            pcall(function() RF_PurchaseWeatherEvent:InvokeServer(wTarget) end)
                             task.wait(2) 
                         end
                         LastWeatherBuyTime = os.time()
@@ -754,10 +736,165 @@ local function StartMerchantAutoBuy()
 end
 
 -- ===============================
--- 2. TRIGGER LISTENER (ONLY COUNTER)
+-- GUI DASHBOARD (GRID LAYOUT)
+-- ===============================
+function CreateDashboard()
+    if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
+    local gui = Instance.new("ScreenGui", Services.CoreGui)
+    gui.Name = "EnochDashboard"
+    gui.IgnoreGuiInset = true
+
+    -- Main Container
+    local dashboard = Instance.new("Frame", gui)
+    dashboard.Size = UDim2.new(0.2, 0, 0.2, 0) -- Adjust overall size here
+    dashboard.Position = UDim2.new(0.01, 0, 0.4, 0) -- Adjust position here
+    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dashboard.BorderSizePixel = 2
+    dashboard.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    dashboard.Visible = true
+
+    -- Toggle Button (Small, above dashboard)
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.2, 0, 0.03, 0)
+    toggleBtn.Position = UDim2.new(0.01, 0, 0.37, 0)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "TOGGLE GUI (v7.5)"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
+
+    -- Layout Handler
+    local layout = Instance.new("UIListLayout", dashboard)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 0)
+
+    -- HELPER: Create Row Frame
+    local function CreateRow(order)
+        local row = Instance.new("Frame", dashboard)
+        row.Size = UDim2.new(1, 0, 0.23, 0) -- Approx height for 4 rows
+        row.BackgroundTransparency = 1
+        row.LayoutOrder = order
+        return row
+    end
+
+    -- HELPER: Create Column Label
+    local function CreateCol(parent, text, posX)
+        local lab = Instance.new("TextLabel", parent)
+        lab.Size = UDim2.new(0.5, 0, 1, 0)
+        lab.Position = UDim2.new(posX, 0, 0, 0)
+        lab.BackgroundTransparency = 1
+        lab.Text = text
+        lab.TextColor3 = Color3.new(1,1,1)
+        lab.Font = Enum.Font.GothamBold
+        lab.TextScaled = true
+        return lab
+    end
+
+    -- HELPER: Create Separator Line
+    local function CreateLine()
+        local line = Instance.new("Frame", dashboard)
+        line.Size = UDim2.new(1, 0, 0, 1) -- 1px height
+        line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        line.BorderSizePixel = 0
+    end
+
+    -- HELPER: Create Vertical Line in Row
+    local function CreateVLine(parent)
+        local line = Instance.new("Frame", parent)
+        line.Size = UDim2.new(0, 1, 1, 0) -- 1px width
+        line.Position = UDim2.new(0.5, 0, 0, 0)
+        line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        line.BorderSizePixel = 0
+        line.ZIndex = 2
+    end
+
+    -- === ROW 1: Location | Target ===
+    local Row1 = CreateRow(1)
+    local L_Mode = CreateCol(Row1, "...", 0)
+    CreateVLine(Row1)
+    local L_Target = CreateCol(Row1, "...", 0.5)
+    CreateLine()
+
+    -- === ROW 2: Caught | F/M ===
+    local Row2 = CreateRow(2)
+    local L_Stats = CreateCol(Row2, "0", 0)
+    CreateVLine(Row2)
+    local L_FPM = CreateCol(Row2, "0.0", 0.5)
+    CreateLine()
+
+    -- === ROW 3: Secret | Gem ===
+    local Row3 = CreateRow(3)
+    local L_Secret = CreateCol(Row3, "0", 0)
+    L_Secret.TextColor3 = Color3.fromRGB(255, 100, 255) -- Pinkish
+    CreateVLine(Row3)
+    local L_Gem = CreateCol(Row3, "0", 0.5)
+    L_Gem.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red
+    CreateLine()
+
+    -- === ROW 4: Status (Full Width) ===
+    local Row4 = CreateRow(4)
+    local L_Status = Instance.new("TextLabel", Row4)
+    L_Status.Size = UDim2.new(1, 0, 1, 0)
+    L_Status.BackgroundTransparency = 1
+    L_Status.Text = "Status: Idle"
+    L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
+    L_Status.Font = Enum.Font.GothamBold
+    L_Status.TextScaled = true
+
+    -- Update Loop
+    task.spawn(function()
+        while task.wait(0.5) do
+            if dashboard.Visible then
+                L_Mode.Text = MasterConfig.SelectedLocation or "None"
+                
+                local tName = MasterConfig.TargetUsername or "???"
+                local tPlayer = Services.Players:FindFirstChild(tName)
+                if tPlayer then
+                    L_Target.Text = tName .. "\n[✅]"
+                    L_Target.TextColor3 = Color3.fromRGB(0, 255, 100)
+                else
+                    L_Target.Text = tName .. "\n[❌]"
+                    L_Target.TextColor3 = Color3.fromRGB(255, 50, 50)
+                end
+
+                local elapsed = os.time() - SessionStartTime
+                local fpm = 0
+                if elapsed > 0 and TotalFishCaught > 0 then
+                    fpm = TotalFishCaught / (elapsed / 60)
+                end
+
+                L_Stats.Text = "Caught:\n" .. TotalFishCaught
+                L_FPM.Text = string.format("Speed:\n%.1f F/M", fpm)
+                
+                L_Secret.Text = "Secret:\n" .. TotalSecretsFound
+                L_Gem.Text = "Gem:\n" .. TotalRubyGemstones
+
+                local currentStatus = "Idle"
+                if FishingState.IsFishing then currentStatus = "Fishing" end
+                if TradingState.IsTrading then currentStatus = "Trading" end
+                if FishingState.Teleporting then currentStatus = "Teleporting" end
+                
+                -- Check Weather
+                local activeW, wStatus = ScanWeatherUI()
+                local wText = ""
+                if #activeW > 0 then 
+                    wText = " | " .. table.concat(activeW, ",") 
+                elseif wStatus == "CLOSED" then
+                    local rem = math.max(0, BLIND_BUY_INTERVAL - (os.time() - LastWeatherBuyTime))
+                    wText = " | Blind: " .. rem .. "s"
+                end
+                
+                L_Status.Text = currentStatus .. wText
+            end
+        end
+    end)
+end
+
+-- ===============================
+-- 2. TRIGGER LISTENER
 -- ===============================
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
-
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         TotalFishCaught = TotalFishCaught + 1
@@ -767,10 +904,7 @@ end
 -- CONFIG LOOP
 task.spawn(function()
     LoadWebConfig() 
-    while true do
-        task.wait(60)
-        LoadWebConfig()
-    end
+    while true do task.wait(60) LoadWebConfig() end
 end)
 
 -- ===============================
@@ -779,7 +913,7 @@ end)
 task.spawn(function()
     print("⏳ [System] Starting 15-Second Inventory Scan & Report Loop...")
     while true do
-        pcall(ScanInventoryAndReport) -- Scan & Langsung Kirim
+        pcall(ScanInventoryAndReport) 
         task.wait(15) 
     end
 end)
@@ -841,24 +975,19 @@ local function ToggleWalkOnWater(state)
 end
 
 -- ===============================
--- AUTO-START (WITH DELAY)
+-- AUTO-START
 -- ===============================
 task.delay(10, function()
-    print("[AutoStart] Memulai eksekusi setelah menunggu 10 detik...")
+    print("[AutoStart] Starting...")
+    CreateDashboard()
     LoadWebConfig()
-    print("[AutoStart] Config Web Loaded. Lokasi: " .. MasterConfig.SelectedLocation)
     
     local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
     if RF_UpdateAutoSellThreshold then
         pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
-        print("✅ [AutoSell] Threshold set to Mythic (6)")
-    else
-        warn("❌ [AutoSell] Remote RF/UpdateAutoSellThreshold not found")
     end
 
-    -- SCAN AWAL
     ScanInventoryAndReport()
-    
     StartWeatherAutoBuy() 
     StartMerchantAutoBuy()
     task.spawn(function() ToggleWalkOnWater(true) end)
