@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V6.9.3 (CACHED SCAN STRATEGY)
+-- # ULTIMATE HUB: RE-FARM V7.0 (TIMED SCAN 1 MINUTE)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -20,7 +20,7 @@ local Services = {
 local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
 
--- GLOBAL CACHE DATA (Tempat menyimpan data scan terakhir)
+-- GLOBAL CACHE DATA
 local LatestExportData = { Summary = {}, Details = {} }
 
 -- ===============================
@@ -64,7 +64,8 @@ local MasterConfig = {
     TargetUsername = "mm3kenak",
     TradeMode = "SECRETS_FIRST",
     TradeDelay = 6.5,
-    WebhookEnabled = true,
+    -- [MODIFIED] Webhook dimatikan sesuai request
+    WebhookEnabled = false, 
     WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
 }
 
@@ -99,7 +100,14 @@ local function LoadWebConfig()
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
-                    MasterConfig[key] = value
+                    -- Webhook override protection (tetap mati jika di config lokal mati)
+                    if key == "WebhookEnabled" then 
+                         -- Biarkan false jika user ingin false, atau ikuti web jika perlu. 
+                         -- Di sini kita biarkan dia bisa di-override web, tapi default lokal false.
+                         MasterConfig[key] = value 
+                    else
+                         MasterConfig[key] = value
+                    end
                     settingsChanged = true
                 end
             end
@@ -285,7 +293,7 @@ local function ScanInventoryAndCache()
     
     -- SIMPAN KE VARIABLE GLOBAL (CACHING)
     LatestExportData = exportData
-    print("📦 [Cache] Inventory Scanned & Saved to Memory.")
+    print("📦 [1-Min Scan] Inventory & GUI Updated.")
 end
 
 -- ===============================
@@ -485,14 +493,14 @@ function StartFishingRouter()
                              if item.IsFavorite or item.Favorited or item.Locked then
                                  local name, _ = GetFishNameAndRarity(item) 
                                  if name == "Ruby" and GetMutation(item) ~= "Gemstone" then
-                                     pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
+                                      pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
                                      task.wait(0.2)
                                 end
                              end
                          end
                      end
                  end
-            end
+             end
             task.wait(5)
         end
     end))
@@ -761,7 +769,7 @@ function CreateDashboard()
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "W - v6.9.3 (CACHED SCAN)"
+    toggleBtn.Text = "W - v7.0 (TIMED SCAN)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
@@ -840,44 +848,20 @@ function CreateDashboard()
 end
 
 -- ===============================
--- 2. TRIGGER LISTENER (ONLY UPDATE CACHE WHEN CAUGHT)
+-- 2. TRIGGER LISTENER (ONLY COUNTER)
 -- ===============================
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         TotalFishCaught = TotalFishCaught + 1
-        
-        task.spawn(function()
-            if not item then return end
-            
-            local newItemName, newItemRarity, newItemMutation = "Unknown", "Common", "None"
-            local isTriggerSecret = false
-            local isTriggerRubyGem = false
-            
-            -- Cek apakah ikan BARU ini adalah trigger
-            pcall(function()
-                newItemName, newItemRarity = GetFishNameAndRarity(item)
-                newItemMutation = GetMutation(item)
-                
-                if newItemRarity and string.upper(tostring(newItemRarity)) == "SECRET" then
-                    isTriggerSecret = true
-                end
-                if newItemName == "Ruby" and newItemMutation == "Gemstone" then
-                    isTriggerRubyGem = true
-                end
-            end)
-
-            -- Jika Trigger Aktif -> Scan SEMUA inventory lalu SIMPAN KE CACHE
-            if isTriggerSecret or isTriggerRubyGem then
-               ScanInventoryAndCache()
-            end
-        end)
+        -- [MODIFIED] Menghapus logic scan berat di sini.
+        -- Scan sekarang dilakukan via loop 1 menit agar GUI konsisten.
     end)
 end
 
 -- ===============================
--- 3. WEBHOOK SENDER LOOP (SENDS CACHE EVERY 15S)
+-- 3. WEBHOOK SENDER LOOP (CHECK CONFIG)
 -- ===============================
 if MasterConfig.WebhookEnabled then
     task.spawn(function()
@@ -888,12 +872,10 @@ if MasterConfig.WebhookEnabled then
         end
         
         while true do
-            -- Loop ini hanya mengirim apa yang ada di memori (LatestExportData)
-            -- Tidak melakukan scan berat di sini.
-            if LatestExportData and (next(LatestExportData.Summary) ~= nil) then
+            if MasterConfig.WebhookEnabled and LatestExportData and (next(LatestExportData.Summary) ~= nil) then
                 SendHook(lp.Name, LatestExportData)
             end
-            task.wait(15) -- Jeda 15 detik sesuai original
+            task.wait(15) 
         end
     end)
 end
@@ -904,6 +886,19 @@ task.spawn(function()
     while true do
         task.wait(60)
         LoadWebConfig()
+    end
+end)
+
+-- ===============================
+-- 4. NEW: PERIODIC INVENTORY SCAN (1 MINUTE)
+-- ===============================
+-- Loop ini akan memastikan jumlah Secret/Ruby di GUI selalu AKURAT
+-- karena dia menghitung ulang seluruh inventory setiap 60 detik.
+task.spawn(function()
+    print("⏳ [System] Starting 1-Minute Inventory Scan Loop...")
+    while true do
+        pcall(ScanInventoryAndCache)
+        task.wait(60) -- Scan ulang setiap 60 detik
     end
 end)
 
@@ -981,7 +976,7 @@ task.delay(10, function()
         warn("❌ [AutoSell] Remote RF/UpdateAutoSellThreshold not found")
     end
 
-    -- SCAN AWAL (Supaya webhook langsung kirim data, gak nunggu dapet secret dulu)
+    -- SCAN AWAL
     ScanInventoryAndCache()
     
     StartWeatherAutoBuy() 
