@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.5 (GRID GUI + 15s SCAN)
+-- # ULTIMATE HUB: RE-FARM V7.6 (FULL SCREEN GRID + 15s SCAN)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -736,7 +736,7 @@ local function StartMerchantAutoBuy()
 end
 
 -- ===============================
--- GUI DASHBOARD (GRID LAYOUT)
+-- GUI DASHBOARD (FULL SCREEN GRID LAYOUT)
 -- ===============================
 function CreateDashboard()
     if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
@@ -744,35 +744,42 @@ function CreateDashboard()
     gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
 
-    -- Main Container
+    -- Full Screen Background (Menutupi Layar)
     local dashboard = Instance.new("Frame", gui)
-    dashboard.Size = UDim2.new(0.2, 0, 0.2, 0) -- Adjust overall size here
-    dashboard.Position = UDim2.new(0.01, 0, 0.4, 0) -- Adjust position here
+    dashboard.Size = UDim2.fromScale(1, 1) -- FULL SCREEN
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    dashboard.BorderSizePixel = 2
-    dashboard.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    dashboard.BorderSizePixel = 0
     dashboard.Visible = true
 
-    -- Toggle Button (Small, above dashboard)
+    -- Toggle Button (Overlay)
     local toggleBtn = Instance.new("TextButton", gui)
-    toggleBtn.Size = UDim2.new(0.2, 0, 0.03, 0)
-    toggleBtn.Position = UDim2.new(0.01, 0, 0.37, 0)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "TOGGLE GUI (v7.5)"
+    toggleBtn.Text = "TOGGLE GUI (v7.6)"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
+    -- CONTAINER (Tengah Layar) untuk Grid
+    local gridContainer = Instance.new("Frame", dashboard)
+    gridContainer.Size = UDim2.new(0.4, 0, 0.3, 0) -- Atur ukuran tabel di sini
+    gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+    gridContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+    gridContainer.BackgroundTransparency = 1
+    
     -- Layout Handler
-    local layout = Instance.new("UIListLayout", dashboard)
+    local layout = Instance.new("UIListLayout", gridContainer)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 0)
 
     -- HELPER: Create Row Frame
     local function CreateRow(order)
-        local row = Instance.new("Frame", dashboard)
-        row.Size = UDim2.new(1, 0, 0.23, 0) -- Approx height for 4 rows
+        local row = Instance.new("Frame", gridContainer)
+        row.Size = UDim2.new(1, 0, 0.23, 0) 
         row.BackgroundTransparency = 1
         row.LayoutOrder = order
         return row
@@ -791,18 +798,20 @@ function CreateDashboard()
         return lab
     end
 
-    -- HELPER: Create Separator Line
+    -- HELPER: Create Horizontal Line (Pemisah Baris)
     local function CreateLine()
-        local line = Instance.new("Frame", dashboard)
-        line.Size = UDim2.new(1, 0, 0, 1) -- 1px height
+        local line = Instance.new("Frame", gridContainer)
+        line.Size = UDim2.new(1, 0, 0, 2) -- Ketebalan Garis
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
+        line.LayoutOrder = 99 -- Biar gak tabrakan layout otomatis, tapi kita sisipkan manual nanti
+        return line
     end
 
-    -- HELPER: Create Vertical Line in Row
+    -- HELPER: Create Vertical Line in Row (Pemisah Kolom)
     local function CreateVLine(parent)
         local line = Instance.new("Frame", parent)
-        line.Size = UDim2.new(0, 1, 1, 0) -- 1px width
+        line.Size = UDim2.new(0, 2, 1, 0) -- Ketebalan Garis Vertikal
         line.Position = UDim2.new(0.5, 0, 0, 0)
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
@@ -814,26 +823,32 @@ function CreateDashboard()
     local L_Mode = CreateCol(Row1, "...", 0)
     CreateVLine(Row1)
     local L_Target = CreateCol(Row1, "...", 0.5)
-    CreateLine()
+    
+    local Line1 = CreateLine()
+    Line1.LayoutOrder = 2 -- Sisipkan di bawah Row 1
 
     -- === ROW 2: Caught | F/M ===
-    local Row2 = CreateRow(2)
+    local Row2 = CreateRow(3)
     local L_Stats = CreateCol(Row2, "0", 0)
     CreateVLine(Row2)
     local L_FPM = CreateCol(Row2, "0.0", 0.5)
-    CreateLine()
+
+    local Line2 = CreateLine()
+    Line2.LayoutOrder = 4 -- Sisipkan di bawah Row 2
 
     -- === ROW 3: Secret | Gem ===
-    local Row3 = CreateRow(3)
+    local Row3 = CreateRow(5)
     local L_Secret = CreateCol(Row3, "0", 0)
     L_Secret.TextColor3 = Color3.fromRGB(255, 100, 255) -- Pinkish
     CreateVLine(Row3)
     local L_Gem = CreateCol(Row3, "0", 0.5)
     L_Gem.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red
-    CreateLine()
+
+    local Line3 = CreateLine()
+    Line3.LayoutOrder = 6 -- Sisipkan di bawah Row 3
 
     -- === ROW 4: Status (Full Width) ===
-    local Row4 = CreateRow(4)
+    local Row4 = CreateRow(7)
     local L_Status = Instance.new("TextLabel", Row4)
     L_Status.Size = UDim2.new(1, 0, 1, 0)
     L_Status.BackgroundTransparency = 1
@@ -841,6 +856,10 @@ function CreateDashboard()
     L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
     L_Status.Font = Enum.Font.GothamBold
     L_Status.TextScaled = true
+
+    -- Garis Penutup Bawah
+    local Line4 = CreateLine()
+    Line4.LayoutOrder = 8
 
     -- Update Loop
     task.spawn(function()
