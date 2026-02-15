@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.8 (SPAM EQUIP + GUI SWAP)
+-- # ULTIMATE HUB: RE-FARM V7.9 (FORCE EQUIP 0.1s + GUI SWAP)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -24,7 +24,7 @@ local req = request or http_request or syn.request
 -- [2] DEFAULT CONFIG
 local MasterConfig = {
     FishingEnabled = true,
-    AutoEquip = true,
+    AutoEquip = true, -- AKAN DI-HANDLE OLEH LOOP TERPISAH
     DelayChargeToReq = 0.65,
     DelayReqToCatch = 0.35,
     AutoSell = true,
@@ -385,6 +385,22 @@ local function FireRemote(remote)
     end)
 end
 
+-- ====================================================================
+-- [NEW] FORCE AUTO EQUIP LOOP (TERPISAH DARI FISHING, SPAM 0.1s)
+-- ====================================================================
+task.spawn(function()
+    print("⚔️ [System] Starting Force Equip Loop (0.1s)...")
+    while true do
+        if MasterConfig.AutoEquip and lp.Character then
+             -- Cek jika remote valid, langsung spam slot 1 terus menerus
+             if RE_EquipToolFromHotbar then
+                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+             end
+        end
+        task.wait(0.1) -- JEDA SUPER CEPAT (SPAM)
+    end
+end)
+
 function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
@@ -397,14 +413,8 @@ function StartFishingRouter()
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 
-                -- [MODIFIED] SPAM EQUIP LOGIC
-                -- Tidak lagi mengecek apakah tool ada atau tidak.
-                -- Langsung fire equip command setiap loop agar rod selalu di tangan.
-                if MasterConfig.AutoEquip then
-                    if RE_EquipToolFromHotbar then 
-                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
-                    end
-                end
+                -- [LOGIC REMOVED] AUTO EQUIP DIPINDAH KE GLOBAL LOOP DI ATAS
+                -- Agar tidak tergantung cycle fishing
                 
                 -- Charge & Catch
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
