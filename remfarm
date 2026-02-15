@@ -659,13 +659,13 @@ local function StartMerchantAutoBuy()
                         if RF_PurchaseMarketItem then
                              pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
                         end
-                        task.wait(0.5) 
+                        task.wait(5) 
                         currentCoins = GetCoins() 
                     end
                     print("🛑 [Merchant] Coin under 1M. Stopping purchase.")
                 end
             end
-            task.wait(3) 
+            task.wait(5) 
         end
     end)
 end
