@@ -460,7 +460,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- UNFAVORITE RUBY (HAPUS FAVORITE DARI RUBY BIASA)
+    -- UNFAVORITE RUBY (HAPUS FAVORITE DARI RUBI BIASA)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -863,62 +863,6 @@ task.spawn(function()
     end
 end)
 
--- WALK ON WATER
-local walkOnWaterConnection = nil
-local isWalkOnWater = true 
-local waterPlatform = nil
-local function ToggleWalkOnWater(state)
-    isWalkOnWater = state
-    if state then
-        if not waterPlatform then
-            waterPlatform = Instance.new("Part")
-            waterPlatform.Name = "WaterPlatform"
-            waterPlatform.Anchored = true
-            waterPlatform.CanCollide = true
-            waterPlatform.Transparency = 1 
-            waterPlatform.Size = Vector3.new(15, 1, 15)
-            waterPlatform.Parent = workspace
-        end
-        if walkOnWaterConnection then walkOnWaterConnection:Disconnect() end
-        walkOnWaterConnection = Services.RunService.RenderStepped:Connect(function()
-            local character = lp.Character
-            if not isWalkOnWater or not character then return end
-            local hrp = character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            if not waterPlatform or not waterPlatform.Parent then
-                waterPlatform = Instance.new("Part")
-                waterPlatform.Name = "WaterPlatform"
-                waterPlatform.Anchored = true
-                waterPlatform.CanCollide = true
-                waterPlatform.Transparency = 1 
-                waterPlatform.Size = Vector3.new(15, 1, 15)
-                waterPlatform.Parent = workspace
-            end
-            local rayParams = RaycastParams.new()
-            rayParams.FilterDescendantsInstances = {workspace.Terrain} 
-            rayParams.FilterType = Enum.RaycastFilterType.Include
-            rayParams.IgnoreWater = false 
-            local rayOrigin = hrp.Position + Vector3.new(0, 5, 0) 
-            local rayDirection = Vector3.new(0, -500, 0)
-            local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
-            if result and result.Material == Enum.Material.Water then
-                local waterSurfaceHeight = result.Position.Y
-                waterPlatform.Position = Vector3.new(hrp.Position.X, waterSurfaceHeight, hrp.Position.Z)
-                if hrp.Position.Y < (waterSurfaceHeight + 2) and hrp.Position.Y > (waterSurfaceHeight - 5) then
-                    if not game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then
-                        hrp.CFrame = CFrame.new(hrp.Position.X, waterSurfaceHeight + 3.2, hrp.Position.Z)
-                    end
-                end
-            else
-                waterPlatform.Position = Vector3.new(hrp.Position.X, -500, hrp.Position.Z)
-            end
-        end)
-    else
-        if walkOnWaterConnection then walkOnWaterConnection:Disconnect() walkOnWaterConnection = nil end
-        if waterPlatform then waterPlatform:Destroy() waterPlatform = nil end
-    end
-end
-
 -- ===============================
 -- AUTO-START
 -- ===============================
@@ -934,7 +878,6 @@ task.delay(10, function()
 
     ScanInventoryAndReport()
     StartMerchantAutoBuy()
-    task.spawn(function() ToggleWalkOnWater(true) end)
     if MasterConfig.AutoTeleport then TeleportToFishingLocation() task.wait(1) end
     if MasterConfig.AutoTotem then StartAutoTotemLoop() end
     if MasterConfig.PotatoMode then StartPotatoLoop() end
