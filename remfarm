@@ -30,7 +30,7 @@ local MasterConfig = {
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
-    AutoUnfavoriteRubies = false,
+    AutoUnfavoriteRubies = false, -- Bisa diubah true nanti jika perlu
     DiscordWebhookEnabled = false, 
     DiscordWebhookUrl = "",
     AutoTeleport = true,
@@ -60,7 +60,6 @@ local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
-local LastWeatherBuyTime = 0 
 local StartFishingRouter, StopFishing, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
 
 -- [3] WEB CONFIG LOADER
@@ -425,7 +424,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- AUTO FAVORITE
+    -- AUTO FAVORITE (SEMUA RUBY DI-FAVORITE, 1x KIRIM)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -434,44 +433,61 @@ function StartFishingRouter()
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
                             if item.UUID then
-                                local itemName, rarity = GetFishNameAndRarity(item)
+                                local itemName = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
-                                local isLocked = (item.IsFavorite or item.Favorited or item.Locked)
-                                local isRuby = (itemName == "Ruby" or item.Identifier == "Ruby")
-                                local isRare = string.find(mutation:lower(), "leviathan") or string.find(mutation:lower(), "rage")
-                                if (isRuby or isRare) and not isLocked then
-                                      task.spawn(function()
-                                          for i = 1, 3 do RE_FavoriteItem:FireServer(item.UUID) task.wait(0.05) end
-                                      end)
+                                
+                                -- CEK apakah sudah di-favorite?
+                                local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
+                                
+                                -- CEK: Apakah ini Ruby?
+                                local isRuby = (itemName == "Ruby")
+                                
+                                -- FAVORITE: Hanya Ruby yang BELUM di-favorite
+                                if isRuby and not isFavorited then
+                                    task.spawn(function()
+                                        -- KIRIM 1 KALI SAJA!
+                                        RE_FavoriteItem:FireServer(item.UUID)
+                                        print("✅ Favorited Ruby:", itemName, mutation)
+                                    end)
+                                    task.wait(0.5) -- Jeda antar item
                                 end
                             end
                         end
                     end
                 end
             end
-            task.wait(0.5)
+            task.wait(3) -- Cek setiap 3 detik
         end
     end))
     
-    -- UNFAVORITE RUBY
+    -- UNFAVORITE RUBY (HAPUS FAVORITE DARI RUBY BIASA)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
-                 local inv = PlayerData:Get("Inventory")
-                 if inv then
-                     for _, items in pairs(inv) do
-                         for _, item in ipairs(items) do
-                             if item.IsFavorite or item.Favorited or item.Locked then
-                                 local name, _ = GetFishNameAndRarity(item) 
-                                 if name == "Ruby" and GetMutation(item) ~= "Gemstone" then
-                                      pcall(function() RE_FavoriteItem:FireServer(item.UUID) end)
-                                     task.wait(0.2)
+                local inv = PlayerData:Get("Inventory")
+                if inv then
+                    for _, items in pairs(inv) do
+                        for _, item in ipairs(items) do
+                            -- CEK apakah sedang di-favorite?
+                            local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
+                            
+                            if isFavorited then
+                                local name = GetFishNameAndRarity(item)
+                                local mutation = GetMutation(item)
+                                
+                                -- UNFAVORITE: Ruby biasa (bukan gemstone) yang ke-favorite
+                                if name == "Ruby" and mutation ~= "Gemstone" then
+                                    pcall(function() 
+                                        RE_FavoriteItem:FireServer(item.UUID) -- 1x saja!
+                                        print("❌ Unfavorited Ruby (biasa):", name)
+                                    end)
+                                    task.wait(0.3)
                                 end
-                             end
-                         end
-                     end
-                 end
-             end
+                            end
+                        end
+                    end
+                end
+            end
             task.wait(5)
         end
     end))
@@ -612,69 +628,6 @@ function RunAutoTrade()
             task.wait(MasterConfig.TradeDelay)
         end
         TradingState.IsTrading = false
-    end)
-end
-
--- ===============================
--- WEATHER SYSTEM
--- ===============================
-local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
-local WeatherTargets = {"Storm", "Cloudy", "Wind"}
-local BLIND_BUY_INTERVAL = 950 
-
-local function ScanWeatherUI()
-    local activeList = {}
-    local pGui = Services.Players.LocalPlayer:FindFirstChild("PlayerGui")
-    if not pGui then return activeList, "NO_GUI" end
-    local gui = pGui:FindFirstChild("Weather Machine")
-    if not gui then return activeList, "CLOSED" end
-    local grid = gui:FindFirstChild("Frame")
-    if grid then grid = grid:FindFirstChild("Frame") end
-    if grid then grid = grid:FindFirstChild("Left") end
-    if grid then grid = grid:FindFirstChild("Frame") end
-    if grid then grid = grid:FindFirstChild("Grid") end
-    if not grid then return activeList, "ERROR" end
-    for _, tile in ipairs(grid:GetChildren()) do
-        local content = tile:FindFirstChild("Content")
-        if content then
-            local itemName = content:FindFirstChild("ItemName")
-            if itemName then table.insert(activeList, itemName.Text) end
-        end
-    end
-    return activeList, "OK"
-end
-
-local function StartWeatherAutoBuy()
-    task.spawn(function()
-        print("⚡ [Weather] Auto Buy Started (Smart + Blind 15m Mode)...")
-        while true do
-            local active, status = ScanWeatherUI()
-            if status == "OK" then
-                local activeStr = table.concat(active, ", "):lower()
-                for _, target in ipairs(WeatherTargets) do
-                    if not activeStr:find(target:lower()) then
-                        if RF_PurchaseWeatherEvent then
-                             print("⚡ [Weather-Smart] Membeli: " .. target)
-                             pcall(function() RF_PurchaseWeatherEvent:InvokeServer(target) end)
-                             task.wait(2) 
-                         end
-                     end
-                 end
-            else
-                if os.time() - LastWeatherBuyTime > BLIND_BUY_INTERVAL then
-                    if RF_PurchaseWeatherEvent then
-                        print("⚡ [Weather-Blind] UI Tertutup. Mengeksekusi Batch Storm, Cloudy, Wind...")
-                        for _, wTarget in ipairs(WeatherTargets) do
-                            pcall(function() RF_PurchaseWeatherEvent:InvokeServer(wTarget) end)
-                            task.wait(2) 
-                        end
-                        LastWeatherBuyTime = os.time()
-                        print("✅ [Weather-Blind] Batch Selesai. Menunggu 15 Menit.")
-                    end
-                end
-            end
-            task.wait(5)
-        end
     end)
 end
 
@@ -877,17 +830,7 @@ function CreateDashboard()
                 if TradingState.IsTrading then currentStatus = "Trading" end
                 if FishingState.Teleporting then currentStatus = "Teleporting" end
                 
-                -- Check Weather
-                local activeW, wStatus = ScanWeatherUI()
-                local wText = ""
-                if #activeW > 0 then 
-                    wText = " | " .. table.concat(activeW, ",") 
-                elseif wStatus == "CLOSED" then
-                    local rem = math.max(0, BLIND_BUY_INTERVAL - (os.time() - LastWeatherBuyTime))
-                    wText = " | Blind: " .. rem .. "s"
-                end
-                
-                L_Status.Text = currentStatus .. wText
+                L_Status.Text = currentStatus
             end
         end
     end)
@@ -990,7 +933,6 @@ task.delay(10, function()
     end
 
     ScanInventoryAndReport()
-    StartWeatherAutoBuy() 
     StartMerchantAutoBuy()
     task.spawn(function() ToggleWalkOnWater(true) end)
     if MasterConfig.AutoTeleport then TeleportToFishingLocation() task.wait(1) end
@@ -999,4 +941,4 @@ task.delay(10, function()
     if MasterConfig.FishingEnabled then StartFishingRouter() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
 end)
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/monitoringnew"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
