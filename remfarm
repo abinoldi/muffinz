@@ -2,7 +2,7 @@
 
 # ============================================
 # ANDROID REMOTE CONTROLLER FOR TERMUX
-# Version: 3.1 (Fixed)
+# Version: 3.2 (Stable Fix)
 # ============================================
 
 # Konfigurasi - UBAH SESUAI SERVER ANDA!
@@ -20,7 +20,6 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
-ORANGE='\033[0;33m'
 NC='\033[0m'
 BOLD='\033[1m'
 
@@ -51,8 +50,8 @@ show_banner() {
     clear
     echo -e "${CYAN}${BOLD}"
     echo "╔══════════════════════════════════════╗"
-    echo "║   ANDROID REMOTE CONTROLLER v3.1    ║"
-    echo "║         ${WHITE}Fixed Version${CYAN}                ║"
+    echo "║   ANDROID REMOTE CONTROLLER v3.2     ║"
+    echo "║          ${WHITE}Stable Version${CYAN}              ║"
     echo "╚══════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -73,16 +72,6 @@ check_dependencies() {
     
     check_su
     echo -e "${GREEN}[✓] Dependencies OK${NC}"
-}
-
-# Fungsi aman untuk arithmetic
-safe_math() {
-    local expr="$1"
-    local result=0
-    if [[ "$expr" =~ ^[0-9[:space:]+\-\*\/\(\)]+$ ]]; then
-        result=$((expr 2>/dev/null))
-    fi
-    echo "$result"
 }
 
 # ============================================
@@ -131,28 +120,23 @@ get_device_name() {
 
 get_android_version() {
     local version=""
-    
     if command -v getprop &> /dev/null; then
         version=$(getprop ro.build.version.release 2>/dev/null | tr -d '\n\r')
     fi
-    
     echo "${version:-Unknown}"
 }
 
 get_ip_address() {
     local ip=""
-    
     if command -v ip &> /dev/null; then
         local interface=$(ip route 2>/dev/null | grep default | awk '{print $5}' | head -1)
         if [ -n "$interface" ]; then
             ip=$(ip addr show "$interface" 2>/dev/null | grep -w inet | awk '{print $2}' | cut -d/ -f1 | head -1)
         fi
     fi
-    
     if [ -z "$ip" ] && command -v ifconfig &> /dev/null; then
         ip=$(ifconfig 2>/dev/null | grep -w inet | grep -v 127.0.0.1 | awk '{print $2}' | head -1)
     fi
-    
     echo "${ip:-0.0.0.0}"
 }
 
@@ -166,12 +150,18 @@ get_cpu_usage() {
         return
     fi
     
-    local cpu user nice system idle iowait irq softirq steal total idle_all usage
-    
-    # Baca /proc/stat dengan aman
-    read cpu user nice system idle iowait irq softirq steal < /proc/stat 2>/dev/null
-    
-    # Pastikan semua variabel adalah angka
+    # FIX: Menggunakan grep dan awk agar parsing kolom aman dari spasi ganda
+    local cpu_line=$(grep -m1 "^cpu " /proc/stat)
+    local user=$(echo "$cpu_line" | awk '{print $2}')
+    local nice=$(echo "$cpu_line" | awk '{print $3}')
+    local system=$(echo "$cpu_line" | awk '{print $4}')
+    local idle=$(echo "$cpu_line" | awk '{print $5}')
+    local iowait=$(echo "$cpu_line" | awk '{print $6}')
+    local irq=$(echo "$cpu_line" | awk '{print $7}')
+    local softirq=$(echo "$cpu_line" | awk '{print $8}')
+    local steal=$(echo "$cpu_line" | awk '{print $9}')
+
+    # FIX: Pastikan semua variabel default ke 0 jika kosong
     user=${user:-0}
     nice=${nice:-0}
     system=${system:-0}
@@ -181,26 +171,34 @@ get_cpu_usage() {
     softirq=${softirq:-0}
     steal=${steal:-0}
     
-    total=$((user + nice + system + idle + iowait + irq + softirq + steal))
-    idle_all=$((idle + iowait))
+    # Hitung total
+    local total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+    local idle_all=$((idle + iowait))
     
-    # File untuk menyimpan nilai sebelumnya
     local cache_dir="/data/data/com.termux/files/home/.cache"
     mkdir -p "$cache_dir" 2>/dev/null
     
     local prev_total_file="$cache_dir/cpu_total"
     local prev_idle_file="$cache_dir/cpu_idle"
+    local usage=0
     
     if [ -f "$prev_total_file" ] && [ -f "$prev_idle_file" ]; then
         local prev_total=$(cat "$prev_total_file" 2>/dev/null)
         local prev_idle=$(cat "$prev_idle_file" 2>/dev/null)
         
-        # Validasi angka
-        if [[ "$prev_total" =~ ^[0-9]+$ ]] && [[ "$prev_idle" =~ ^[0-9]+$ ]] && [ $total -gt $prev_total ]; then
-            usage=$(( (total - prev_total - (idle_all - prev_idle)) * 100 / (total - prev_total) ))
-            # Pastikan usage antara 0-100
-            if [ $usage -lt 0 ]; then usage=0; fi
-            if [ $usage -gt 100 ]; then usage=100; fi
+        # Validasi isi file cache (harus angka)
+        if [[ "$prev_total" =~ ^[0-9]+$ ]] && [[ "$prev_idle" =~ ^[0-9]+$ ]] && [ "$total" -gt "$prev_total" ]; then
+            local diff_total=$((total - prev_total))
+            local diff_idle=$((idle_all - prev_idle))
+            
+            # Hindari division by zero
+            if [ "$diff_total" -gt 0 ]; then
+                usage=$(( (diff_total - diff_idle) * 100 / diff_total ))
+            fi
+            
+            if [ "$usage" -lt 0 ]; then usage=0; fi
+            if [ "$usage" -gt 100 ]; then usage=100; fi
+            
             echo "$usage"
             echo "$total" > "$prev_total_file"
             echo "$idle_all" > "$prev_idle_file"
@@ -208,7 +206,7 @@ get_cpu_usage() {
         fi
     fi
     
-    # Simpan nilai pertama
+    # Simpan nilai awal
     echo "$total" > "$prev_total_file" 2>/dev/null
     echo "$idle_all" > "$prev_idle_file" 2>/dev/null
     echo "0"
@@ -225,7 +223,7 @@ get_memory_info() {
     total=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}')
     available=$(grep MemAvailable /proc/meminfo 2>/dev/null | awk '{print $2}')
     
-    # Pastikan angka
+    # FIX: Validasi input angka
     total=${total:-0}
     available=${available:-0}
     
@@ -234,9 +232,9 @@ get_memory_info() {
         percent=$((used * 100 / total))
     fi
     
-    # Batasi percent antara 0-100
-    if [ $percent -lt 0 ]; then percent=0; fi
-    if [ $percent -gt 100 ]; then percent=100; fi
+    # FIX: Pastikan percent adalah angka valid
+    if [ -z "$percent" ] || [ "$percent" -lt 0 ]; then percent=0; fi
+    if [ "$percent" -gt 100 ]; then percent=100; fi
     
     echo "{\"total\":$((total * 1024)),\"used\":$((used * 1024)),\"free\":$((available * 1024)),\"percent\":$percent}"
 }
@@ -252,14 +250,16 @@ get_storage_info() {
     
     for path in $paths; do
         if [ -d "$path" ]; then
+            # Menggunakan awk yang lebih aman
             local df_output=$(df -k "$path" 2>/dev/null | tail -1)
             if [ -n "$df_output" ]; then
                 total=$(echo "$df_output" | awk '{print $2}')
                 used=$(echo "$df_output" | awk '{print $3}')
                 free=$(echo "$df_output" | awk '{print $4}')
-                percent=$(echo "$df_output" | awk '{print $5}' | sed 's/%//')
+                # Ambil kolom persen, hapus tanda %
+                percent=$(echo "$df_output" | awk '{print $5}' | tr -d '%')
                 
-                # Validasi angka
+                # Validasi jika total adalah angka
                 if [[ "$total" =~ ^[0-9]+$ ]] && [ "$total" -gt 0 ]; then
                     break
                 fi
@@ -267,7 +267,7 @@ get_storage_info() {
         fi
     done
     
-    # Default values jika tidak valid
+    # FIX: Default values jika variabel kosong
     total=${total:-0}
     used=${used:-0}
     free=${free:-0}
@@ -297,6 +297,7 @@ get_battery_info() {
     # Fallback ke file sysfs
     if [ "$percent" -eq 0 ] && [ -f /sys/class/power_supply/battery/capacity ]; then
         percent=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)
+        # FIX: Validasi percent
         percent=${percent:-0}
         
         if [ -f /sys/class/power_supply/battery/status ]; then
@@ -327,6 +328,8 @@ send_metrics() {
     local mem_percent=$(echo "$memory_info" | grep -o '"percent":[0-9]*' | cut -d':' -f2)
     local batt_percent=$(echo "$battery_info" | grep -o '"percent":[0-9]*' | cut -d':' -f2)
     
+    # FIX: Pastikan tidak kosong untuk display
+    cpu_usage=${cpu_usage:-0}
     mem_percent=${mem_percent:-0}
     batt_percent=${batt_percent:-0}
     
@@ -405,6 +408,11 @@ check_commands() {
                 done
                 echo -e "${RED}    💥 REBOOTING NOW!${NC}"
                 curl -s --max-time 3 -X POST "$SERVER_URL/api/device/$DEVICE_ID/offline" > /dev/null 2>&1
+                if [ "$HAS_SU" = true ]; then
+                    su -c "reboot"
+                else
+                    /system/bin/reboot 2>/dev/null || echo "Reboot failed: No root"
+                fi
                 exit 0
                 ;;
                 
