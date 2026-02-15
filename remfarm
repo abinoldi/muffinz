@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.7 (FIXED AUTO-EQUIP + GUI SWAP)
+-- # ULTIMATE HUB: RE-FARM V7.8 (SPAM EQUIP + GUI SWAP)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -30,7 +30,7 @@ local MasterConfig = {
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
-    AutoUnfavoriteRubies = false,
+    AutoUnfavoriteRubies = false, 
     DiscordWebhookEnabled = false, 
     DiscordWebhookUrl = "",
     AutoTeleport = true,
@@ -75,6 +75,7 @@ local function LoadWebConfig()
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
+                    
                     if key == "WebhookEnabled" then 
                          MasterConfig[key] = value 
                     else
@@ -95,6 +96,7 @@ local function LoadWebConfig()
                     shouldRestart = false
                 end
                 if shouldRestart then task.spawn(StartFishingRouter) end
+               
                 if MasterConfig.AutoTrade and not TradingState.IsTrading then
                     task.spawn(RunAutoTrade)
                 elseif not MasterConfig.AutoTrade and TradingState.IsTrading then
@@ -270,7 +272,7 @@ local function ScanInventoryAndReport()
     
     if (next(exportData.Summary) ~= nil) then
         SendHook(lp.Name, exportData)
-        print("📤 [Direct] Data terkirim ke Webhook.")
+        print("📤 [Direct] Data sent to Webhook.")
     end
 end
 
@@ -342,7 +344,7 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- FISHING SYSTEM (FIXED AUTO-EQUIP)
+-- FISHING SYSTEM
 -- ===============================
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
@@ -371,7 +373,7 @@ local function DisableNativeAutoFish()
         FishingController.RequestChargeFishingRod = function() end
         FishingController.SendFishingRequestToServer = function() return false end
     end
-    print("[-] Native Controller Dinonaktifkan")
+    print("[-] Native Controller Disabled (Brutal Mode)")
 end
 
 local function FireRemote(remote)
@@ -383,120 +385,37 @@ local function FireRemote(remote)
     end)
 end
 
--- FUNGSI AUTO-EQUIP YANG LEBIH HANDAL
-local function EquipFishingRod()
-    if not MasterConfig.AutoEquip then return true end
-    
-    -- Cek apakah sudah ada fishing rod di tangan
-    local character = lp.Character
-    if not character then return false end
-    
-    local currentTool = character:FindFirstChildOfClass("Tool")
-    if currentTool then
-        -- Verifikasi apakah ini benar-benar fishing rod
-        local isFishingRod = currentTool.Name:lower():find("fishing") or 
-                            currentTool.Name:lower():find("rod") or 
-                            currentTool:FindFirstChild("Handle") ~= nil
-        
-        if isFishingRod then
-            return true -- Sudah punya fishing rod
-        end
-    end
-    
-    print("🎣 Mencari fishing rod...")
-    
-    -- METHOD 1: Coba equip dari hotbar (semua slot)
-    if RE_EquipToolFromHotbar then
-        for slot = 1, 5 do
-            pcall(function()
-                RE_EquipToolFromHotbar:FireServer(slot)
-                task.wait(0.2)
-                
-                -- Cek apakah berhasil dapat fishing rod
-                local newTool = character:FindFirstChildOfClass("Tool")
-                if newTool then
-                    local isRod = newTool.Name:lower():find("fishing") or 
-                                 newTool.Name:lower():find("rod") or 
-                                 newTool:FindFirstChild("Handle") ~= nil
-                    
-                    if isRod then
-                        print("✅ Fishing rod terpasang (slot " .. slot .. ")")
-                        return true
-                    end
-                end
-            end)
-        end
-    end
-    
-    -- METHOD 2: Coba ambil langsung dari backpack
-    pcall(function()
-        local backpack = lp:FindFirstChild("Backpack")
-        if backpack then
-            for _, item in ipairs(backpack:GetChildren()) do
-                if item:IsA("Tool") then
-                    local isRod = item.Name:lower():find("fishing") or 
-                                 item.Name:lower():find("rod") or 
-                                 item:FindFirstChild("Handle") ~= nil
-                    
-                    if isRod then
-                        item.Parent = character
-                        task.wait(0.2)
-                        print("✅ Fishing rod diambil dari backpack")
-                        return true
-                    end
-                end
-            end
-        end
-    end)
-    
-    return false
-end
-
 function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
     FishingState.CurrentMode = "INSTANT_RECHARGE"
     DisableNativeAutoFish()
 
-    -- INSTANT BOT (DENGAN AUTO-EQUIP FIX)
+    -- INSTANT BOT
     table.insert(FishingThreads, task.spawn(function()
-        print("⚡ [Instant Bot] Dimulai dengan Auto-Equip FIX")
-        
+        print("⚡ [Instant Bot] Started")
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 
-                -- AUTO-EQUIP: Pastikan selalu ada fishing rod
+                -- [MODIFIED] SPAM EQUIP LOGIC
+                -- Tidak lagi mengecek apakah tool ada atau tidak.
+                -- Langsung fire equip command setiap loop agar rod selalu di tangan.
                 if MasterConfig.AutoEquip then
-                    local equipped = EquipFishingRod()
-                    
-                    -- Jika gagal equip, coba lagi nanti
-                    if not equipped then
-                        task.wait(0.5)
+                    if RE_EquipToolFromHotbar then 
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
                     end
                 end
                 
-                -- Proses memancing
+                -- Charge & Catch
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                 task.wait(MasterConfig.DelayChargeToReq)
-                
                 if not FishingState.IsFishing then break end
-                
                 if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
                 task.wait(MasterConfig.DelayReqToCatch)
-                
                 if not FishingState.IsFishing then break end
-                
                 if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
-                
-                -- Delay kecil antar mancing
-                task.wait(0.1)
             end
-            
-            if not lp.Character then 
-                -- Tunggu karakter respawn
-                lp.CharacterAdded:Wait()
-                task.wait(1)
-            end
+            if not lp.Character then task.wait(1) end
         end
     end))
 
@@ -514,7 +433,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- AUTO FAVORITE (SEMUA RUBY DI-FAVORITE)
+    -- AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -523,17 +442,14 @@ function StartFishingRouter()
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
                             if item.UUID then
-                                local itemName, _ = GetFishNameAndRarity(item)
+                                local itemName = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
-                                
-                                -- CEK apakah sudah di-favorite?
                                 local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
-                                
-                                -- FAVORITE: Hanya Ruby yang BELUM di-favorite
-                                if itemName == "Ruby" and not isFavorited then
+                                local isRuby = (itemName == "Ruby")
+                                if isRuby and not isFavorited then
                                     task.spawn(function()
                                         RE_FavoriteItem:FireServer(item.UUID)
-                                        print("✅ Ruby di-favorite:", itemName, mutation)
+                                        print("✅ Favorited Ruby:", itemName, mutation)
                                     end)
                                     task.wait(0.5)
                                 end
@@ -546,7 +462,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- UNFAVORITE RUBY BIASA
+    -- UNFAVORITE RUBY
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -555,15 +471,13 @@ function StartFishingRouter()
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
                             local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
-                            
                             if isFavorited then
-                                local name, _ = GetFishNameAndRarity(item)
+                                local name = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
-                                
                                 if name == "Ruby" and mutation ~= "Gemstone" then
                                     pcall(function() 
                                         RE_FavoriteItem:FireServer(item.UUID)
-                                        print("❌ Ruby biasa unfavorited")
+                                        print("❌ Unfavorited Ruby (biasa):", name)
                                     end)
                                     task.wait(0.3)
                                 end
@@ -578,7 +492,7 @@ function StartFishingRouter()
 end
 
 function StopFishing()
-    print("🛑 [Info] Menghentikan Instant Bot")
+    print("🛑 [Info] Stopping Instant Bot")
     FishingState.IsFishing = false
     FishingState.CurrentMode = "NONE"
     for _, thread in ipairs(FishingThreads) do if thread then task.cancel(thread) end end
@@ -635,6 +549,7 @@ local function SpawnMutationTotem()
         end
     end
     task.wait(0.5)
+    
     if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
     return success
 end
@@ -723,7 +638,7 @@ local MUTATION_TOTEM_ID = 8
 
 local function StartMerchantAutoBuy()
     task.spawn(function()
-        print("🛍️ [Merchant] Smart Auto Buy Dimulai...")
+        print("🛍️ [Merchant] Smart Auto Buy Started...")
         while true do
             local currentCoins = GetCoins()
             if currentCoins > 1000000 then
@@ -738,7 +653,7 @@ local function StartMerchantAutoBuy()
                     end
                 end
                 if isTotemInStock then
-                    print("💰 [Merchant] Coin > 1M & Totem Tersedia! Mulai membeli...")
+                    print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
                     while currentCoins > 1000000 do
                         if RF_PurchaseMarketItem then
                              pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
@@ -746,7 +661,7 @@ local function StartMerchantAutoBuy()
                         task.wait(0.5) 
                         currentCoins = GetCoins() 
                     end
-                    print("🛑 [Merchant] Coin di bawah 1M. Berhenti membeli.")
+                    print("🛑 [Merchant] Coin under 1M. Stopping purchase.")
                 end
             end
             task.wait(3) 
@@ -755,7 +670,7 @@ local function StartMerchantAutoBuy()
 end
 
 -- ===============================
--- GUI DASHBOARD (F/M BESAR DI BAWAH)
+-- GUI DASHBOARD (FULL SCREEN GRID LAYOUT)
 -- ===============================
 function CreateDashboard()
     if Services.CoreGui:FindFirstChild("EnochDashboard") then Services.CoreGui.EnochDashboard:Destroy() end
@@ -763,29 +678,29 @@ function CreateDashboard()
     gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
 
-    -- Full Screen Background
+    -- Full Screen Background (Menutupi Layar)
     local dashboard = Instance.new("Frame", gui)
-    dashboard.Size = UDim2.fromScale(1, 1)
+    dashboard.Size = UDim2.fromScale(1, 1) -- FULL SCREEN
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     dashboard.BorderSizePixel = 0
     dashboard.Visible = true
 
-    -- Toggle Button
+    -- Toggle Button (Overlay)
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
     toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    toggleBtn.Text = "Tutup GUI"
+    toggleBtn.Text = "Close GUI"
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.TextScaled = true
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
-    -- CONTAINER
+    -- CONTAINER (Tengah Layar) untuk Grid
     local gridContainer = Instance.new("Frame", dashboard)
-    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0)
+    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0) -- Lebar 95% layar
     gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
     gridContainer.AnchorPoint = Vector2.new(0.5, 0.5)
     gridContainer.BackgroundTransparency = 1
@@ -796,86 +711,97 @@ function CreateDashboard()
     layout.Padding = UDim.new(0, 0)
 
     -- HELPER: Create Row Frame
-    local function CreateRow(order, heightMultiplier)
+    local function CreateRow(order)
         local row = Instance.new("Frame", gridContainer)
-        row.Size = UDim2.new(1, 0, heightMultiplier or 0.23, 0) 
+        row.Size = UDim2.new(1, 0, 0.23, 0) 
         row.BackgroundTransparency = 1
         row.LayoutOrder = order
         return row
     end
 
     -- HELPER: Create Column Label
-    local function CreateCol(parent, text, posX, color)
+    local function CreateCol(parent, text, posX)
         local lab = Instance.new("TextLabel", parent)
         lab.Size = UDim2.new(0.5, 0, 1, 0)
         lab.Position = UDim2.new(posX, 0, 0, 0)
         lab.BackgroundTransparency = 1
         lab.Text = text
-        lab.TextColor3 = color or Color3.new(1,1,1)
+        lab.TextColor3 = Color3.new(1,1,1)
         lab.Font = Enum.Font.GothamBold
         lab.TextScaled = true
         return lab
     end
 
-    -- HELPER: Create Horizontal Line
-    local function CreateLine(order)
+    -- HELPER: Create Horizontal Line (Pemisah Baris)
+    local function CreateLine()
         local line = Instance.new("Frame", gridContainer)
-        line.Size = UDim2.new(1, 0, 0, 2)
+        line.Size = UDim2.new(1, 0, 0, 2) -- Ketebalan Garis
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
-        line.LayoutOrder = order
+        line.LayoutOrder = 99
         return line
     end
 
-    -- HELPER: Create Vertical Line
+    -- HELPER: Create Vertical Line in Row (Pemisah Kolom)
     local function CreateVLine(parent)
         local line = Instance.new("Frame", parent)
-        line.Size = UDim2.new(0, 2, 1, 0)
+        line.Size = UDim2.new(0, 2, 1, 0) -- Ketebalan Garis Vertikal
         line.Position = UDim2.new(0.5, 0, 0, 0)
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
         line.ZIndex = 2
     end
 
-    -- ROW 1: Location | Target (Ukuran normal)
-    local Row1 = CreateRow(1, 0.18)
+    -- === ROW 1: Location | Target ===
+    local Row1 = CreateRow(1)
     local L_Mode = CreateCol(Row1, "...", 0)
     CreateVLine(Row1)
     local L_Target = CreateCol(Row1, "...", 0.5)
     
-    local Line1 = CreateLine(2)
+    local Line1 = CreateLine()
+    Line1.LayoutOrder = 2 
 
-    -- ROW 2: Caught | Secret (Ukuran normal)
-    local Row2 = CreateRow(3, 0.18)
+    -- === ROW 2: Caught | STATUS (SWAPPED POSITION) ===
+    local Row2 = CreateRow(3)
     local L_Stats = CreateCol(Row2, "0", 0)
     CreateVLine(Row2)
-    local L_Secret = CreateCol(Row2, "0", 0.5, Color3.fromRGB(255, 100, 255))
+    -- [MODIFIED] Disini sekarang STATUS (kolom kecil)
+    local L_Status = CreateCol(Row2, "Idle", 0.5)
+    L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
 
-    local Line2 = CreateLine(4)
+    local Line2 = CreateLine()
+    Line2.LayoutOrder = 4
 
-    -- ROW 3: Gem | Status (Ukuran normal)
-    local Row3 = CreateRow(5, 0.18)
-    local L_Gem = CreateCol(Row3, "0", 0, Color3.fromRGB(255, 0, 0))
+    -- === ROW 3: Secret | Gem ===
+    local Row3 = CreateRow(5)
+    local L_Secret = CreateCol(Row3, "0", 0)
+    L_Secret.TextColor3 = Color3.fromRGB(255, 100, 255) -- Pinkish
     CreateVLine(Row3)
-    local L_Status = CreateCol(Row3, "Status: Idle", 0.5, Color3.fromRGB(0, 255, 100))
+    local L_Gem = CreateCol(Row3, "0", 0.5)
+    L_Gem.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red
 
-    local Line3 = CreateLine(6)
+    local Line3 = CreateLine()
+    Line3.LayoutOrder = 6
 
-    -- ROW 4: F/M BESAR (Ukuran 2x lipat)
-    local Row4 = CreateRow(7, 0.28) -- Lebih besar dari row lainnya
-    local L_FPM = Instance.new("TextLabel", Row4)
-    L_FPM.Size = UDim2.new(1, 0, 1, 0)
-    L_FPM.BackgroundTransparency = 1
-    L_FPM.Text = "0.0 F/M"
-    L_FPM.TextColor3 = Color3.fromRGB(255, 255, 0) -- Warna kuning terang
-    L_FPM.Font = Enum.Font.GothamBold
-    L_FPM.TextScaled = true
+    -- === ROW 4: F/M (FULL WIDTH) (SWAPPED POSITION) ===
+    local Row4 = CreateRow(7)
+    -- [MODIFIED] Disini sekarang SPEED F/M (Full width)
+    local L_FPM_Big = Instance.new("TextLabel", Row4)
+    L_FPM_Big.Size = UDim2.new(1, 0, 1, 0)
+    L_FPM_Big.BackgroundTransparency = 1
+    L_FPM_Big.Text = "Speed: 0.0 F/M"
+    L_FPM_Big.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow
+    L_FPM_Big.Font = Enum.Font.GothamBold
+    L_FPM_Big.TextScaled = true
+
+    -- Garis Penutup Bawah
+    local Line4 = CreateLine()
+    Line4.LayoutOrder = 8
 
     -- Update Loop
     task.spawn(function()
         while task.wait(0.5) do
             if dashboard.Visible then
-                -- Row 1: Location dan Target
                 L_Mode.Text = MasterConfig.SelectedLocation or "None"
                 
                 local tName = MasterConfig.TargetUsername or "???"
@@ -888,33 +814,34 @@ function CreateDashboard()
                     L_Target.TextColor3 = Color3.fromRGB(255, 50, 50)
                 end
 
-                -- Row 2: Total Tangkapan dan Secret
-                L_Stats.Text = "Tangkapan:\n" .. TotalFishCaught
-                L_Secret.Text = "Secret:\n" .. TotalSecretsFound
-
-                -- Row 3: Ruby Gem dan Status
-                L_Gem.Text = "Ruby Gem:\n" .. TotalRubyGemstones
-                
-                local currentStatus = "Idle"
-                if FishingState.IsFishing then currentStatus = "Memancing" end
-                if TradingState.IsTrading then currentStatus = "Trading" end
-                if FishingState.Teleporting then currentStatus = "Teleport" end
-                L_Status.Text = "Status:\n" .. currentStatus
-
-                -- Row 4: F/M BESAR
                 local elapsed = os.time() - SessionStartTime
                 local fpm = 0
                 if elapsed > 0 and TotalFishCaught > 0 then
                     fpm = TotalFishCaught / (elapsed / 60)
                 end
-                L_FPM.Text = string.format("%.1f IKAN/MENIT", fpm)
+
+                L_Stats.Text = "Caught:\n" .. TotalFishCaught
+                
+                -- [MODIFIED] UPDATE FPM DI ROW 4 (Besar)
+                L_FPM_Big.Text = string.format("SPEED: %.1f F/M", fpm)
+                
+                L_Secret.Text = "Secret:\n" .. TotalSecretsFound
+                L_Gem.Text = "Gem:\n" .. TotalRubyGemstones
+
+                -- [MODIFIED] UPDATE STATUS DI ROW 2 (Kecil)
+                local currentStatus = "Idle"
+                if FishingState.IsFishing then currentStatus = "Fishing" end
+                if TradingState.IsTrading then currentStatus = "Trading" end
+                if FishingState.Teleporting then currentStatus = "Teleporting" end
+                
+                L_Status.Text = currentStatus
             end
         end
     end)
 end
 
 -- ===============================
--- TRIGGER LISTENER
+-- 2. TRIGGER LISTENER
 -- ===============================
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 if RE_ObtainedNewFishNotification then
@@ -929,52 +856,28 @@ task.spawn(function()
     while true do task.wait(60) LoadWebConfig() end
 end)
 
--- PERIODIC INVENTORY SCAN (15 DETIK)
+-- ===============================
+-- 4. NEW: PERIODIC INVENTORY SCAN (15 SECONDS)
+-- ===============================
 task.spawn(function()
-    print("⏳ [System] Memulai Scan Inventory setiap 15 detik...")
+    print("⏳ [System] Starting 15-Second Inventory Scan & Report Loop...")
     while true do
         pcall(ScanInventoryAndReport) 
         task.wait(15) 
     end
 end)
 
--- DEBUG FUNCTION (Opsional)
-local function DebugAutoEquip()
-    print("=== Auto-Equip Debug ===")
-    print("RE_EquipToolFromHotbar ada:", RE_EquipToolFromHotbar ~= nil)
-    if RE_EquipToolFromHotbar then
-        print("Tipe remote:", RE_EquipToolFromHotbar.ClassName)
-    end
-    
-    if lp.Character then
-        local tool = lp.Character:FindFirstChildOfClass("Tool")
-        print("Tool saat ini:", tool and tool.Name or "Tidak ada")
-        
-        local backpack = lp:FindFirstChild("Backpack")
-        if backpack then
-            print("Isi Backpack:")
-            for _, item in ipairs(backpack:GetChildren()) do
-                if item:IsA("Tool") then
-                    print(" -", item.Name)
-                end
-            end
-        end
-    end
-    print("========================")
-end
-
+-- ===============================
 -- AUTO-START
+-- ===============================
 task.delay(10, function()
-    print("[AutoStart] Memulai sistem...")
+    print("[AutoStart] Starting...")
     CreateDashboard()
     LoadWebConfig()
     
-    -- Debug (bisa di-comment jika tidak perlu)
-    -- DebugAutoEquip()
-    
     local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
     if RF_UpdateAutoSellThreshold then
-        pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end)
+        pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
     end
 
     ScanInventoryAndReport()
@@ -985,6 +888,4 @@ task.delay(10, function()
     if MasterConfig.FishingEnabled then StartFishingRouter() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
 end)
-
--- Loader tambahan (jika diperlukan)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
