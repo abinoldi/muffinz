@@ -1,25 +1,27 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.7 (Final Integrated - Smart Placing Fix)
+-- VERSION: v1.9 (FIX: Artifact Placing + Auto Equip Logic)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
 local Plrs = game:GetService("Players")
-local lp = Plrs.LocalPlayer
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
-local GuiService = game:GetService("GuiService")
-local VirtualUser = game:GetService("VirtualUser")
+local MyLp = Plrs.LocalPlayer
 
--- [[ 1. CHARACTER CHECK (NO RESET) ]]
-if not lp.Character then lp.CharacterAdded:Wait() end
-lp.Character:WaitForChild("HumanoidRootPart", 10)
+-- [[ 1. NO RESET CHARACTER CHECK ]]
+if not MyLp.Character then MyLp.CharacterAdded:Wait() end
+MyLp.Character:WaitForChild("HumanoidRootPart", 10)
 task.wait(3)
 
 -- ===============================
--- SERVICES & VARS
+-- 2. SERVICES & VARS
 -- ===============================
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local lp = Plrs.LocalPlayer
+
 local STATE = {
     HasAstralRod = false, CurrentRod = "Checking...", CurrentRodID = 0, TotalCoins = 0,
     Mode = "Starting...", 
@@ -31,13 +33,12 @@ local STATE = {
 }
 
 -- ===============================
--- 2. AUTO RECONNECT & ANTI-AFK
+-- 3. AUTO RECONNECT & ANTI-AFK
 -- ===============================
 GuiService.ErrorMessageChanged:Connect(function()
     task.wait(5)
     local errorMessage = GuiService:GetErrorMessage()
     if #errorMessage > 0 then
-        warn("Disconnect detected: " .. errorMessage)
         TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
     end
 end)
@@ -48,7 +49,7 @@ lp.Idled:Connect(function()
 end)
 
 -- ===============================
--- 3. VISUALS & OPTIMIZATION
+-- 4. VISUALS & OPTIMIZATION
 -- ===============================
 local function ActivateGreenMode()
     local GreenColor = Color3.fromRGB(0, 255, 0) 
@@ -57,7 +58,6 @@ local function ActivateGreenMode()
 
     settings().Rendering.QualityLevel = 1
     game:GetService("Lighting").GlobalShadows = false
-    game:GetService("Lighting").FogEnd = 9e9
     
     local function Greenify(v)
         if QuestFolder and v:IsDescendantOf(QuestFolder) then return end 
@@ -96,7 +96,7 @@ local function DisableAudio()
 end
 
 -- ===============================
--- 4. REMOTES
+-- 5. REMOTES
 -- ===============================
 local RPath = {"Packages","_Index","sleitnick_net@0.2.0","net"}
 local function GetRemote(path, name)
@@ -132,14 +132,14 @@ local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
 -- ===============================
--- 5. FIRST EQUIP
+-- 6. FIRST EQUIP
 -- ===============================
 task.spawn(function()
     for i = 1, 3 do RE_EquipToolFromHotbar:FireServer(1); task.wait(0.1) end
 end)
 
 -- ==============================================================================
--- [[ 6. MAIN FISHING BOT (SMART INTEGRATED LOOP) ]]
+-- [[ MAIN FISHING BOT (SMART PLACING FIX) ]]
 -- ==============================================================================
 _G.FishBotActive = true
 
@@ -158,22 +158,22 @@ task.spawn(function()
     print("⚡ Smart Auto-Equip Bot Started")
     while _G.FishBotActive do
         
-        -- [[ SMART AUTO EQUIP CHECK ]]
-        -- Fix: Auto Equip akan PAUSE jika status bot sedang "Placing" Lever
+        -- [[ SMART AUTO EQUIP LOGIC ]]
+        -- Inilah kuncinya: Cek apakah bot sedang placing lever?
         local IsPlacingLever = (STATE.Mode == "Lever" and string.find(STATE.TargetInfo, "Placing"))
         
+        -- Jika TIDAK sedang placing, baru boleh Auto Equip
         if not IsPlacingLever and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            -- Jika tangan kosong, paksa equip
             if not lp.Character:FindFirstChildOfClass("Tool") then
                 if RE_EquipToolFromHotbar then
                     pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
                 end
-                task.wait(0.3) -- Delay wajib agar server memproses
+                task.wait(0.3) -- Delay agar server memproses
             end
         end
 
         -- [[ FISHING LOGIC ]]
-        -- Hanya jalan jika Rod dipegang & TIDAK sedang placing lever
+        -- Hanya mancing jika punya Tool DAN TIDAK sedang placing
         if not IsPlacingLever and lp.Character:FindFirstChildOfClass("Tool") then
             local currentRodID = STATE.CurrentRodID or 0
             local Delay_ChargeToRequest = GetRodDelay(currentRodID)
@@ -196,8 +196,8 @@ task.spawn(function()
             -- [4] CATCH
             if Remotes.Catch then Fire(Remotes.Catch) end
         else
-            -- Idle sebentar jika sedang placing lever atau tool belum ready
-            task.wait(0.5)
+            -- Jika sedang placing lever, loop istirahat sebentar agar tidak crash
+            task.wait(0.2)
         end
     end
 end)
@@ -300,7 +300,7 @@ local function ExecuteLeverLogic()
             if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
             
             if hasArt then
-                -- !!! PENTING: TargetInfo harus mengandung "Placing" agar Loop Auto Equip berhenti
+                -- !!! PENTING: String ini akan mematikan Auto Equip sementara !!!
                 STATE.TargetInfo = "Placing: "..artName 
                 
                 if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
@@ -308,7 +308,7 @@ local function ExecuteLeverLogic()
                     task.wait(0.5)
                     lp.Character.HumanoidRootPart.Anchored = true
                     
-                    -- Unequip (Aman karena Auto Equip sedang dipause)
+                    -- Unequip (Aman sekarang karena Auto Equip sedang dipause)
                     RE_UnequipItem:FireServer("all")
                     task.wait(0.5)
                     
@@ -422,7 +422,7 @@ local function CreateDashboard()
     local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.7"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.9"; toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
     local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
@@ -459,5 +459,5 @@ task.spawn(DisableAudio)
 task.spawn(DisableNativeAutoFish)
 task.spawn(CreateDashboard)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub v1.7 (Final Integrated) Started!")
+print("🚀 EnochHub v1.9 (FIXED PLACING) Started!")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
