@@ -1,6 +1,6 @@
 -- ======================================================
 -- ENOCHHUB | FULL AUTO: DEEP SEA -> LEVER -> ELEMENT
--- VERSION: v1.3.9 (Timestamp Fix + Green Mode + Auto Equip)
+-- VERSION: v1.3.9 (Timestamp Fix + Green Mode + Brutal Native Disable)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -155,11 +155,38 @@ local function DisableAudio()
     RunService.RenderStepped:Connect(function() SoundService.Volume = 0 end)
     local function MuteSound(instance)
         if instance:IsA("Sound") then
-            instance.Volume = 0; instance.Looped = false; if instance.Playing then instance:Stop() end
+            instance.Volume = 0;
+            instance.Looped = false; if instance.Playing then instance:Stop() end
         end
     end
     for _, v in pairs(game:GetDescendants()) do pcall(MuteSound, v) end
     game.DescendantAdded:Connect(function(v) pcall(MuteSound, v) end)
+end
+
+-- ===============================
+-- DISABLE NATIVE AUTO FISH (BRUTAL MODE)
+-- ===============================
+local function DisableNativeAutoFish()
+    -- Menggunakan game:GetService("ReplicatedStorage") menggantikan Services.ReplicatedStorage untuk menghindari error
+    local success, AutoFishCtrl = pcall(function() 
+        return require(game:GetService("ReplicatedStorage").Controllers.AutoFishingController) 
+    end)
+    
+    if success and AutoFishCtrl then
+        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+        AutoFishCtrl.Start = function() return end 
+    end
+
+    local s2, FishingController = pcall(function() 
+        return require(game:GetService("ReplicatedStorage").Controllers.FishingController) 
+    end)
+
+    if s2 and FishingController then
+        FishingController.RequestChargeFishingRod = function() end
+        FishingController.SendFishingRequestToServer = function() return false end
+    end
+    print("[-] Native Controller Disabled (Brutal Mode)")
 end
 
 -- ===============================
@@ -231,13 +258,13 @@ local function GetRodDelay(rodID)
     local rodDelays = {
         [5] = 1.8,    -- Astral Rod
         [169] = 1.2,  -- Ghostfin Rod
-        [80] = 2,    -- Midnight Rod
+        [80] = 2,   -- Midnight Rod
         [4] = 2,    -- Lucky Rod
-        [78] = 2,    -- Ice Rod
-        [77] = 2,    -- Demascus Rod
-        [85] = 2,    -- Grass Rod
-        [76] = 2,    -- Carbon Rod
-        [79] = 2,    -- Luck Rod
+        [78] = 2,   -- Ice Rod
+        [77] = 2,   -- Demascus Rod
+        [85] = 2,   -- Grass Rod
+        [76] = 2,   -- Carbon Rod
+        [79] = 2,   -- Luck Rod
     }
     
     -- Default delay jika rod tidak ditemukan
@@ -426,6 +453,7 @@ local function CheckDeepSeaQuest(data)
     if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
     if actObj==3 and (progMap[3] or 0)>=1 then actObj=4 end
     if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end 
+    
     if actObj==1 then return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
     elseif actObj==2 then return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
     elseif actObj==3 then return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
@@ -640,9 +668,9 @@ task.spawn(function()
         if AutoActive then
             local success, err = pcall(function()
                 UpdateGameMode()   
-                AutoBuyBestBait()      
+                AutoBuyBestBait()     
                 EquipBestBait()        
-            
+                
                 if STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
                     EquipRod("Best")
                     if STATE.CurrentArea ~= STATE.NextLocation then
@@ -679,21 +707,14 @@ end
 -- ===============================
 local function CreateDashboard()
     if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
-    local gui = Instance.new("ScreenGui", game.CoreGui);
-    gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
+    local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
     local toggleBtn = Instance.new("TextButton", gui)
-    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0);
-    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242);
-    toggleBtn.Text = "E - v1.3.9"; toggleBtn.TextColor3 = Color3.new(1,1,1)
-    toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true;
-    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
-    local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1);
-    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
-    local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
-    layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
-    local function Text(txt, h, col) local l = Instance.new("TextLabel", dashboard);
-    l.Text=txt; l.TextColor3=col; l.Size=UDim2.new(1,0,h,0); l.BackgroundTransparency=1; l.Font=Enum.Font.GothamBold; l.TextScaled=true; return l end
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.9"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
+    local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
+    local function Text(txt, h, col) local l = Instance.new("TextLabel", dashboard); l.Text=txt; l.TextColor3=col; l.Size=UDim2.new(1,0,h,0); l.BackgroundTransparency=1; l.Font=Enum.Font.GothamBold; l.TextScaled=true; return l end
     local L_Coins = Text("$0", 0.12, Color3.fromRGB(255, 215, 0))
     local L_Mode = Text("MODE: CHECKING", 0.08, Color3.fromRGB(0, 255, 255))
     local L_Stats = Text("0 | 0.0 F/M", 0.06, Color3.fromRGB(255, 255, 255))
@@ -719,79 +740,11 @@ local function CreateDashboard()
     end)
 end
 
--- ======================================================
--- [[ ADDED ]] STANDALONE AUTO EQUIP (Bypass Original Fishing)
--- ======================================================
-
-local AE_Services = {
-    Players = game:GetService("Players"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    RunService = game:GetService("RunService")
-}
-
-local ae_lp = AE_Services.Players.LocalPlayer
-
--- [1] REMOTE FINDER SYSTEM
-local function AE_GetEquipRemote()
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = AE_Services.ReplicatedStorage
-    
-    for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 5)
-        if not current then 
-            warn("Could not find path for Auto Equip: " .. child)
-            return nil 
-        end
-    end
-    
-    return current:FindFirstChild("RE/EquipToolFromHotbar")
-end
-
-local AE_EquipRemote = AE_GetEquipRemote()
-
--- [2] CONFIGURATION
-local AE_Config = {
-    Enabled = true,
-    HotbarSlot = 1, -- Which slot to equip (Default: 1)
-    CheckDelay = 0.5 -- How often to check (in seconds)
-}
-
--- [3] MAIN LOOP
-task.spawn(function()
-    print("✅ Standalone Auto-Equip Started (Bypass Original Fishing)")
-    
-    while task.wait(AE_Config.CheckDelay) do
-        if not AE_Config.Enabled then break end
-
-        pcall(function()
-            local character = ae_lp.Character
-            
-            -- Only run if character exists and is alive
-            if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0 then
-                
-                -- Check if player is NOT holding a tool
-                if not character:FindFirstChildOfClass("Tool") then
-                    if AE_EquipRemote then
-                        -- Fire remote to equip item in specific slot
-                        AE_EquipRemote:FireServer(AE_Config.HotbarSlot)
-                    else
-                        -- Attempt to re-fetch remote if it was missing initially
-                        AE_EquipRemote = AE_GetEquipRemote()
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- ======================================================
--- INITIALIZE MAIN SCRIPT
--- ======================================================
-
 task.spawn(ActivateGreenMode)
 task.spawn(DisableAudio)
+task.spawn(DisableNativeAutoFish) -- [[ NEW ]] EXECUTE BRUTAL DISABLE
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
-print("🚀 EnochHub TIMESTAMP FIX (v1.3.9 + AutoEquip) Started!")
+print("🚀 EnochHub TIMESTAMP FIX (v1.3.9) Started!")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
