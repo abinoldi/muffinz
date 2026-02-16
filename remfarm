@@ -763,11 +763,13 @@ function CreateDashboard()
     local Line1 = CreateLine()
     Line1.LayoutOrder = 2 -- Sisipkan di bawah Row 1
 
-    -- === ROW 2: Caught | F/M ===
+    -- === ROW 2: Caught | STATUS (BARU) ===
     local Row2 = CreateRow(3)
     local L_Stats = CreateCol(Row2, "0", 0)
     CreateVLine(Row2)
-    local L_FPM = CreateCol(Row2, "0.0", 0.5)
+    -- Kolom kanan sekarang menjadi Status
+    local L_Status = CreateCol(Row2, "Idle", 0.5)
+    L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
 
     local Line2 = CreateLine()
     Line2.LayoutOrder = 4 -- Sisipkan di bawah Row 2
@@ -783,15 +785,15 @@ function CreateDashboard()
     local Line3 = CreateLine()
     Line3.LayoutOrder = 6 -- Sisipkan di bawah Row 3
 
-    -- === ROW 4: Status (Full Width) ===
+    -- === ROW 4: F/M (SPEED) Full Width (BARU) ===
     local Row4 = CreateRow(7)
-    local L_Status = Instance.new("TextLabel", Row4)
-    L_Status.Size = UDim2.new(1, 0, 1, 0)
-    L_Status.BackgroundTransparency = 1
-    L_Status.Text = "Status: Idle"
-    L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
-    L_Status.Font = Enum.Font.GothamBold
-    L_Status.TextScaled = true
+    local L_FPM = Instance.new("TextLabel", Row4)
+    L_FPM.Size = UDim2.new(1, 0, 1, 0)
+    L_FPM.BackgroundTransparency = 1
+    L_FPM.Text = "0.0 F/M"
+    L_FPM.TextColor3 = Color3.fromRGB(255, 255, 255)
+    L_FPM.Font = Enum.Font.GothamBold
+    L_FPM.TextScaled = true
 
     -- Garis Penutup Bawah
     local Line4 = CreateLine()
@@ -820,17 +822,18 @@ function CreateDashboard()
                 end
 
                 L_Stats.Text = "Caught:\n" .. TotalFishCaught
-                L_FPM.Text = string.format("Speed:\n%.1f F/M", fpm)
-                
-                L_Secret.Text = "Secret:\n" .. TotalSecretsFound
-                L_Gem.Text = "Gem:\n" .. TotalRubyGemstones
-
+                -- Status sekarang ada di Row2 (kolom kanan)
                 local currentStatus = "Idle"
                 if FishingState.IsFishing then currentStatus = "Fishing" end
                 if TradingState.IsTrading then currentStatus = "Trading" end
                 if FishingState.Teleporting then currentStatus = "Teleporting" end
-                
                 L_Status.Text = currentStatus
+                
+                L_Secret.Text = "Secret:\n" .. TotalSecretsFound
+                L_Gem.Text = "Gem:\n" .. TotalRubyGemstones
+
+                -- F/M sekarang ada di Row4 (full width)
+                L_FPM.Text = string.format("Speed:\n%.1f F/M", fpm)
             end
         end
     end)
