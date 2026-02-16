@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V8.0 (WALK ON WATER + EQUIP SPAM)
+-- # ULTIMATE HUB: RE-FARM V7.7 (RESPONSIVE GRID + 15s SCAN)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -24,13 +24,13 @@ local req = request or http_request or syn.request
 -- [2] DEFAULT CONFIG
 local MasterConfig = {
     FishingEnabled = true,
-    AutoEquip = true, -- AKAN DI-HANDLE OLEH LOOP TERPISAH
+    AutoEquip = true,
     DelayChargeToReq = 0.65,
     DelayReqToCatch = 0.35,
     AutoSell = true,
     SellDelay = 65,
     AutoFavorite = true,
-    AutoUnfavoriteRubies = false, 
+    AutoUnfavoriteRubies = false, -- Bisa diubah true nanti jika perlu
     DiscordWebhookEnabled = false, 
     DiscordWebhookUrl = "",
     AutoTeleport = true,
@@ -75,7 +75,6 @@ local function LoadWebConfig()
                 if MasterConfig[key] ~= value then
                     if key == "SelectedLocation" then locationChanged = true end
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
-                    
                     if key == "WebhookEnabled" then 
                          MasterConfig[key] = value 
                     else
@@ -96,7 +95,6 @@ local function LoadWebConfig()
                     shouldRestart = false
                 end
                 if shouldRestart then task.spawn(StartFishingRouter) end
-               
                 if MasterConfig.AutoTrade and not TradingState.IsTrading then
                     task.spawn(RunAutoTrade)
                 elseif not MasterConfig.AutoTrade and TradingState.IsTrading then
@@ -385,22 +383,6 @@ local function FireRemote(remote)
     end)
 end
 
--- ====================================================================
--- [NEW] FORCE AUTO EQUIP LOOP (TERPISAH DARI FISHING, SPAM 0.1s)
--- ====================================================================
-task.spawn(function()
-    print("⚔️ [System] Starting Force Equip Loop (0.1s)...")
-    while true do
-        if MasterConfig.AutoEquip and lp.Character then
-             -- Cek jika remote valid, langsung spam slot 1 terus menerus
-             if RE_EquipToolFromHotbar then
-                pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
-             end
-        end
-        task.wait(0.05) -- JEDA SUPER CEPAT (SPAM)
-    end
-end)
-
 function StartFishingRouter()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
@@ -412,8 +394,10 @@ function StartFishingRouter()
         print("⚡ [Instant Bot] Started")
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                
-                -- Charge & Catch
+                if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
+                    if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+                    task.wait(0.3)
+                end
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                 task.wait(MasterConfig.DelayChargeToReq)
                 if not FishingState.IsFishing then break end
@@ -440,7 +424,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- AUTO FAVORITE
+    -- AUTO FAVORITE (SEMUA RUBY DI-FAVORITE, 1x KIRIM)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -451,25 +435,32 @@ function StartFishingRouter()
                             if item.UUID then
                                 local itemName = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
+                                
+                                -- CEK apakah sudah di-favorite?
                                 local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
+                                
+                                -- CEK: Apakah ini Ruby?
                                 local isRuby = (itemName == "Ruby")
+                                
+                                -- FAVORITE: Hanya Ruby yang BELUM di-favorite
                                 if isRuby and not isFavorited then
                                     task.spawn(function()
+                                        -- KIRIM 1 KALI SAJA!
                                         RE_FavoriteItem:FireServer(item.UUID)
                                         print("✅ Favorited Ruby:", itemName, mutation)
                                     end)
-                                    task.wait(0.5)
+                                    task.wait(0.5) -- Jeda antar item
                                 end
                             end
                         end
                     end
                 end
             end
-            task.wait(3)
+            task.wait(3) -- Cek setiap 3 detik
         end
     end))
     
-    -- UNFAVORITE RUBY
+    -- UNFAVORITE RUBY (HAPUS FAVORITE DARI RUBY BIASA)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -477,13 +468,17 @@ function StartFishingRouter()
                 if inv then
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
+                            -- CEK apakah sedang di-favorite?
                             local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
+                            
                             if isFavorited then
                                 local name = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
+                                
+                                -- UNFAVORITE: Ruby biasa (bukan gemstone) yang ke-favorite
                                 if name == "Ruby" and mutation ~= "Gemstone" then
                                     pcall(function() 
-                                        RE_FavoriteItem:FireServer(item.UUID)
+                                        RE_FavoriteItem:FireServer(item.UUID) -- 1x saja!
                                         print("❌ Unfavorited Ruby (biasa):", name)
                                     end)
                                     task.wait(0.3)
@@ -556,7 +551,6 @@ local function SpawnMutationTotem()
         end
     end
     task.wait(0.5)
-    
     if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
     return success
 end
@@ -706,6 +700,7 @@ function CreateDashboard()
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
     -- CONTAINER (Tengah Layar) untuk Grid
+    -- MENGGUNAKAN SKALA 0.95 (95%) SUPAYA FIT SAAT SPLIT SCREEN
     local gridContainer = Instance.new("Frame", dashboard)
     gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0) -- Lebar 95% layar
     gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -745,7 +740,7 @@ function CreateDashboard()
         line.Size = UDim2.new(1, 0, 0, 2) -- Ketebalan Garis
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
-        line.LayoutOrder = 99
+        line.LayoutOrder = 99 -- Biar gak tabrakan layout otomatis, tapi kita sisipkan manual nanti
         return line
     end
 
@@ -766,17 +761,16 @@ function CreateDashboard()
     local L_Target = CreateCol(Row1, "...", 0.5)
     
     local Line1 = CreateLine()
-    Line1.LayoutOrder = 2 
+    Line1.LayoutOrder = 2 -- Sisipkan di bawah Row 1
 
-    -- === ROW 2: Caught | STATUS (SWAPPED POSITION) ===
+    -- === ROW 2: Caught | F/M ===
     local Row2 = CreateRow(3)
     local L_Stats = CreateCol(Row2, "0", 0)
     CreateVLine(Row2)
-    local L_Status = CreateCol(Row2, "Idle", 0.5)
-    L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
+    local L_FPM = CreateCol(Row2, "0.0", 0.5)
 
     local Line2 = CreateLine()
-    Line2.LayoutOrder = 4
+    Line2.LayoutOrder = 4 -- Sisipkan di bawah Row 2
 
     -- === ROW 3: Secret | Gem ===
     local Row3 = CreateRow(5)
@@ -787,17 +781,17 @@ function CreateDashboard()
     L_Gem.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red
 
     local Line3 = CreateLine()
-    Line3.LayoutOrder = 6
+    Line3.LayoutOrder = 6 -- Sisipkan di bawah Row 3
 
-    -- === ROW 4: F/M (FULL WIDTH) (SWAPPED POSITION) ===
+    -- === ROW 4: Status (Full Width) ===
     local Row4 = CreateRow(7)
-    local L_FPM_Big = Instance.new("TextLabel", Row4)
-    L_FPM_Big.Size = UDim2.new(1, 0, 1, 0)
-    L_FPM_Big.BackgroundTransparency = 1
-    L_FPM_Big.Text = "Speed: 0.0 F/M"
-    L_FPM_Big.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow
-    L_FPM_Big.Font = Enum.Font.GothamBold
-    L_FPM_Big.TextScaled = true
+    local L_Status = Instance.new("TextLabel", Row4)
+    L_Status.Size = UDim2.new(1, 0, 1, 0)
+    L_Status.BackgroundTransparency = 1
+    L_Status.Text = "Status: Idle"
+    L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
+    L_Status.Font = Enum.Font.GothamBold
+    L_Status.TextScaled = true
 
     -- Garis Penutup Bawah
     local Line4 = CreateLine()
@@ -826,8 +820,7 @@ function CreateDashboard()
                 end
 
                 L_Stats.Text = "Caught:\n" .. TotalFishCaught
-                
-                L_FPM_Big.Text = string.format("SPEED: %.1f F/M", fpm)
+                L_FPM.Text = string.format("Speed:\n%.1f F/M", fpm)
                 
                 L_Secret.Text = "Secret:\n" .. TotalSecretsFound
                 L_Gem.Text = "Gem:\n" .. TotalRubyGemstones
@@ -860,7 +853,7 @@ task.spawn(function()
 end)
 
 -- ===============================
--- 4. PERIODIC INVENTORY SCAN (15 SECONDS)
+-- 4. NEW: PERIODIC INVENTORY SCAN (15 SECONDS)
 -- ===============================
 task.spawn(function()
     print("⏳ [System] Starting 15-Second Inventory Scan & Report Loop...")
@@ -870,17 +863,13 @@ task.spawn(function()
     end
 end)
 
--- ===============================
--- WALK ON WATER LOGIC (AUTO-ACTIVE)
--- ===============================
+-- WALK ON WATER
 local walkOnWaterConnection = nil
 local isWalkOnWater = true 
 local waterPlatform = nil
-
 local function ToggleWalkOnWater(state)
     isWalkOnWater = state
     if state then
-        -- Create the platform if it doesn't exist
         if not waterPlatform then
             waterPlatform = Instance.new("Part")
             waterPlatform.Name = "WaterPlatform"
@@ -890,19 +879,12 @@ local function ToggleWalkOnWater(state)
             waterPlatform.Size = Vector3.new(15, 1, 15)
             waterPlatform.Parent = workspace
         end
-
-        -- Disconnect existing connection to avoid duplicates
         if walkOnWaterConnection then walkOnWaterConnection:Disconnect() end
-
-        -- Start the loop to position the platform
         walkOnWaterConnection = Services.RunService.RenderStepped:Connect(function()
             local character = lp.Character
             if not isWalkOnWater or not character then return end
-            
             local hrp = character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
-           
-            -- Re-create platform if it was deleted
             if not waterPlatform or not waterPlatform.Parent then
                 waterPlatform = Instance.new("Part")
                 waterPlatform.Name = "WaterPlatform"
@@ -912,35 +894,26 @@ local function ToggleWalkOnWater(state)
                 waterPlatform.Size = Vector3.new(15, 1, 15)
                 waterPlatform.Parent = workspace
             end
-
-            -- Raycast to detect water
             local rayParams = RaycastParams.new()
             rayParams.FilterDescendantsInstances = {workspace.Terrain} 
             rayParams.FilterType = Enum.RaycastFilterType.Include
             rayParams.IgnoreWater = false 
-            
             local rayOrigin = hrp.Position + Vector3.new(0, 5, 0) 
             local rayDirection = Vector3.new(0, -500, 0)
             local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
-
-            -- If water is found, move platform to water surface
             if result and result.Material == Enum.Material.Water then
                 local waterSurfaceHeight = result.Position.Y
                 waterPlatform.Position = Vector3.new(hrp.Position.X, waterSurfaceHeight, hrp.Position.Z)
-                
-                -- Adjust player height if they are near the water surface
                 if hrp.Position.Y < (waterSurfaceHeight + 2) and hrp.Position.Y > (waterSurfaceHeight - 5) then
-                    if not Services.UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    if not game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then
                         hrp.CFrame = CFrame.new(hrp.Position.X, waterSurfaceHeight + 3.2, hrp.Position.Z)
                     end
                 end
             else
-                -- Hide platform if no water is below
                 waterPlatform.Position = Vector3.new(hrp.Position.X, -500, hrp.Position.Z)
             end
         end)
     else
-        -- Cleanup
         if walkOnWaterConnection then walkOnWaterConnection:Disconnect() walkOnWaterConnection = nil end
         if waterPlatform then waterPlatform:Destroy() waterPlatform = nil end
     end
@@ -959,11 +932,9 @@ task.delay(10, function()
         pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
     end
 
-    -- ACTIVATE WALK ON WATER
-    task.spawn(function() ToggleWalkOnWater(true) end)
-
     ScanInventoryAndReport()
     StartMerchantAutoBuy()
+    task.spawn(function() ToggleWalkOnWater(true) end)
     if MasterConfig.AutoTeleport then TeleportToFishingLocation() task.wait(1) end
     if MasterConfig.AutoTotem then StartAutoTotemLoop() end
     if MasterConfig.PotatoMode then StartPotatoLoop() end
