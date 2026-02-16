@@ -257,7 +257,7 @@ local function GetRodDelay(rodID)
     -- Konfigurasi delay berdasarkan rod ID
     local rodDelays = {
         [5] = 1.8,    -- Astral Rod
-        [169] = 1.2,  -- Ghostfin Rod
+        [169] = 1.1,  -- Ghostfin Rod
         [80] = 2,   -- Midnight Rod
         [4] = 2,    -- Lucky Rod
         [78] = 2,   -- Ice Rod
