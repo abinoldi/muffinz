@@ -1,15 +1,15 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v3.5 (STABLE - 1 BY 1 DOWNLOAD)
+# ROBLOX CLONE MANAGER v3.6 (ADDED INSTALL ONLY MODE)
 # ==========================================================
 
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
 BASE_URL="http://43.134.116.2:5555/uploaded"
 
-# KONFIGURASI TIMEOUT (PENTING AGAR TIDAK STUCK)
-TIMEOUT_SEC=300      # 5 Menit per file. Kalau macet, skip.
+# KONFIGURASI TIMEOUT
+TIMEOUT_SEC=300
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -80,42 +80,73 @@ do_uninstall() {
 
 do_auto_process() {
     echo "=========================================="
-    echo "   🚀 PROSES OTOMATIS (1 BY 1 MODE) 🚀    "
+    echo "   🚀 PROSES OTOMATIS (BACKUP -> INSTALL) "
     echo "=========================================="
     
     total_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
     if [ "$total_files" -eq 0 ]; then echo "❌ Tidak ada backup."; return; fi
 
-    # Bersihkan folder download
     rm -rf "$DOWNLOAD_DIR"
     mkdir -p "$DOWNLOAD_DIR"
 
-    echo "📡 Total file yang akan diproses: $total_files"
-    echo "⚠️  Mode: Sequential (Satu per satu agar aman)"
-    echo "------------------------------------------"
-
-    # --- LOOP DOWNLOAD 1 PER 1 ---
+    echo "📡 Mendeteksi $total_files backup. Mulai download..."
+    
+    # DOWNLOAD LOOP
     for i in $(seq 1 "$total_files"); do
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+        echo -n "⬇️  [$i/$total_files] Download $APK_NAME... "
+        curl -L -f --retry 3 --retry-delay 2 -m $TIMEOUT_SEC "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
+        if [ $? -eq 0 ]; then echo " ✅ OK"; else echo " ❌ GAGAL"; fi
+    done
+
+    # INSTALL LOOP
+    echo "📦 Menginstall..."
+    for i in $(seq 1 "$total_files"); do
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
+        if [ -f "$SAVE_PATH" ] && [ $(stat -c%s "$SAVE_PATH") -gt 1000 ]; then
+            pm install -r "$SAVE_PATH" > /dev/null 2>&1
+        fi
+    done
+
+    do_restore_sequential
+    echo "✨ SELESAI!"
+}
+
+# --- FITUR BARU: DOWNLOAD & INSTALL ONLY ---
+do_download_install_only() {
+    echo "=========================================="
+    echo "   📥 DOWNLOAD & INSTALL SAJA (NO RESTORE) "
+    echo "=========================================="
+    echo "⚠️  Fitur ini akan mendownload APK dari 1.apk s/d N.apk"
+    echo -n "🔢 Masukkan jumlah clone yang mau diinstall: "
+    read target_qty
+
+    # Validasi input harus angka
+    if ! [ "$target_qty" -eq "$target_qty" ] 2>/dev/null; then
+        echo "❌ Input harus berupa angka!"
+        return
+    fi
+
+    rm -rf "$DOWNLOAD_DIR"
+    mkdir -p "$DOWNLOAD_DIR"
+
+    echo "------------------------------------------"
+    echo "📡 Target: $target_qty Aplikasi"
+    
+    # 1. DOWNLOAD PHASE
+    for i in $(seq 1 "$target_qty"); do
+        APK_NAME="$i.apk"
+        SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
         
-        echo -n "⬇️  [$i/$total_files] Mendownload $APK_NAME... "
+        echo -n "⬇️  [$i/$target_qty] Mendownload $APK_NAME... "
+        curl -L -f --retry 3 --retry-delay 2 -m $TIMEOUT_SEC "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
         
-        # Penjelasan Command CURL:
-        # -L : Follow redirect
-        # -f : Fail silent (kalau 404 gak bikin file kosong)
-        # --retry 3 : Coba 3x kalau gagal
-        # -m 300 : Max time 5 menit
-        # -# : Tampilkan progress bar sederhana (Hashtag)
-        
-        curl -L -f --retry 3 --retry-delay 2 -m $TIMEOUT_SEC "$BASE_URL/$APK_NAME" -o "$SAVE_PATH" 
-        
-        # Cek status exit code curl ($?)
         if [ $? -eq 0 ]; then
             echo " ✅ Sukses."
         else
-            echo " ❌ GAGAL! (Server timeout/File tidak ada)"
-            # Kita lanjut ke file berikutnya, jangan exit script
+            echo " ❌ GAGAL! (Skip)"
         fi
     done
 
@@ -123,7 +154,7 @@ do_auto_process() {
     echo "📦 [PHASE 2] Menginstall Aplikasi..."
     
     installed_count=0
-    for i in $(seq 1 "$total_files"); do
+    for i in $(seq 1 "$target_qty"); do
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
         
@@ -132,12 +163,11 @@ do_auto_process() {
             pm install -r "$SAVE_PATH" > /dev/null 2>&1
             installed_count=$((installed_count + 1))
         else
-            echo "   ⚠️ File $APK_NAME rusak/tidak terdownload."
+            echo "   ⚠️ File $APK_NAME tidak valid."
         fi
     done
 
-    do_restore_sequential
-    echo "✨ SELESAI! ($installed_count berhasil diinstall)"
+    echo "✨ SELESAI! ($installed_count berhasil diinstall tanpa restore)"
 }
 
 # --- MAIN MENU ---
@@ -145,13 +175,14 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX MANAGER v3.5 (SAFE MODE)       "
+    echo "    ROBLOX MANAGER v3.6 (SAFE MODE)       "
     echo "=========================================="
     echo "1. Backup Akun"
     echo "2. Restore Akun"
     echo "3. Hapus Semua Aplikasi"
-    echo "4. MULAI PROSES (Download 1-by-1)"
-    echo "5. Keluar"
+    echo "4. AUTO PROCESS (Download + Install + Restore)"
+    echo "5. DOWNLOAD & INSTALL SAJA (No Restore)"
+    echo "6. Keluar"
     echo -n "Pilih: "
     read choice
     case $choice in
@@ -159,7 +190,8 @@ while true; do
         2) do_restore_sequential ;;
         3) do_uninstall ;;
         4) do_auto_process ;;
-        5) exit 0 ;;
+        5) do_download_install_only ;;
+        6) exit 0 ;;
         *) echo "⚠️ Salah." ;;
     esac
 done
