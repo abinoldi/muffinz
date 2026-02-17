@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX INJECTOR v8.0 (CLONE DB STRUCTURE & RESTORE)
+# ROBLOX INJECTOR v10.0 (AUTO-SKIP + VALIDATOR)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
@@ -17,7 +17,12 @@ check_root() {
 }
 
 prepare_env() {
-    # 1. Siapkan Sqlite
+    # Cek Curl untuk validasi
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "❌ Curl tidak ditemukan. Install dulu: pkg install curl"
+        exit 1
+    fi
+
     rm -f "$TMP_SQLITE"
     if [ -f "$TERMUX_SQLITE" ]; then
         cp "$TERMUX_SQLITE" "$TMP_SQLITE"
@@ -28,162 +33,202 @@ prepare_env() {
     fi
 
     if [ -z "$SQLITE_BIN" ] || [ ! -x "$SQLITE_BIN" ]; then
-        echo "❌ sqlite3 tidak ditemukan. Wajib install di Termux."
+        echo "❌ sqlite3 tidak ditemukan. Wajib install: pkg install sqlite"
         exit 1
     fi
 
-    # 2. Siapkan Folder Temp
     rm -rf "$TEMP_DB_DIR"
     mkdir -p "$TEMP_DB_DIR"
     chmod 777 "$TEMP_DB_DIR"
 }
 
-# --- PHASE 1: GENERATE DB (SESUAI STRUKTUR FILE ANDA) ---
+# --- FUNGSI 1: CEK APAKAH APK SUDAH LOGIN ---
+check_existing_cookie() {
+    local pkg="$1"
+    local db_path="/data/data/$pkg/app_webview/Default/Cookies"
+    
+    if [ ! -f "$db_path" ]; then return 1; fi
+
+    local cookie_value=$("$SQLITE_BIN" "$db_path" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
+    
+    if [ -n "$cookie_value" ]; then
+        return 0 # Ada isinya (Sudah login)
+    else
+        return 1 # Kosong
+    fi
+}
+
+# --- FUNGSI 2: CEK VALIDITAS COOKIE VIA INTERNET ---
+validate_cookie_online() {
+    local cookie_val="$1"
+    
+    echo -n "   ⏳ Mengecek validitas... "
+    
+    # Hit API Roblox untuk cek user login
+    # Timeout 10 detik agar tidak hang jika sinyal jelek
+    response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+        -H "Cookie: .ROBLOSECURITY=$cookie_val" \
+        "https://users.roblox.com/v1/users/authenticated")
+
+    if [ "$response" -eq 200 ]; then
+        echo "✅ VALID (Live)"
+        return 0
+    else
+        echo "❌ MATI/INVALID ($response)"
+        return 1
+    fi
+}
+
 generate_db_file() {
     local index="$1"
     local raw_cookie="$2"
     local db_path="$TEMP_DB_DIR/cookie_$index.db"
 
-    # Hapus file lama
     rm -f "$db_path"
-
-    # 1. CREATE TABLE (Struktur EXACT dari Cookies_Salinan.db Anda)
     "$SQLITE_BIN" "$db_path" "CREATE TABLE cookies(creation_utc INTEGER NOT NULL, top_frame_site_key TEXT NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, encrypted_value BLOB DEFAULT '', path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, source_port INTEGER NOT NULL DEFAULT -1, is_same_party INTEGER NOT NULL DEFAULT 0, UNIQUE (top_frame_site_key, host_key, name, path));"
-
-    # 2. CREATE META (Opsional tapi bagus agar persis asli)
     "$SQLITE_BIN" "$db_path" "CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);"
     "$SQLITE_BIN" "$db_path" "INSERT INTO meta(key, value) VALUES('version','15');"
     "$SQLITE_BIN" "$db_path" "INSERT INTO meta(key, value) VALUES('last_compatible_version','15');"
-
-    # 3. INSERT COOKIE (Mengisi SEMUA kolom agar tidak error constraint)
-    # Perhatikan urutan kolom harus sesuai CREATE TABLE di atas
     "$SQLITE_BIN" "$db_path" "INSERT INTO cookies (creation_utc, top_frame_site_key, host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, source_port, is_same_party) VALUES ((strftime('%s','now')*1000000), '', '.roblox.com', '.ROBLOSECURITY', '$raw_cookie', '', '/', 253402300799000000, 1, 1, (strftime('%s','now')*1000000), 1, 1, 1, -1, 1, -1, 0);"
-
-    if [ -f "$db_path" ]; then
-        echo "   ✅ Generated DB #$index (Struktur Valid)"
-    else
-        echo "   ❌ Gagal membuat DB #$index"
-    fi
 }
 
-# --- PHASE 2: RESTORE TO APP (Metode Copy Paste) ---
 restore_db() {
     local pkg_name="$1"
     local source_db="$2"
-    
     local target_root="/data/data/$pkg_name"
-    # Target FOLDER (Parent)
     local target_folder="$target_root/app_webview/Default"
-    # Target FILE
     local target_file="$target_folder/Cookies"
 
-    echo "------------------------------------------"
-    echo "🔄 Target: $pkg_name"
-
-    # 1. Force Stop
+    echo "   🔄 Injecting: $pkg_name"
     am force-stop "$pkg_name" > /dev/null 2>&1
 
-    # 2. HAPUS FILE LAMA (PENTING!)
-    if [ -e "$target_file" ]; then
-        rm -f "$target_file"
-    fi
-    # Hapus juga jika ada folder nyasar dengan nama Cookies
-    if [ -d "$target_file" ]; then
-        rm -rf "$target_file"
-    fi
+    if [ -e "$target_file" ]; then rm -f "$target_file"; fi
+    if [ -d "$target_file" ]; then rm -rf "$target_file"; fi
 
-    # 3. BUAT FOLDER (Jika belum ada)
     if [ ! -d "$target_folder" ]; then
         mkdir -p "$target_folder"
-        # Fix owner folder parent
         local uid_awal=$(stat -c "%u:%g" "$target_root")
         chown -R "$uid_awal" "$target_root/app_webview"
     fi
 
-    # 4. COPY DATABASE BARU
-    echo "   📥 Menyalin database..."
     cp "$source_db" "$target_file"
-
-    if [ -f "$target_file" ]; then
-        # 5. FIX PERMISSION (Paling Penting)
-        local app_uid=$(stat -c "%u:%g" "$target_root")
-        
-        # Ubah pemilik folder recursive biar aman
-        chown -R "$app_uid" "$target_root/app_webview"
-        
-        # Ubah permission file database spesifik
-        chmod 660 "$target_file"
-        
-        echo "   ✨ SUKSES TERPASANG"
-    else
-        echo "   ❌ Gagal menyalin file."
-    fi
+    local app_uid=$(stat -c "%u:%g" "$target_root")
+    chown -R "$app_uid" "$target_root/app_webview"
+    chmod 660 "$target_file"
 }
 
 do_main_process() {
     echo "=========================================="
-    echo "   ROBLOX INJECTOR v8.0 (CLONE METHOD)    "
+    echo " ROBLOX INJECTOR v10 (VALIDATOR EDITION)"
     echo "=========================================="
     prepare_env
     
-    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    total_apps=${#pkgs[@]}
+    raw_pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
     
-    if [ $total_apps -eq 0 ]; then
+    if [ ${#raw_pkgs[@]} -eq 0 ]; then
         echo "❌ Tidak ada aplikasi Roblox Clone."
         return
     fi
 
-    # Input Cookie
-    echo "📱 Terdeteksi $total_apps aplikasi."
-    echo "📝 INPUT COOKIE (Ketik 'done' selesai)"
+    echo "🔍 Memeriksa status login & memfilter..."
+    target_pkgs=()
+
+    for pkg in "${raw_pkgs[@]}"; do
+        if check_existing_cookie "$pkg"; then
+            echo "   ⏩ SKIP: $pkg (Sudah Login)"
+        else
+            echo "   🎯 TARGET: $pkg (Perlu Injeksi)"
+            target_pkgs+=("$pkg")
+        fi
+    done
+
+    total_targets=${#target_pkgs[@]}
+
+    if [ $total_targets -eq 0 ]; then
+        echo "✅ Semua aplikasi aman. Keluar."
+        rm -rf "$TEMP_DB_DIR"
+        exit 0
+    fi
+
+    echo "------------------------------------------"
+    echo "📝 Mengisi $total_targets slot kosong."
+    echo "   Ketik 'done' untuk batal/keluar."
     echo "------------------------------------------"
     
     rm -f "$COOKIE_QUEUE"
+    
+    # Loop untuk setiap target yang kosong
     i=0
-    while true; do
+    while [ $i -lt $total_targets ]; do
         display_num=$((i + 1))
-        echo -n "[$display_num] Cookie: "
-        read -r input_cookie
+        current_target_pkg="${target_pkgs[$i]}"
+        
+        # Infinite loop kecil sampai user memasukkan cookie yang VALID untuk app ini
+        while true; do
+            echo ""
+            echo "👉 [$display_num/$total_targets] Target: ...${current_target_pkg: -15}"
+            echo -n "   Paste Cookie: "
+            read -r input_cookie
 
-        if [ "$input_cookie" = "done" ]; then break; fi
-        if [ -n "$input_cookie" ]; then
-            echo "$input_cookie" >> "$COOKIE_QUEUE"
-            i=$((i + 1))
-        fi
-        if [ $i -ge $total_apps ]; then echo "⚠️  Slot penuh."; break; fi
+            # Handle exit
+            if [ "$input_cookie" = "done" ]; then 
+                # Jika user keluar di tengah, kita proses yang sudah ada saja
+                echo "⚠️  Proses dihentikan user."
+                break 2 
+            fi
+
+            # Handle kosong
+            if [ -z "$input_cookie" ]; then
+                echo "   ❌ Cookie tidak boleh kosong!"
+                continue
+            fi
+
+            # --- VALIDASI ONLINE ---
+            if validate_cookie_online "$input_cookie"; then
+                # Jika valid, simpan ke queue dan BREAK loop kecil untuk lanjut ke app berikutnya
+                echo "$input_cookie" >> "$COOKIE_QUEUE"
+                i=$((i + 1))
+                break 
+            else
+                # Jika tidak valid, ulangi prompt (jangan break)
+                echo "   ⚠️  Silakan ambil cookie baru dan paste ulang."
+            fi
+        done
     done
-    total_cookies=$i
+    
+    total_cookies_input=$i
 
-    # Phase 1: Generate
-    echo "------------------------------------------"
-    echo "🔨 [1/2] Membuat Database (Struktur Asli)..."
-    line_num=1
-    while [ $line_num -le $total_cookies ]; do
-        current_cookie=$(sed "${line_num}q;d" "$COOKIE_QUEUE")
-        generate_db_file "$line_num" "$current_cookie"
-        line_num=$((line_num + 1))
-    done
+    if [ $total_cookies_input -eq 0 ]; then
+        echo "❌ Tidak ada cookie valid yang diinput."
+        rm -rf "$TEMP_DB_DIR"
+        exit 0
+    fi
 
-    # Phase 2: Restore
+    # Phase 1: Generate & Inject
     echo "------------------------------------------"
-    echo "🚀 [2/2] Mengirim ke Aplikasi..."
+    echo "🚀 Memproses & Mengirim ke Aplikasi..."
+    
     idx=0
-    for pkg in "${pkgs[@]}"; do
-        db_num=$((idx + 1))
-        source_db="$TEMP_DB_DIR/cookie_$db_num.db"
-
-        if [ ! -f "$source_db" ]; then break; fi
-
-        restore_db "$pkg" "$source_db"
+    # Kita loop ulang file queue yang isinya sudah pasti valid
+    while read -r valid_cookie; do
+        if [ $idx -ge ${#target_pkgs[@]} ]; then break; fi
+        
+        # 1. Generate DB
+        generate_db_file "$((idx+1))" "$valid_cookie"
+        
+        # 2. Inject langsung
+        target_app="${target_pkgs[$idx]}"
+        source_db="$TEMP_DB_DIR/cookie_$((idx+1)).db"
+        
+        restore_db "$target_app" "$source_db"
+        
         idx=$((idx + 1))
-    done
+    done < "$COOKIE_QUEUE"
 
-    # Clean up
     rm -rf "$TEMP_DB_DIR"
     rm -f "$COOKIE_QUEUE"
     echo "------------------------------------------"
-    echo "✨ SELESAI! Silakan buka aplikasinya."
+    echo "✨ SELESAI! Semua cookie yang masuk sudah dites valid."
 }
 
 check_root
