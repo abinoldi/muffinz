@@ -15,11 +15,6 @@ local VirtualUser = game:GetService("VirtualUser")
 repeat task.wait() until Players.LocalPlayer
 local lp = Players.LocalPlayer
 
--- 1. Lakukan Respawn (Reset Character)
-if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-    lp.Character.Humanoid.Health = 0 
-end
-
 -- 2. Tunggu sampai karakter muncul kembali
 local char = lp.Character or lp.CharacterAdded:Wait()
 char:WaitForChild("HumanoidRootPart", 10)
