@@ -238,13 +238,13 @@ local function GetRodDelay(rodID)
     local rodDelays = {
         [5] = 1.5,    -- Astral Rod
         [169] = 0.65,  -- Ghostfin Rod
-        [80] = 1.5,   -- Midnight Rod
-        [4] = 1.5,    -- Lucky Rod
-        [78] = 1.5,   -- Ice Rod
-        [77] = 1.5,   -- Demascus Rod
+        [80] = 2.2,   -- Midnight Rod
+        [4] = 2.2,    -- Lucky Rod
+        [78] = 2.2,   -- Ice Rod
+        [77] = 2.2,   -- Demascus Rod
         [85] = 2.2,   -- Grass Rod
         [76] = 2.2,   -- Carbon Rod
-        [79] = 1.5,  -- Luck Rod
+        [79] = 2.2,  -- Luck Rod
     }
     return rodDelays[rodID] or 2.2
 end
