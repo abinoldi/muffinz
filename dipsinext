@@ -469,7 +469,7 @@ local function UpdateGameMode()
             else 
                 progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
             end
-            local bestArea = "Esoteric Island"
+            local bestArea = "Volcano"
             local currentBestRodValue = 0
             for _, ownedId in ipairs(ownedRods) do
                 for _, shopRod in ipairs(ShopRods) do
