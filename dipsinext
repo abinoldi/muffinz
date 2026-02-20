@@ -20,27 +20,6 @@ MyLp.Character:WaitForChild("HumanoidRootPart", 10)
 task.wait(3)
 
 -- ===============================
--- 1. AUTO RECONNECT
--- ===============================
-local TeleportService = game:GetService("TeleportService")
-local GuiService = game:GetService("GuiService")
-local Players = game:GetService("Players")
-
-local placeId = game.PlaceId
-local serverId = game.JobId 
-
-GuiService.ErrorMessageChanged:Connect(function()
-    task.wait(5)
-    local errorMessage = GuiService:GetErrorMessage()
-    if #errorMessage > 0 then
-        warn("Disconnect detected: " .. errorMessage)
-        TeleportService:TeleportToPlaceInstance(placeId, serverId, Players.LocalPlayer)
-        task.wait(10)
-        TeleportService:Teleport(placeId, Players.LocalPlayer)
-    end
-end)
-
--- ===============================
 -- 2. ANTI-AFK
 -- ===============================
 local VirtualUser = game:GetService("VirtualUser")
@@ -248,7 +227,7 @@ local Remotes = {
 }
 
 -- ================= KONFIGURASI ================= --
-local Delay_RequestToCatch  = 0.1  -- DIPERCEPAT KE 0.1 DETIK
+local Delay_RequestToCatch  = 0.02  -- DIPERCEPAT KE 0.1 DETIK
 -- =============================================== --
 
 _G.FishBotActive = true
@@ -256,15 +235,15 @@ _G.FishBotActive = true
 local function GetRodDelay(rodID)
     -- Konfigurasi delay berdasarkan rod ID
     local rodDelays = {
-        [5] = 1.8,    -- Astral Rod
-        [169] = 1.1,  -- Ghostfin Rod
-        [80] = 2,   -- Midnight Rod
-        [4] = 2,    -- Lucky Rod
-        [78] = 2,   -- Ice Rod
-        [77] = 2,   -- Demascus Rod
+        [5] = 1,    -- Astral Rod
+        [169] = 0.65,  -- Ghostfin Rod
+        [80] = 1,   -- Midnight Rod
+        [4] = 1.2,    -- Lucky Rod
+        [78] = 1.1,   -- Ice Rod
+        [77] = 1.1,   -- Demascus Rod
         [85] = 2,   -- Grass Rod
         [76] = 2,   -- Carbon Rod
-        [79] = 2,   -- Luck Rod
+        [79] = 1.15,   -- Luck Rod
     }
     
     -- Default delay jika rod tidak ditemukan
@@ -276,11 +255,6 @@ local function Fire(remote)
     task.spawn(function()
         pcall(function()
             if remote:IsA("RemoteFunction") then remote:InvokeServer(1) else remote:FireServer(1) end
-        end)
-    end)
-    task.spawn(function()
-        pcall(function()
-            if remote:IsA("RemoteFunction") then remote:InvokeServer(true) else remote:FireServer(true) end
         end)
     end)
 end
