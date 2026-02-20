@@ -1,0 +1,342 @@
+#!/system/bin/sh
+
+# ==========================================================
+# ROBLOX COOKIE REMOVER v1.0
+# ==========================================================
+# Script untuk menghapus semua cookies dari aplikasi Roblox clone
+# ==========================================================
+
+TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
+TMP_SQLITE="/data/local/tmp/sqlite3_exec"
+
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "❌ Script ini MEMBUTUHKAN akses Root!"
+        exit 1
+    fi
+}
+
+prepare_sqlite() {
+    rm -f "$TMP_SQLITE"
+    
+    if [ -f "$TERMUX_SQLITE" ]; then
+        cp "$TERMUX_SQLITE" "$TMP_SQLITE"
+        chmod 755 "$TMP_SQLITE"
+        SQLITE_BIN="$TMP_SQLITE"
+    else
+        SQLITE_BIN=$(which sqlite3)
+    fi
+
+    if [ -z "$SQLITE_BIN" ] || [ ! -x "$SQLITE_BIN" ]; then
+        echo "❌ sqlite3 tidak ditemukan. Install: pkg install sqlite"
+        exit 1
+    fi
+}
+
+# Fungsi untuk menghapus cookie dari database
+remove_cookie_from_db() {
+    local db_path="$1"
+    
+    if [ ! -f "$db_path" ]; then
+        return 1
+    fi
+    
+    # Cek apakah ada cookie .ROBLOSECURITY
+    local cookie_exists=$("$SQLITE_BIN" "$db_path" "SELECT COUNT(*) FROM cookies WHERE name='.ROBLOSECURITY';" 2>/dev/null)
+    
+    if [ "$cookie_exists" -gt 0 ]; then
+        # Hapus cookie .ROBLOSECURITY
+        "$SQLITE_BIN" "$db_path" "DELETE FROM cookies WHERE name='.ROBLOSECURITY';" 2>/dev/null
+        echo "   ✅ Cookie dihapus dari: $(basename $(dirname $(dirname $db_path)))"
+        return 0
+    fi
+    
+    return 2 # Tidak ada cookie
+}
+
+# Fungsi untuk menghapus seluruh file Cookies (alternatif jika metode SQLite gagal)
+remove_cookies_file() {
+    local pkg="$1"
+    local cookies_path="/data/data/$pkg/app_webview/Default/Cookies"
+    
+    if [ -f "$cookies_path" ]; then
+        # Stop aplikasi dulu
+        am force-stop "$pkg" > /dev/null 2>&1
+        
+        # Backup dulu sebelum hapus (optional, bisa di-comment)
+        local backup_dir="/data/local/tmp/cookies_backup"
+        mkdir -p "$backup_dir"
+        cp "$cookies_path" "$backup_dir/${pkg}_cookies.backup" 2>/dev/null
+        echo "   💾 Backup: $backup_dir/${pkg}_cookies.backup"
+        
+        # Hapus file cookies
+        rm -f "$cookies_path"
+        echo "   🔥 File cookies dihapus: $pkg"
+        return 0
+    fi
+    return 1
+}
+
+# Fungsi untuk menghapus semua cookies dari semua Roblox clone
+remove_all_cookies() {
+    echo "=========================================="
+    echo "   ROBLOX COOKIE REMOVER v1.0"
+    echo "=========================================="
+    echo ""
+    
+    prepare_sqlite
+    
+    # Cari semua package Roblox clone
+    raw_pkgs=($(pm list packages | grep -E "com\.roblox\.client|com\.roblox\.clien" | cut -f 2 -d ":"))
+    
+    if [ ${#raw_pkgs[@]} -eq 0 ]; then
+        echo "❌ Tidak ada aplikasi Roblox Clone ditemukan."
+        return
+    fi
+    
+    echo "📱 Ditemukan ${#raw_pkgs[@]} aplikasi Roblox:"
+    for pkg in "${raw_pkgs[@]}"; do
+        echo "   - $pkg"
+    done
+    echo ""
+    
+    echo "⚠️  PERINGATAN: Script ini akan MENGHAPUS semua cookie/login!"
+    echo "   Semua akun Roblox akan logout dari aplikasi berikut."
+    echo ""
+    echo -n "Lanjutkan? (y/n): "
+    read -r confirm
+    
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "❌ Dibatalkan user."
+        exit 0
+    fi
+    
+    echo ""
+    echo "🔄 Memproses penghapusan cookie..."
+    echo "------------------------------------------"
+    
+    removed_count=0
+    failed_count=0
+    no_cookie_count=0
+    
+    for pkg in "${raw_pkgs[@]}"; do
+        db_path="/data/data/$pkg/app_webview/Default/Cookies"
+        
+        if [ ! -f "$db_path" ]; then
+            echo "   ℹ️  $pkg: File cookies tidak ditemukan"
+            continue
+        fi
+        
+        # Cek dulu apakah ada cookie
+        cookie_check=$("$SQLITE_BIN" "$db_path" "SELECT COUNT(*) FROM cookies WHERE name='.ROBLOSECURITY';" 2>/dev/null)
+        
+        if [ "$cookie_check" = "0" ] || [ -z "$cookie_check" ]; then
+            echo "   ℹ️  $pkg: Tidak ada cookie .ROBLOSECURITY"
+            ((no_cookie_count++))
+            continue
+        fi
+        
+        # Coba metode SQLite dulu
+        if remove_cookie_from_db "$db_path"; then
+            ((removed_count++))
+        else
+            # Fallback: hapus file langsung
+            if remove_cookies_file "$pkg"; then
+                ((removed_count++))
+            else
+                echo "   ❌ Gagal menghapus cookie dari: $pkg"
+                ((failed_count++))
+            fi
+        fi
+    done
+    
+    echo "------------------------------------------"
+    echo ""
+    echo "📊 SUMMARY:"
+    echo "   ✅ Berhasil dihapus: $removed_count"
+    echo "   ℹ️  Tidak ada cookie: $no_cookie_count"
+    echo "   ❌ Gagal: $failed_count"
+    
+    # Bersihkan temporary sqlite
+    rm -f "$TMP_SQLITE"
+    
+    echo ""
+    echo "✨ Selesai! Semua cookie telah dihapus."
+}
+
+# Fungsi untuk menghapus cookie dari aplikasi spesifik
+remove_specific_app() {
+    echo "=========================================="
+    echo "   REMOVE COOKIE - APLIKASI SPESIFIK"
+    echo "=========================================="
+    echo ""
+    
+    prepare_sqlite
+    
+    # Cari semua package Roblox clone
+    raw_pkgs=($(pm list packages | grep -E "com\.roblox\.client|com\.roblox\.clien" | cut -f 2 -d ":"))
+    
+    if [ ${#raw_pkgs[@]} -eq 0 ]; then
+        echo "❌ Tidak ada aplikasi Roblox Clone ditemukan."
+        return
+    fi
+    
+    echo "Pilih aplikasi:"
+    for i in "${!raw_pkgs[@]}"; do
+        status=""
+        db_path="/data/data/${raw_pkgs[$i]}/app_webview/Default/Cookies"
+        if [ -f "$db_path" ]; then
+            cookie_check=$("$SQLITE_BIN" "$db_path" "SELECT COUNT(*) FROM cookies WHERE name='.ROBLOSECURITY';" 2>/dev/null)
+            if [ "$cookie_check" -gt 0 ]; then
+                status=" (ADA COOKIE)"
+            else
+                status=" (TIDAK ADA COOKIE)"
+            fi
+        else
+            status=" (NO DB)"
+        fi
+        echo "   $((i+1)). ${raw_pkgs[$i]}$status"
+    done
+    echo "   0. Kembali"
+    echo ""
+    echo -n "Pilih nomor: "
+    read -r choice
+    
+    if [ "$choice" = "0" ]; then
+        return
+    fi
+    
+    if [ "$choice" -gt 0 ] && [ "$choice" -le ${#raw_pkgs[@]} ]; then
+        index=$((choice-1))
+        pkg="${raw_pkgs[$index]}"
+        
+        echo ""
+        echo "📱 Target: $pkg"
+        echo -n "Hapus cookie dari aplikasi ini? (y/n): "
+        read -r confirm
+        
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+            db_path="/data/data/$pkg/app_webview/Default/Cookies"
+            
+            if [ ! -f "$db_path" ]; then
+                echo "❌ File cookies tidak ditemukan"
+                return
+            fi
+            
+            am force-stop "$pkg" > /dev/null 2>&1
+            
+            if remove_cookie_from_db "$db_path"; then
+                echo "✅ Cookie berhasil dihapus dari $pkg"
+            else
+                # Fallback hapus file
+                remove_cookies_file "$pkg"
+            fi
+        else
+            echo "❌ Dibatalkan"
+        fi
+    else
+        echo "❌ Pilihan tidak valid"
+    fi
+    
+    rm -f "$TMP_SQLITE"
+}
+
+# Fungsi untuk backup cookies sebelum dihapus
+backup_cookies() {
+    echo "=========================================="
+    echo "   BACKUP COOKIES SEBELUM HAPUS"
+    echo "=========================================="
+    echo ""
+    
+    prepare_sqlite
+    
+    backup_dir="/data/local/tmp/cookies_backup_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$backup_dir"
+    
+    raw_pkgs=($(pm list packages | grep -E "com\.roblox\.client|com\.roblox\.clien" | cut -f 2 -d ":"))
+    
+    if [ ${#raw_pkgs[@]} -eq 0 ]; then
+        echo "❌ Tidak ada aplikasi Roblox Clone ditemukan."
+        return
+    fi
+    
+    backed_up=0
+    
+    for pkg in "${raw_pkgs[@]}"; do
+        db_path="/data/data/$pkg/app_webview/Default/Cookies"
+        
+        if [ -f "$db_path" ]; then
+            # Cek apakah ada cookie
+            cookie_value=$("$SQLITE_BIN" "$db_path" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
+            
+            if [ -n "$cookie_value" ]; then
+                # Backup file
+                cp "$db_path" "$backup_dir/${pkg}_cookies.db"
+                # Backup cookie value ke text file
+                echo "$cookie_value" > "$backup_dir/${pkg}_cookie.txt"
+                echo "   💾 Backup: $pkg"
+                ((backed_up++))
+            fi
+        fi
+    done
+    
+    echo ""
+    echo "✅ Backup selesai! $backed_up aplikasi di-backup"
+    echo "📁 Lokasi backup: $backup_dir"
+    echo "   - File .db: file database lengkap"
+    echo "   - File .txt: cookie value saja"
+    
+    rm -f "$TMP_SQLITE"
+}
+
+# Menu utama
+show_menu() {
+    clear
+    echo "=========================================="
+    echo "   ROBLOX COOKIE REMOVER TOOL"
+    echo "=========================================="
+    echo "1. Hapus semua cookies (semua aplikasi)"
+    echo "2. Hapus cookie dari aplikasi spesifik"
+    echo "3. Backup cookies sebelum hapus"
+    echo "4. Keluar"
+    echo "=========================================="
+    echo -n "Pilih menu [1-4]: "
+    read -r menu
+}
+
+# Main program
+check_root
+
+while true; do
+    show_menu
+    
+    case $menu in
+        1)
+            remove_all_cookies
+            echo ""
+            echo -n "Tekan Enter untuk kembali ke menu..."
+            read -r
+            ;;
+        2)
+            remove_specific_app
+            echo ""
+            echo -n "Tekan Enter untuk kembali ke menu..."
+            read -r
+            ;;
+        3)
+            backup_cookies
+            echo ""
+            echo -n "Tekan Enter untuk kembali ke menu..."
+            read -r
+            ;;
+        4)
+            echo "Keluar..."
+            rm -f "$TMP_SQLITE" 2>/dev/null
+            exit 0
+            ;;
+        *)
+            echo "❌ Pilihan tidak valid!"
+            sleep 1
+            ;;
+    esac
+done
