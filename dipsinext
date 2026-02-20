@@ -246,7 +246,7 @@ local function GetRodDelay(rodID)
         [76] = 2,   -- Carbon Rod
         [79] = 1.15,  -- Luck Rod
     }
-    return rodDelays[rodID] or 1.5
+    return rodDelays[rodID] or 1.7
 end
 
 local function Fire(remote)
