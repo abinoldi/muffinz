@@ -20,6 +20,11 @@ MyLp.Character:WaitForChild("HumanoidRootPart", 10)
 -- 3. Tunggu 3 Detik
 task.wait(3)
 
+Plrs.LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
 -- ===============================
 -- 2. ANTI-AFK
 -- ===============================
