@@ -6,6 +6,7 @@
 repeat task.wait() until game:IsLoaded()
 local Plrs = game:GetService("Players")
 local MyLp = Plrs.LocalPlayer
+local lp = MyLp -- Samakan saja agar variabel 'lp' juga terisi
 
 -- 1. Lakukan Respawn (Reset Character)
 if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
