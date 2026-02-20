@@ -204,7 +204,7 @@ end
 -- ==============================================================================
 -- [[ RUBAH THRESHOLD SELL KE MYTHIC ]]
 -- ==============================================================================
-local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
+local RF_UpdateAutoSellThreshold = GetRemote(RPath, "RF/UpdateAutoSellThreshold")
 if RF_UpdateAutoSellThreshold then
     pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
 end
