@@ -236,15 +236,15 @@ _G.FishBotActive = true
 
 local function GetRodDelay(rodID)
     local rodDelays = {
-        [5] = 1.5,    -- Astral Rod
+        [5] = 1.2,    -- Astral Rod
         [169] = 0.65,  -- Ghostfin Rod
         [80] = 1.5,   -- Midnight Rod
-        [4] = 2,    -- Lucky Rod
-        [78] = 2,   -- Ice Rod
+        [4] = 1.8,    -- Lucky Rod
+        [78] = 1.8,   -- Ice Rod
         [77] = 1.8,   -- Demascus Rod
-        [85] = 2,   -- Grass Rod
-        [76] = 2,   -- Carbon Rod
-        [79] = 2,  -- Luck Rod
+        [85] = 1.8,   -- Grass Rod
+        [76] = 1.8,   -- Carbon Rod
+        [79] = 1.8,  -- Luck Rod
     }
     return rodDelays[rodID] or 2
 end
