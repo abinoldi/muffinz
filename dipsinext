@@ -238,13 +238,13 @@ local function GetRodDelay(rodID)
     local rodDelays = {
         [5] = 1.2,    -- Astral Rod
         [169] = 0.65,  -- Ghostfin Rod
-        [80] = 1.5,   -- Midnight Rod
-        [4] = 1.8,    -- Lucky Rod
-        [78] = 1.8,   -- Ice Rod
-        [77] = 1.8,   -- Demascus Rod
-        [85] = 1.8,   -- Grass Rod
-        [76] = 1.8,   -- Carbon Rod
-        [79] = 1.8,  -- Luck Rod
+        [80] = 1.8,   -- Midnight Rod
+        [4] = 2,    -- Lucky Rod
+        [78] = 2,   -- Ice Rod
+        [77] = 2,   -- Demascus Rod
+        [85] = 2,   -- Grass Rod
+        [76] = 2,   -- Carbon Rod
+        [79] = 2,  -- Luck Rod
     }
     return rodDelays[rodID] or 2
 end
@@ -298,6 +298,7 @@ local FishingAreas = {
     ["Treasure Room"]={Pos=Vector3.new(-3598,-281,-1645),Look=Vector3.new(-0.06,0,-1)},
     ["Sisyphus Statue"]={Pos=Vector3.new(-3743,-135,-1007),Look=Vector3.new(0.3,0,0.95)},
     ["Sacred Temple"]={Pos=Vector3.new(1461,-22,-670),Look=Vector3.new(-0.99,0,0.14)},
+    ["Volcano"] = {Pos=Vector3.new(-605.121, 19.516, 160.010),Look=Vector3.new(0.854, 0.000, 0.520)},
     ["Esoteric Island"]={Pos=Vector3.new(2164,3,1242),Look=Vector3.new(0,0,-1)},
     ["Ancient Jungle"]={Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)}
 }
@@ -474,9 +475,8 @@ local function UpdateGameMode()
                 for _, shopRod in ipairs(ShopRods) do
                     if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
                         currentBestRodValue = shopRod.Price
-                        if shopRod.Price >= 50000 then bestArea = "Sisyphus Statue"
-                        elseif shopRod.Price >= 15000 then bestArea = "Treasure Room"
-                        else bestArea = "Enchant Room" end
+                        if shopRod.Price >= 100000 then bestArea = "Treasure Room"
+                        else bestArea = "Volcano" end
                     end
                 end
             end
