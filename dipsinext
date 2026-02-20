@@ -247,7 +247,7 @@ local function GetRodDelay(rodID)
     }
     
     -- Default delay jika rod tidak ditemukan
-    return rodDelays[rodID] or 2
+    return rodDelays[rodID] or 1.2
 end
 
 local function Fire(remote)
