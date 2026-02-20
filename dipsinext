@@ -4,32 +4,33 @@
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
-local Plrs = game:GetService("Players")
-local MyLp = Plrs.LocalPlayer
-local lp = MyLp
+
+-- [PERBAIKAN UTAMA: Definisikan Services & Tunggu Player]
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+
+-- Tunggu sampai LocalPlayer benar-benar termuat (Sangat penting untuk AutoExec)
+repeat task.wait() until Players.LocalPlayer
+local lp = Players.LocalPlayer
 
 -- 1. Lakukan Respawn (Reset Character)
-if MyLp.Character and MyLp.Character:FindFirstChild("Humanoid") then
-    MyLp.Character.Humanoid.Health = 0 
+if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+    lp.Character.Humanoid.Health = 0 
 end
 
 -- 2. Tunggu sampai karakter muncul kembali
-MyLp.CharacterAdded:Wait()
-MyLp.Character:WaitForChild("HumanoidRootPart", 10)
+local char = lp.Character or lp.CharacterAdded:Wait()
+char:WaitForChild("HumanoidRootPart", 10)
 
 -- 3. Tunggu 3 Detik
 task.wait(3)
 
-Plrs.LocalPlayer.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-end)
-
 -- ===============================
 -- 2. ANTI-AFK
 -- ===============================
-local VirtualUser = game:GetService("VirtualUser")
-game:GetService("Players").LocalPlayer.Idled:Connect(function()
+lp.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
@@ -37,10 +38,6 @@ end)
 -- ===============================
 -- SERVICES & VARS
 -- ===============================
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local lp = Players.LocalPlayer
-local RunService = game:GetService("RunService")
-
 local STATE = {
     HasAstralRod = false, CurrentRod = "Checking...", CurrentRodID = 0, TotalCoins = 0,
     -- QUEST MODES
@@ -99,10 +96,10 @@ local function ActivateGreenMode()
     end)
 
     -- 3. GREENIFY PLAYER
-    local function GreenifyCharacter(char)
-        if not char then return end
+    local function GreenifyCharacter(character)
+        if not character then return end
         task.wait(0.5) 
-        for _, v in pairs(char:GetDescendants()) do
+        for _, v in pairs(character:GetDescendants()) do
             if v:IsA("Clothing") or v:IsA("ShirtGraphic") or v:IsA("Accessory") or v:IsA("CharacterMesh") then
                 v:Destroy()
             elseif v:IsA("BasePart") then
@@ -111,7 +108,7 @@ local function ActivateGreenMode()
                 v.Transparency = 0 
             end
         end
-        char.ChildAdded:Connect(function(child)
+        character.ChildAdded:Connect(function(child)
             if child:IsA("Tool") then
                 task.wait(0.1)
                 for _, part in pairs(child:GetDescendants()) do
@@ -140,8 +137,9 @@ local function DisableAudio()
     RunService.RenderStepped:Connect(function() SoundService.Volume = 0 end)
     local function MuteSound(instance)
         if instance:IsA("Sound") then
-            instance.Volume = 0;
-            instance.Looped = false; if instance.Playing then instance:Stop() end
+            instance.Volume = 0
+            instance.Looped = false
+            if instance.Playing then instance:Stop() end
         end
     end
     for _, v in pairs(game:GetDescendants()) do pcall(MuteSound, v) end
@@ -152,7 +150,6 @@ end
 -- DISABLE NATIVE AUTO FISH (BRUTAL MODE)
 -- ===============================
 local function DisableNativeAutoFish()
-    -- Menggunakan game:GetService("ReplicatedStorage") menggantikan Services.ReplicatedStorage untuk menghindari error
     local success, AutoFishCtrl = pcall(function() 
         return require(game:GetService("ReplicatedStorage").Controllers.AutoFishingController) 
     end)
@@ -212,11 +209,9 @@ end
 
 -- ==============================================================================
 -- [[ FISHING BOT: AUTO START - ULTA FAST MODE ]]
--- Request to Catch set to 0.1s
--- Delay_ChargeToRequest disesuaikan dengan rod yang digunakan
 -- ==============================================================================
 
-local function GetRemote(name)
+local function GetNetRemote(name)
     local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
     local current = ReplicatedStorage
     for _, child in ipairs(path) do
@@ -227,9 +222,9 @@ local function GetRemote(name)
 end
 
 local Remotes = {
-    Charge  = GetRemote("RF/ChargeFishingRod"),
-    Request = GetRemote("RF/RequestFishingMinigameStarted"),
-    Catch   = GetRemote("RF/CatchFishCompleted")
+    Charge  = GetNetRemote("RF/ChargeFishingRod"),
+    Request = GetNetRemote("RF/RequestFishingMinigameStarted"),
+    Catch   = GetNetRemote("RF/CatchFishCompleted")
 }
 
 -- ================= KONFIGURASI ================= --
@@ -239,7 +234,6 @@ local Delay_RequestToCatch  = 0.02  -- DIPERCEPAT KE 0.1 DETIK
 _G.FishBotActive = true
 
 local function GetRodDelay(rodID)
-    -- Konfigurasi delay berdasarkan rod ID
     local rodDelays = {
         [5] = 1,    -- Astral Rod
         [169] = 0.65,  -- Ghostfin Rod
@@ -249,10 +243,8 @@ local function GetRodDelay(rodID)
         [77] = 1.1,   -- Demascus Rod
         [85] = 2,   -- Grass Rod
         [76] = 2,   -- Carbon Rod
-        [79] = 1.15,   -- Luck Rod
+        [79] = 1.15,  -- Luck Rod
     }
-    
-    -- Default delay jika rod tidak ditemukan
     return rodDelays[rodID] or 1.2
 end
 
@@ -269,7 +261,6 @@ print("⚡ Ultra Fast Mode Active (Catch Delay: 0.1s)")
 
 task.spawn(function()
     while _G.FishBotActive do
-        -- Dapatkan delay berdasarkan rod yang sedang digunakan
         local currentRodID = STATE.CurrentRodID or 0
         local Delay_ChargeToRequest = GetRodDelay(currentRodID)
         
@@ -278,21 +269,21 @@ task.spawn(function()
         
         local t1 = os.clock()
         while (os.clock() - t1) < Delay_ChargeToRequest and _G.FishBotActive do
-            RunService.Heartbeat:Wait()
+             RunService.Heartbeat:Wait()
         end
         if not _G.FishBotActive then break end
 
         -- [2] REQUEST
         if Remotes.Request then Fire(Remotes.Request) end
 
-        -- [3] TUNGGU 0.1 DETIK
+        -- [3] TUNGGU
         local t2 = os.clock()
         while (os.clock() - t2) < Delay_RequestToCatch and _G.FishBotActive do
-            RunService.Heartbeat:Wait()
+             RunService.Heartbeat:Wait()
         end
         if not _G.FishBotActive then break end
 
-        -- [4] CATCH & INSTANT RE-LOOP
+        -- [4] CATCH
         if Remotes.Catch then Fire(Remotes.Catch) end
     end
     print("🛑 Bot Nonaktif")
@@ -376,7 +367,6 @@ end
 -- BAIT FUNCTIONS
 -- ===============================
 local function AutoBuyBestBait()
-    -- [MODIFIED] Check if Astral Rod is owned
     if not STATE.HasAstralRod then return end 
 
     if not PlayerDataReplion then return end
@@ -615,8 +605,6 @@ local function ExecuteLeverLogic()
                     local dist = (lp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
                     if dist > 5 then 
                         lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) 
-                    else
-                        -- Tidak perlu memanggil CastRod() karena fishing bot sudah berjalan otomatis
                     end
                 end
             end
@@ -656,17 +644,13 @@ task.spawn(function()
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
                     end
-                    -- Tidak perlu memanggil CastRod() karena fishing bot sudah berjalan otomatis
-
                 elseif STATE.Mode == "Lever" then
                     ExecuteLeverLogic()
-
                 elseif STATE.Mode == "Element" then
                     EquipRod(169) -- Ghostfin
                     if STATE.CurrentArea ~= STATE.NextLocation then
                         Teleport(STATE.NextLocation)
                     end
-                    -- Tidak perlu memanggil CastRod() karena fishing bot sudah berjalan otomatis
                 end
             end)
             if not success then warn("Loop Error: " .. tostring(err)) end
@@ -722,7 +706,7 @@ end
 
 task.spawn(ActivateGreenMode)
 task.spawn(DisableAudio)
-task.spawn(DisableNativeAutoFish) -- [[ NEW ]] EXECUTE BRUTAL DISABLE
+task.spawn(DisableNativeAutoFish)
 task.spawn(CreateDashboard)
 task.wait(2)
 RF_UpdateAutoFishingState:InvokeServer(true)
