@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.8 (SMART TOTEM + DASHBOARD UPDATE)
+-- # ULTIMATE HUB: RE-FARM V7.9 (ENCODED REMOTES UPDATE)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -20,6 +20,39 @@ local Services = {
 
 local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
+
+-- ======================================================
+-- FUNGSI MAPPING ENCODED (TEMUAN i + 1)
+-- ======================================================
+local function getEncodedRemote(originalName)
+    local net = Services.ReplicatedStorage:FindFirstChild("Packages")
+    if net then
+        net = net:FindFirstChild("_Index")
+        if net then
+            net = net:FindFirstChild("sleitnick_net@0.2.0")
+            if net then
+                net = net:FindFirstChild("net")
+                if net then
+                    local children = net:GetChildren()
+                    for i = 1, #children do
+                        if children[i].Name == originalName then
+                            -- Langsung ambil objek setelahnya sesuai mapping i + 1
+                            return children[i + 1]
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ======================================================
+-- FUNGSI GETREMOTE YANG DIUPDATE (MENGGUNAKAN ENCODED)
+-- ======================================================
+local function GetRemote(name)
+    return getEncodedRemote(name)
+end
 
 -- [2] DEFAULT CONFIG
 local MasterConfig = {
@@ -60,7 +93,7 @@ local SessionStartTime = os.time()
 local TotalSecretsFound = 0
 local TotalRubyGemstones = 0
 local TotalFishCaught = 0
-local CurrentTotemTime = "Checking..." -- Variabel baru untuk Dashboard
+local CurrentTotemTime = "Checking..."
 
 local StartFishingRouter, StopFishing, RunAutoTrade, TeleportToFishingLocation, CreateDashboard, UpdateStatsFromInventory
 
@@ -159,15 +192,52 @@ local TierUtility = require(Services.ReplicatedStorage.Shared.TierUtility)
 local PlayerData = Replion:WaitReplion("Data", 10)
 local MerchantReplion = Replion:WaitReplion("Merchant", 10)
 
-local function GetRemote(name)
-    local path = {"Packages", "_Index", "sleitnick_net@0.2.0", "net"}
-    local current = Services.ReplicatedStorage
-    for _, child in ipairs(path) do
-        current = current:WaitForChild(child, 5)
-        if not current then return nil end
-    end
-    return current:FindFirstChild(name)
-end
+-- ======================================================
+-- AMBIL SEMUA REMOTE MENGGUNAKAN ENCODED VERSION
+-- ======================================================
+print("╔══════════════════════════════════════════╗")
+print("║     MENGAMBIL REMOTE ENCODED VERSIONS    ║")
+print("╚══════════════════════════════════════════╝")
+
+-- FISHING REMOTES
+local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
+local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
+local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
+local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RF_SellAllItems = GetRemote("RF/SellAllItems")
+local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
+
+-- TOTEM REMOTES
+local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
+local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
+local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
+
+-- TRADE REMOTES
+local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
+
+-- MERCHANT REMOTES
+local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
+local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
+
+-- NOTIFICATION REMOTE
+local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+
+-- VALIDASI SEMUA REMOTE
+print("\n=== REMOTE VALIDATION (ENCODED) ===")
+print("RF_ChargeFishingRod:", RF_ChargeFishingRod and RF_ChargeFishingRod.Name or "❌ NOT FOUND")
+print("RF_RequestFishingMinigameStarted:", RF_RequestFishingMinigameStarted and RF_RequestFishingMinigameStarted.Name or "❌ NOT FOUND")
+print("RE_FishingCompleted:", RE_FishingCompleted and RE_FishingCompleted.Name or "❌ NOT FOUND")
+print("RE_EquipToolFromHotbar:", RE_EquipToolFromHotbar and RE_EquipToolFromHotbar.Name or "❌ NOT FOUND")
+print("RF_SellAllItems:", RF_SellAllItems and RF_SellAllItems.Name or "❌ NOT FOUND")
+print("RE_FavoriteItem:", RE_FavoriteItem and RE_FavoriteItem.Name or "❌ NOT FOUND")
+print("RE_SpawnTotem:", RE_SpawnTotem and RE_SpawnTotem.Name or "❌ NOT FOUND")
+print("RF_EquipOxygenTank:", RF_EquipOxygenTank and RF_EquipOxygenTank.Name or "❌ NOT FOUND")
+print("RF_UnequipOxygenTank:", RF_UnequipOxygenTank and RF_UnequipOxygenTank.Name or "❌ NOT FOUND")
+print("RF_InitiateTrade:", RF_InitiateTrade and RF_InitiateTrade.Name or "❌ NOT FOUND")
+print("RF_PurchaseMarketItem:", RF_PurchaseMarketItem and RF_PurchaseMarketItem.Name or "❌ NOT FOUND")
+print("RF_UpdateAutoSellThreshold:", RF_UpdateAutoSellThreshold and RF_UpdateAutoSellThreshold.Name or "❌ NOT FOUND")
+print("RE_ObtainedNewFishNotification:", RE_ObtainedNewFishNotification and RE_ObtainedNewFishNotification.Name or "❌ NOT FOUND")
+print("=====================================\n")
 
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -346,14 +416,8 @@ local function StartPotatoLoop()
 end
 
 -- ===============================
--- FISHING SYSTEM
+-- FISHING SYSTEM (MENGGUNAKAN ENCODED REMOTES)
 -- ===============================
-local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
-local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
-local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
-local RF_SellAllItems = GetRemote("RF/SellAllItems")
-local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
 local function GetCoins()
     return PlayerData and (PlayerData:Get("Coins") or 0) or 0
@@ -378,12 +442,26 @@ local function DisableNativeAutoFish()
     print("[-] Native Controller Disabled (Brutal Mode)")
 end
 
-local function FireRemote(remote)
-    if not remote then return end
+local function FireRemote(remote, ...)
+    if not remote then 
+        warn("Remote tidak ditemukan!")
+        return false 
+    end
+    
+    local args = {...}
+    if #args == 0 then args = {1} end
+    
     task.spawn(function()
-        pcall(function()
-            if remote:IsA("RemoteFunction") then remote:InvokeServer(1) else remote:FireServer(1) end
+        local success = pcall(function()
+            if remote:IsA("RemoteFunction") then
+                return remote:InvokeServer(unpack(args))
+            else
+                remote:FireServer(unpack(args))
+            end
         end)
+        if not success then
+            warn("Gagal memanggil remote:", remote.Name)
+        end
     end)
 end
 
@@ -399,7 +477,9 @@ function StartFishingRouter()
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
-                    if RE_EquipToolFromHotbar then pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) end
+                    if RE_EquipToolFromHotbar then 
+                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                    end
                     task.wait(0.3)
                 end
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
@@ -419,7 +499,9 @@ function StartFishingRouter()
         while FishingState.IsFishing do
             if MasterConfig.AutoSell then
                 local before = GetCoins()
-                pcall(function() if RF_SellAllItems then RF_SellAllItems:InvokeServer() end end)
+                if RF_SellAllItems then
+                    pcall(function() RF_SellAllItems:InvokeServer() end)
+                end
                 task.wait(1)
                 local after = GetCoins()
                 if after > before then FishingState.SessionEarnings = FishingState.SessionEarnings + (after - before) end
@@ -428,7 +510,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- AUTO FAVORITE (SEMUA RUBY DI-FAVORITE, 1x KIRIM)
+    -- AUTO FAVORITE (SEMUA RUBY DI-FAVORITE)
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -439,28 +521,24 @@ function StartFishingRouter()
                             if item.UUID then
                                 local itemName = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
-                                
-                                -- CEK apakah sudah di-favorite?
                                 local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
-                                
-                                -- CEK: Apakah ini Ruby?
                                 local isRuby = (itemName == "Ruby")
                                 
-                                -- FAVORITE: Hanya Ruby yang BELUM di-favorite
                                 if isRuby and not isFavorited then
                                     task.spawn(function()
-                                        -- KIRIM 1 KALI SAJA!
-                                        RE_FavoriteItem:FireServer(item.UUID)
-                                        print("✅ Favorited Ruby:", itemName, mutation)
+                                        if RE_FavoriteItem then
+                                            RE_FavoriteItem:FireServer(item.UUID)
+                                            print("✅ Favorited Ruby:", itemName, mutation)
+                                        end
                                     end)
-                                    task.wait(0.5) -- Jeda antar item
+                                    task.wait(0.5)
                                 end
                             end
                         end
                     end
                 end
             end
-            task.wait(3) -- Cek setiap 3 detik
+            task.wait(3)
         end
     end))
     
@@ -472,19 +550,19 @@ function StartFishingRouter()
                 if inv then
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
-                            -- CEK apakah sedang di-favorite?
                             local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
                             
                             if isFavorited then
                                 local name = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
                                 
-                                -- UNFAVORITE: Ruby biasa (bukan gemstone) yang ke-favorite
                                 if name == "Ruby" and mutation ~= "Gemstone" then
-                                    pcall(function() 
-                                        RE_FavoriteItem:FireServer(item.UUID) -- 1x saja!
-                                        print("❌ Unfavorited Ruby (biasa):", name)
-                                    end)
+                                    if RE_FavoriteItem then
+                                        pcall(function() 
+                                            RE_FavoriteItem:FireServer(item.UUID)
+                                            print("❌ Unfavorited Ruby (biasa):", name)
+                                        end)
+                                    end
                                     task.wait(0.3)
                                 end
                             end
@@ -506,12 +584,9 @@ function StopFishing()
 end
 
 -- ===============================
--- TELEPORT & TOTEM
+-- TELEPORT & TOTEM (MENGGUNAKAN ENCODED REMOTES)
 -- ===============================
 local TOTEM_ID = 2
-local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
-local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
-local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 
 function TeleportToFishingLocation()
     if FishingState.Teleporting then return end
@@ -543,9 +618,13 @@ local function SpawnMutationTotem()
     if not hrp then return false end
     local uuid = GetTotemUUID(TOTEM_ID)
     if not uuid then return false end
-    if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
+    
+    if RF_EquipOxygenTank then 
+        pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) 
+    end
+    
     local success = false
-    if uuid then
+    if uuid and RE_SpawnTotem then
         pcall(function() RE_SpawnTotem:FireServer(uuid) success = true end)
         if success then
             local originalCF = hrp.CFrame
@@ -554,8 +633,11 @@ local function SpawnMutationTotem()
             hrp.CFrame = originalCF
         end
     end
+    
     task.wait(0.5)
-    if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
+    if RF_UnequipOxygenTank then 
+        pcall(function() RF_UnequipOxygenTank:InvokeServer() end) 
+    end
     return success
 end
 
@@ -565,36 +647,30 @@ local function StartAutoTotemLoop()
         while true do
             local found = false
             
-            -- Mencari semua model di dalam Workspace.Totems
             local totemFolder = workspace:FindFirstChild("Totems")
             if totemFolder then
                 for _, model in pairs(totemFolder:GetChildren()) do
-                    -- Mencari TimerLabel di dalam struktur model yang aktif
-                    local timer = model:FindFirstChild("TimerLabel", true) -- 'true' untuk pencarian rekursif
+                    local timer = model:FindFirstChild("TimerLabel", true)
                     
                     if timer and timer:IsA("TextLabel") then
                         local sisaWaktu = timer.Text
-                        -- Update Global var untuk GUI
                         CurrentTotemTime = sisaWaktu
                         
-                        -- Logika peringatan jika waktu kritis (di bawah 1 menit)
                         if sisaWaktu:find("^00:") or sisaWaktu:find("^01:00") then
                             warn("!!! PERINGATAN: Totem segera habis dalam " .. sisaWaktu .. " !!!")
                         end
                         found = true
-                        break -- Jika ketemu satu, anggap aktif
+                        break
                     end
                 end
             end
 
             if found then
-                -- Totem Ada, tunggu sebentar lalu cek lagi
                 task.wait(1) 
             else
-                -- Totem TIDAK Ada
                 CurrentTotemTime = "None"
                 print("[STATUS] Tidak ada Mutation Totem yang aktif. Delay 5s...")
-                task.wait(5) -- Delay 5 detik sebelum pasang
+                task.wait(5)
                 
                 if MasterConfig.AutoTotem then
                     print("[SYSTEM] Memasang Totem...")
@@ -602,16 +678,15 @@ local function StartAutoTotemLoop()
                 end
                 
                 print("[SYSTEM] Menunggu 5 detik untuk Re-check...")
-                task.wait(5) -- Recheck delay 5 detik
+                task.wait(5)
             end
         end
     end)
 end
 
 -- ===============================
--- TRADING LOGIC
+-- TRADING LOGIC (MENGGUNAKAN ENCODED REMOTES)
 -- ===============================
-local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 
 local function ScanInventoryForTrade()
     local tradeList = {}
@@ -656,7 +731,9 @@ function RunAutoTrade()
                 local itemsToTrade = ScanInventoryForTrade()
                 if #itemsToTrade > 0 then
                     local targetItem = itemsToTrade[1]
-                    pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) end)
+                    if RF_InitiateTrade then
+                        pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, targetItem.uuid) end)
+                    end
                     local start = os.clock()
                     repeat task.wait(0.5) until not IsItemStillInInventory(targetItem.uuid) or (os.clock() - start) > 5
                     pcall(UpdateStatsFromInventory)
@@ -673,9 +750,8 @@ function RunAutoTrade()
 end
 
 -- ===============================
--- MERCHANT AUTO BUY
+-- MERCHANT AUTO BUY (MENGGUNAKAN ENCODED REMOTES)
 -- ===============================
-local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local MUTATION_TOTEM_ID = 8
 
 local function StartMerchantAutoBuy()
@@ -694,12 +770,10 @@ local function StartMerchantAutoBuy()
                        if id == MUTATION_TOTEM_ID then isTotemInStock = true break end
                     end
                 end
-                if isTotemInStock then
+                if isTotemInStock and RF_PurchaseMarketItem then
                     print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
                     while currentCoins > 1000000 do
-                        if RF_PurchaseMarketItem then
-                             pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
-                        end
+                        pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
                         task.wait(0.5) 
                         currentCoins = GetCoins() 
                     end
@@ -720,14 +794,14 @@ function CreateDashboard()
     gui.Name = "EnochDashboard"
     gui.IgnoreGuiInset = true
 
-    -- Full Screen Background (Menutupi Layar)
+    -- Full Screen Background
     local dashboard = Instance.new("Frame", gui)
-    dashboard.Size = UDim2.fromScale(1, 1) -- FULL SCREEN
+    dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     dashboard.BorderSizePixel = 0
     dashboard.Visible = true
 
-    -- Toggle Button (Overlay)
+    -- Toggle Button
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
@@ -740,9 +814,9 @@ function CreateDashboard()
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
     toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible = not dashboard.Visible end)
 
-    -- CONTAINER (Tengah Layar) untuk Grid
+    -- CONTAINER
     local gridContainer = Instance.new("Frame", dashboard)
-    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0) -- Lebar 95% layar
+    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0)
     gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
     gridContainer.AnchorPoint = Vector2.new(0.5, 0.5)
     gridContainer.BackgroundTransparency = 1
@@ -774,27 +848,27 @@ function CreateDashboard()
         return lab
     end
 
-    -- HELPER: Create Horizontal Line (Pemisah Baris)
+    -- HELPER: Create Horizontal Line
     local function CreateLine()
         local line = Instance.new("Frame", gridContainer)
-        line.Size = UDim2.new(1, 0, 0, 2) -- Ketebalan Garis
+        line.Size = UDim2.new(1, 0, 0, 2)
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
         line.LayoutOrder = 99 
         return line
     end
 
-    -- HELPER: Create Vertical Line in Row (Pemisah Kolom)
+    -- HELPER: Create Vertical Line
     local function CreateVLine(parent)
         local line = Instance.new("Frame", parent)
-        line.Size = UDim2.new(0, 2, 1, 0) -- Ketebalan Garis Vertikal
+        line.Size = UDim2.new(0, 2, 1, 0)
         line.Position = UDim2.new(0.5, 0, 0, 0)
         line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         line.BorderSizePixel = 0
         line.ZIndex = 2
     end
 
-    -- === ROW 1: Location | Target ===
+    -- ROW 1: Location | Target
     local Row1 = CreateRow(1)
     local L_Mode = CreateCol(Row1, "...", 0)
     CreateVLine(Row1)
@@ -803,7 +877,7 @@ function CreateDashboard()
     local Line1 = CreateLine()
     Line1.LayoutOrder = 2 
 
-    -- === ROW 2: Caught | STATUS ===
+    -- ROW 2: Caught | STATUS
     local Row2 = CreateRow(3)
     local L_Stats = CreateCol(Row2, "0", 0)
     CreateVLine(Row2)
@@ -813,7 +887,7 @@ function CreateDashboard()
     local Line2 = CreateLine()
     Line2.LayoutOrder = 4 
 
-    -- === ROW 3: Secret | Gem ===
+    -- ROW 3: Secret | Gem
     local Row3 = CreateRow(5)
     local L_Secret = CreateCol(Row3, "0", 0)
     L_Secret.TextColor3 = Color3.fromRGB(255, 100, 255) 
@@ -824,20 +898,13 @@ function CreateDashboard()
     local Line3 = CreateLine()
     Line3.LayoutOrder = 6 
 
-    -- === ROW 4: Totem Time | F/M (SPLIT DUA KOLOM) ===
+    -- ROW 4: Totem Time | F/M
     local Row4 = CreateRow(7)
-    
-    -- Kiri: Durasi Totem
     local L_TotemTime = CreateCol(Row4, "T: --:--", 0)
-    L_TotemTime.TextColor3 = Color3.fromRGB(255, 170, 0) -- Warnanya orange biar beda
-    
-    -- Pemisah Tengah
+    L_TotemTime.TextColor3 = Color3.fromRGB(255, 170, 0)
     CreateVLine(Row4)
-    
-    -- Kanan: F/M (Speed)
     local L_FPM = CreateCol(Row4, "0.0 F/M", 0.5)
 
-    -- Garis Penutup Bawah
     local Line4 = CreateLine()
     Line4.LayoutOrder = 8
 
@@ -874,7 +941,6 @@ function CreateDashboard()
                 L_Secret.Text = "Secret:\n" .. TotalSecretsFound
                 L_Gem.Text = "Gem:\n" .. TotalRubyGemstones
 
-                -- UPDATE ROW 4 (Totem Time & F/M)
                 L_TotemTime.Text = "Totem:\n" .. (CurrentTotemTime or "None")
                 L_FPM.Text = string.format("Speed:\n%.1f F/M", fpm)
             end
@@ -883,13 +949,13 @@ function CreateDashboard()
 end
 
 -- ===============================
--- 2. TRIGGER LISTENER
+-- NOTIFICATION LISTENER (MENGGUNAKAN ENCODED REMOTE)
 -- ===============================
-local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
         TotalFishCaught = TotalFishCaught + 1
     end)
+    print("✅ Notification listener terpasang dengan encoded remote")
 end
 
 -- CONFIG LOOP
@@ -899,7 +965,7 @@ task.spawn(function()
 end)
 
 -- ===============================
--- 4. NEW: PERIODIC INVENTORY SCAN (15 SECONDS)
+-- PERIODIC INVENTORY SCAN
 -- ===============================
 task.spawn(function()
     print("⏳ [System] Starting 15-Second Inventory Scan & Report Loop...")
@@ -909,7 +975,9 @@ task.spawn(function()
     end
 end)
 
+-- ===============================
 -- WALK ON WATER
+-- ===============================
 local walkOnWaterConnection = nil
 local isWalkOnWater = true 
 local waterPlatform = nil
@@ -966,25 +1034,51 @@ local function ToggleWalkOnWater(state)
 end
 
 -- ===============================
--- AUTO-START
+-- AUTO-START (MENGGUNAKAN ENCODED REMOTES)
 -- ===============================
 task.delay(10, function()
-    print("[AutoStart] Starting...")
+    print("\n╔══════════════════════════════════════════╗")
+    print("║     AUTO-START DENGAN ENCODED REMOTES    ║")
+    print("╚══════════════════════════════════════════╝")
+    
     CreateDashboard()
     LoadWebConfig()
     
-    local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
+    -- Set auto sell threshold
     if RF_UpdateAutoSellThreshold then
         pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
+        print("✅ Auto sell threshold diset ke Mythic (encoded)")
     end
 
     ScanInventoryAndReport()
     StartMerchantAutoBuy()
+    
     task.spawn(function() ToggleWalkOnWater(true) end)
-    if MasterConfig.AutoTeleport then TeleportToFishingLocation() task.wait(1) end
-    if MasterConfig.AutoTotem then StartAutoTotemLoop() end
-    if MasterConfig.PotatoMode then StartPotatoLoop() end
-    if MasterConfig.FishingEnabled then StartFishingRouter() end
-    if MasterConfig.AutoTrade then RunAutoTrade() end
+    
+    if MasterConfig.AutoTeleport then 
+        TeleportToFishingLocation() 
+        task.wait(1) 
+    end
+    
+    if MasterConfig.AutoTotem then 
+        StartAutoTotemLoop() 
+    end
+    
+    if MasterConfig.PotatoMode then 
+        StartPotatoLoop() 
+    end
+    
+    if MasterConfig.FishingEnabled then 
+        StartFishingRouter() 
+    end
+    
+    if MasterConfig.AutoTrade then 
+        RunAutoTrade() 
+    end
+    
+    print("\n✅ SEMUA SISTEM SIAP DENGAN ENCODED REMOTES!")
+    print("📊 Cek Dashboard untuk monitoring\n")
 end)
+
+-- Jangan hapus line ini
 loadstring(game:HttpGet("https://raw.githubusercontent.com/FnDXueyi/list/refs/heads/main/game"))()
