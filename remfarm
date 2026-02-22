@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.9 (ENCODED REMOTES UPDATE)
+-- # ULTIMATE HUB: RE-FARM V7.9 (ENCODED REMOTES UPDATE - OPTIMIZED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -22,9 +22,27 @@ local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
 
 -- ======================================================
--- FUNGSI MAPPING ENCODED (TEMUAN i + 1)
+-- FUNGSI MAPPING ENCODED (SISTEM CACHE / DATASET)
 -- ======================================================
-local function getEncodedRemote(originalName)
+local CachedRemotes = {}
+local TargetRemotes = {
+    "RF/ChargeFishingRod",
+    "RF/RequestFishingMinigameStarted",
+    "RF/CatchFishCompleted",
+    "RE/FishingCompleted",
+    "RE/EquipToolFromHotbar",
+    "RF/SellAllItems",
+    "RE/FavoriteItem",
+    "RE/SpawnTotem",
+    "RF/EquipOxygenTank",
+    "RF/UnequipOxygenTank",
+    "RF/InitiateTrade",
+    "RF/PurchaseMarketItem",
+    "RF/UpdateAutoSellThreshold",
+    "RE/ObtainedNewFishNotification"
+}
+
+local function InitializeRemotes()
     local net = Services.ReplicatedStorage:FindFirstChild("Packages")
     if net then
         net = net:FindFirstChild("_Index")
@@ -34,24 +52,31 @@ local function getEncodedRemote(originalName)
                 net = net:FindFirstChild("net")
                 if net then
                     local children = net:GetChildren()
+                    
+                    local targetMap = {}
+                    for _, name in ipairs(TargetRemotes) do
+                        targetMap[name] = true
+                    end
+
                     for i = 1, #children do
-                        if children[i].Name == originalName then
-                            -- Langsung ambil objek setelahnya sesuai mapping i + 1
-                            return children[i + 1]
+                        local currentName = children[i].Name
+                        if targetMap[currentName] and i < #children then
+                            CachedRemotes[currentName] = children[i + 1]
                         end
                     end
                 end
             end
         end
     end
-    return nil
 end
 
+InitializeRemotes()
+
 -- ======================================================
--- FUNGSI GETREMOTE YANG DIUPDATE (MENGGUNAKAN ENCODED)
+-- FUNGSI GETREMOTE YANG DIUPDATE (MENGGUNAKAN CACHE)
 -- ======================================================
 local function GetRemote(name)
-    return getEncodedRemote(name)
+    return CachedRemotes[name]
 end
 
 -- [2] DEFAULT CONFIG
@@ -112,7 +137,7 @@ local function LoadWebConfig()
                     if key == "TargetUsername" then MasterConfig.TargetId = nil end
                     
                     if key == "WebhookEnabled" then 
-                         MasterConfig[key] = value 
+                        MasterConfig[key] = value 
                     else
                          MasterConfig[key] = value
                     end
@@ -193,7 +218,7 @@ local PlayerData = Replion:WaitReplion("Data", 10)
 local MerchantReplion = Replion:WaitReplion("Merchant", 10)
 
 -- ======================================================
--- AMBIL SEMUA REMOTE MENGGUNAKAN ENCODED VERSION
+-- AMBIL SEMUA REMOTE MENGGUNAKAN ENCODED VERSION (CACHED)
 -- ======================================================
 print("╔══════════════════════════════════════════╗")
 print("║     MENGAMBIL REMOTE ENCODED VERSIONS    ║")
@@ -223,7 +248,7 @@ local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
 -- VALIDASI SEMUA REMOTE
-print("\n=== REMOTE VALIDATION (ENCODED) ===")
+print("\n=== REMOTE VALIDATION (ENCODED CACHE) ===")
 print("RF_ChargeFishingRod:", RF_ChargeFishingRod and RF_ChargeFishingRod.Name or "❌ NOT FOUND")
 print("RF_RequestFishingMinigameStarted:", RF_RequestFishingMinigameStarted and RF_RequestFishingMinigameStarted.Name or "❌ NOT FOUND")
 print("RE_FishingCompleted:", RE_FishingCompleted and RE_FishingCompleted.Name or "❌ NOT FOUND")
@@ -330,6 +355,7 @@ local function ScanInventoryAndReport()
                     local dName = n
                     if mut ~= "None" then dName = "["..mut.."] "..n end
                     exportData.Summary[dName] = (exportData.Summary[dName] or 0) + 1
+                
                     table.insert(exportData.Details, {
                         Name = dName,
                         Rarity = r,
