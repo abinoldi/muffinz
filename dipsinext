@@ -620,7 +620,14 @@ local function ExecuteLeverLogic()
             local hasArt = false
             local id = ARTIFACT_IDS[artName]
             
-            local function check(t) for _,v in pairs(t or {}) do if v.Id==id then return true end end end
+            -- [PERBAIKAN 1]: Tambahkan tonumber() agar tipe data cocok
+            local function check(t) 
+                for _,v in pairs(t or {}) do 
+                    if tonumber(v.Id) == id then return true end 
+                end 
+                return false
+            end
+            
             if check(inv["Lever Items"]) or check(inv.Items) then hasArt = true end
             
             if hasArt then
@@ -632,22 +639,29 @@ local function ExecuteLeverLogic()
                 
                     if RE_UnequipItem then RE_UnequipItem:FireServer("all") end
                     task.wait(0.5)
+                    
                     if RF_PlaceLeverItem then RF_PlaceLeverItem:FireServer(artName) end
                     task.wait(2.0)
                     lp.Character.HumanoidRootPart.Anchored = false
                 end
             else
                 STATE.TargetInfo = "Farming: "..artName
-                Teleport(artName)
                 
+                -- [PERBAIKAN 2]: Hapus pemanggilan Teleport(artName) yang salah,
+                -- langsung gunakan sistem CFrame terintegrasi dengan pengamanan State.
                 if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                    local dist = (lp.Character.HumanoidRootPart.Position - d.Pos).Magnitude
+                    local root = lp.Character.HumanoidRootPart
+                    local dist = (root.Position - d.Pos).Magnitude
+                    
                     if dist > 5 then 
-                        lp.Character.HumanoidRootPart.CFrame = CFrame.new(d.Pos, d.Pos+d.Look) 
+                        STATE.Teleporting = true -- Kunci state agar bot tidak bingung
+                        root.CFrame = CFrame.new(d.Pos, d.Pos + d.Look) 
+                        task.wait(1.5)
+                        STATE.Teleporting = false
                     end
                 end
             end
-            break 
+            break -- Hentikan loop, fokus kerjakan 1 artifact ini dulu
         end
     end
 end
