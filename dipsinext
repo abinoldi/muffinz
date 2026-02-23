@@ -241,14 +241,14 @@ local Remotes = {
     Catch   = GetRemote("RF/CatchFishCompleted")
 }
 
-local Delay_RequestToCatch  = 0.02
+local Delay_RequestToCatch  = 0.1
 
 _G.FishBotActive = true
 
 local function GetRodDelay(rodID)
     local rodDelays = {
-        [5] = 1.2,    [169] = 0.65, [80] = 1.8,   [4] = 2,
-        [78] = 2,     [77] = 2,     [85] = 2,     [76] = 2,
+        [5] = 1.2,    [169] = 0.65, [80] = 1.8,   [4] = 1.8,
+        [78] = 1.8,     [77] = 1.8,     [85] = 1.8,     [76] = 1.8,
         [79] = 2,
     }
     return rodDelays[rodID] or 2
