@@ -1,53 +1,160 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- ======================================================
+-- ENOCHHUB | FULL AUTO: GHOSTFIN -> ENCHANT ROOM
+-- VERSION: v1.3.9 (Cleaned Lever Quest + Cached Remotes + HEAVY UI JITTER)
+-- ======================================================
+
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+
+repeat task.wait() until Players.LocalPlayer
+local lp = Players.LocalPlayer
+
+local char = lp.Character or lp.CharacterAdded:Wait()
+char:WaitForChild("HumanoidRootPart", 10)
+
+task.wait(3)
 
 -- ===============================
 -- 1. UTILITY: RANDOMIZER (HUMANIZER)
 -- ===============================
 local rng = Random.new()
 
--- Fungsi 1: Mendapatkan angka acak di antara dua nilai (min dan max)
 local function GetRandomBetween(min, max)
     return rng:NextNumber(min, max)
 end
 
--- Fungsi 2: Memberikan variasi waktu (jitter) pada nilai dasar (base)
 local function AddJitter(baseValue, variance)
     return baseValue + GetRandomBetween(-variance, variance)
 end
 
 -- ===============================
--- 2. DISABLE NATIVE AUTO FISH 
+-- 2. ANTI-AFK
 -- ===============================
-local success, AutoFishCtrl = pcall(function() 
-    return require(game:GetService("ReplicatedStorage").Controllers.AutoFishingController) 
+lp.Idled:Connect(function()
+    task.spawn(function()
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new(0,0))
+            print("[⚡ Anti-AFK] Simulasi klik dikirim.")
+        end)
+    end)
 end)
 
-if success and AutoFishCtrl then
-    if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
-    if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
-    AutoFishCtrl.Start = function() return end 
+-- ===============================
+-- SERVICES & VARS
+-- ===============================
+local STATE = {
+    HasAstralRod = false, CurrentRod = "Checking...", CurrentRodID = 0, TotalCoins = 0,
+    Mode = "Starting...", 
+    FishCount = 0, FishPerMinute = 0.0, StartTime = os.time(),
+    Status = "Starting...", Teleporting = false,
+    CurrentArea = "None", TargetInfo = "None",
+    CurrentBait = "None",
+    NextRodInfo = nil 
+}
+
+-- [Fungsi ActivateGreenMode dan DisableAudio TETAP SAMA seperti aslinya, saya skip barisnya di teks ini agar rapi, tapi PASTIKAN KAMU TETAP MEMASUKKANNYA dari script aslimu]
+local function ActivateGreenMode()
+    local GreenColor = Color3.fromRGB(0, 255, 0) 
+    local Material = Enum.Material.SmoothPlastic
+    local QuestFolder = workspace:WaitForChild("JUNGLE INTERACTIONS", 5)
+
+    settings().Rendering.QualityLevel = 1
+    game:GetService("Lighting").GlobalShadows = false
+    game:GetService("Lighting").FogEnd = 9e9
+    game:GetService("Lighting").Brightness = 0
+    for _, v in pairs(game:GetService("Lighting"):GetChildren()) do
+        if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") then v:Destroy() end
+    end
+    
+    local function Greenify(v)
+        if QuestFolder and v:IsDescendantOf(QuestFolder) then return end
+        if v:IsA("BasePart") and not v:IsA("Terrain") then
+            v.Material = Material
+            v.Color = GreenColor
+            v.Reflectance = 0
+            v.CastShadow = false
+            if v:IsA("MeshPart") then v.TextureID = "" end
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v:Destroy()
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+            v.Enabled = false 
+        end
+    end
+
+    task.spawn(function()
+        for _, v in pairs(workspace:GetDescendants()) do Greenify(v) end
+        workspace.DescendantAdded:Connect(Greenify)
+    end)
+
+    local function GreenifyCharacter(character)
+        if not character then return end
+        task.wait(0.5) 
+        for _, v in pairs(character:GetDescendants()) do
+            if v:IsA("Clothing") or v:IsA("ShirtGraphic") or v:IsA("Accessory") or v:IsA("CharacterMesh") then
+                v:Destroy()
+            elseif v:IsA("BasePart") then
+                v.Material = Material; v.Color = GreenColor; v.Transparency = 0 
+            end
+        end
+        character.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") then
+                task.wait(0.1)
+                for _, part in pairs(child:GetDescendants()) do Greenify(part) end
+            end
+        end)
+    end
+    GreenifyCharacter(lp.Character)
+    lp.CharacterAdded:Connect(GreenifyCharacter)
+
+    local Terrain = workspace:FindFirstChildOfClass("Terrain")
+    if Terrain then
+        Terrain.WaterWaveSize = 0; Terrain.WaterWaveSpeed = 0; Terrain.WaterTransparency = 1 
+    end
 end
 
-local s2, FishingController = pcall(function() 
-    return require(game:GetService("ReplicatedStorage").Controllers.FishingController) 
-end)
-
-if s2 and FishingController then
-    FishingController.RequestChargeFishingRod = function() end
-    FishingController.SendFishingRequestToServer = function() return false end
+local function DisableAudio()
+    local SoundService = game:GetService("SoundService")
+    RunService.RenderStepped:Connect(function() SoundService.Volume = 0 end)
+    local function MuteSound(instance)
+        if instance:IsA("Sound") then
+            instance.Volume = 0; instance.Looped = false
+            if instance.Playing then instance:Stop() end
+        end
+    end
+    for _, v in pairs(game:GetDescendants()) do pcall(MuteSound, v) end
+    game.DescendantAdded:Connect(function(v) pcall(MuteSound, v) end)
 end
-print("[-] Native Controller Disabled (Silent Mode)")
+
+local function DisableNativeAutoFish()
+    local success, AutoFishCtrl = pcall(function() return require(game:GetService("ReplicatedStorage").Controllers.AutoFishingController) end)
+    if success and AutoFishCtrl then
+        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+        AutoFishCtrl.Start = function() return end 
+    end
+    local s2, FishingController = pcall(function() return require(game:GetService("ReplicatedStorage").Controllers.FishingController) end)
+    if s2 and FishingController then
+        FishingController.RequestChargeFishingRod = function() end
+        FishingController.SendFishingRequestToServer = function() return false end
+    end
+end
 
 -- ======================================================
--- 3. SYSTEM REMOTE CACHE
+-- SISTEM REMOTE CACHE TUNGGAL
 -- ======================================================
 local CachedRemotes = {}
 local TargetRemotes = {
-    "RE/EquipToolFromHotbar",
-    "RF/ChargeFishingRod",
-    "RF/RequestFishingMinigameStarted",
-    "RF/CatchFishCompleted"
+    "RE/EquipItem", "RE/EquipToolFromHotbar", "RE/UnequipItem",
+    "RF/UpdateAutoFishingState", "RF/SellAllItems", "RF/PurchaseBait",
+    "RF/PurchaseFishingRod", "RE/ObtainedNewFishNotification",
+    "RF/CatchFishCompleted", "RF/CancelFishingInputs",
+    "RF/UpdateAutoSellThreshold", "RF/ChargeFishingRod",
+    "RF/RequestFishingMinigameStarted"
 }
 
 local function InitializeRemotes()
@@ -63,58 +170,402 @@ local function InitializeRemotes()
     local children = netFolder:GetChildren()
     local targetMap = {}
     for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
-
     for i = 1, #children do
         local currentName = children[i].Name
-        if targetMap[currentName] and i < #children then
-            CachedRemotes[currentName] = children[i + 1]
-        end
+        if targetMap[currentName] and i < #children then CachedRemotes[currentName] = children[i + 1] end
     end
 end
 
 InitializeRemotes()
+local function GetRemote(name) return CachedRemotes[name] end
 
-local Remotes = {
-    Equip   = CachedRemotes["RE/EquipToolFromHotbar"],
-    Charge  = CachedRemotes["RF/ChargeFishingRod"],
-    Request = CachedRemotes["RF/RequestFishingMinigameStarted"],
-    Catch   = CachedRemotes["RF/CatchFishCompleted"]
-}
+local RE_EquipItem = GetRemote("RE/EquipItem")
+local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RE_UnequipItem = GetRemote("RE/UnequipItem")
+local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
+local RF_SellAllItems = GetRemote("RF/SellAllItems")
+local RF_PurchaseBait = GetRemote("RF/PurchaseBait")
+local RF_PurchaseFishingRod = GetRemote("RF/PurchaseFishingRod")
+local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted")
+local RF_CancelFishingInputs = GetRemote("RF/CancelFishingInputs")
 
--- ==============================================================================
--- 4. EQUIP ROD DARI HOTBAR
--- ==============================================================================
+local ReplionClient = require(ReplicatedStorage.Packages.Replion).Client
+local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
+
+-- PERBAIKAN: Jeda Equip Awal Diperlambat
 for i = 1, 3 do
-    if Remotes.Equip then 
-        Remotes.Equip:FireServer(1) 
-    end
-    -- Panggil fungsi untuk jeda equip yang natural
-    task.wait(GetRandomBetween(0.1, 0.3)) 
+    if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end
+    task.wait(GetRandomBetween(0.8, 1.5)) -- Manusia butuh waktu melihat hotbar
 end
-print("[+] Rod Equipped")
+
+local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
+if RF_UpdateAutoSellThreshold then
+    pcall(function() 
+        task.wait(GetRandomBetween(1.0, 2.0)) -- Jeda interaksi UI
+        RF_UpdateAutoSellThreshold:InvokeServer(6) 
+    end)
+end
 
 -- ==============================================================================
--- 5. FISHING BOT: AUTO START - HUMANIZED MODE
+-- FISHING BOT: AUTO START - FAST HUMANIZED MODE
 -- ==============================================================================
+local Remotes = { Charge = GetRemote("RF/ChargeFishingRod"), Request = GetRemote("RF/RequestFishingMinigameStarted"), Catch = GetRemote("RF/CatchFishCompleted") }
 _G.FishBotActive = true
 
--- Edit ID ini sesuai rod yang dipakai
-local CURRENT_EQUIPPED_ROD_ID = 169 
-
 local function GetRodDelay(rodID)
-    local rodDelays = {
-        [5] = 1.5,    [169] = 0.65, [80] = 2,   [4] = 2,
-        [78] = 2,     [77] = 2,     [85] = 2,   [76] = 2,
-        [79] = 2,
-    }
-    local baseDelay = rodDelays[rodID] or 2
-    
-    -- Panggil fungsi Jitter (tambah/kurang maksimal 0.15 detik dari baseDelay)
-    return AddJitter(baseDelay, 0.15)
+    local rodDelays = { [5]=1.5, [169]=0.65, [80]=2, [4]=2, [78]=2, [77]=2, [85]=2, [76]=2, [79]=2 }
+    return AddJitter(rodDelays[rodID] or 2, 0.15) 
 end
 
 local function Fire(remote)
     if not remote then return end
     task.spawn(function()
         pcall(function()
-            if r
+            if remote:IsA("RemoteFunction") then remote:InvokeServer(1) else remote:FireServer(1) end
+        end)
+    end)
+end
+
+task.spawn(function()
+    while _G.FishBotActive do
+        local currentRodID = STATE.CurrentRodID or 0
+        local Delay_ChargeToRequest = GetRodDelay(currentRodID)
+        
+        if Remotes.Charge then Fire(Remotes.Charge) end
+        
+        local t1 = os.clock()
+        while (os.clock() - t1) < Delay_ChargeToRequest and _G.FishBotActive do RunService.Heartbeat:Wait() end
+        if not _G.FishBotActive then break end
+
+        if Remotes.Request then Fire(Remotes.Request) end
+
+        -- Refleks mancing tetap dipertahankan cepat (0.5 - 0.7)
+        local humanReactionTime = GetRandomBetween(0.5, 0.7)
+        local t2 = os.clock()
+        while (os.clock() - t2) < humanReactionTime and _G.FishBotActive do RunService.Heartbeat:Wait() end
+        if not _G.FishBotActive then break end
+
+        if Remotes.Catch then Fire(Remotes.Catch) end
+        task.wait(GetRandomBetween(0.1, 0.13))
+    end
+end)
+
+-- ===============================
+-- CONFIGURATION DATA 
+-- ===============================
+local FishingAreas = {
+    ["Enchant Room"]={Pos=Vector3.new(3255,-1301,1371),Look=Vector3.new(0,0,-1)},
+    ["Treasure Room"]={Pos=Vector3.new(-3598,-281,-1645),Look=Vector3.new(-0.06,0,-1)},
+    ["Sisyphus Statue"]={Pos=Vector3.new(-3743,-135,-1007),Look=Vector3.new(0.3,0,0.95)},
+    ["Sacred Temple"]={Pos=Vector3.new(1461,-22,-670),Look=Vector3.new(-0.99,0,0.14)},
+    ["Volcano"] = {Pos=Vector3.new(-605.121, 19.516, 160.010),Look=Vector3.new(0.854, 0.000, 0.520)},
+    ["Esoteric Island"]={Pos=Vector3.new(2164,3,1242),Look=Vector3.new(0,0,-1)},
+    ["Ancient Jungle"]={Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, 0, 0.863)}
+}
+
+local ShopRods = {
+    {Name="Luck Rod", ID=79, Price=325}, {Name="Carbon Rod", ID=76, Price=750}, 
+    {Name="Grass Rod", ID=85, Price=1500}, {Name="Demascus Rod", ID=77, Price=3000},
+    {Name="Ice Rod", ID=78, Price=5000}, {Name="Lucky Rod", ID=4, Price=15000}, 
+    {Name="Midnight Rod", ID=80, Price=50000}, {Name="Astral Rod", ID=5, Price=1000000},
+}
+local ShopBaits = {
+    {ID=3, Price=3000, Name="Midnight Bait"}, {ID=17, Price=83500, Name="Nature Bait"}, 
+    {ID=6, Price=290000, Name="Chroma Bait"}, {ID=4, Price=425000, Name="Royal Bait"}, 
+    {ID=8, Price=630000, Name="Dark Matter Bait"}, {ID=15, Price=1148484, Name="Corrupt Bait"}, 
+    {ID=16, Price=3700000, Name="Aether Bait"}, {ID=20, Price=4000000, Name="Floral Bait"},
+    {ID=18, Price=8200000, Name="Singularity Bait"} 
+}
+
+-- HELPERS
+local function FormatNumber(n) if n>=1e6 then return string.format("%.2fM",n/1e6) elseif n>=1e3 then return string.format("%.1fK",n/1e3) else return tostring(n) end end
+local function CalcStats() local mins = (os.time()-STATE.StartTime)/60; STATE.FishPerMinute = mins>0 and STATE.FishCount/mins or 0 end
+local function FormatTime(s) return string.format("%02dh %02dm %02ds", math.floor(s/3600), math.floor((s%3600)/60), s%60) end
+
+local function GetOwnedRods(inv)
+    local owned = {}
+    for _, r in ipairs(inv["Fishing Rods"] or {}) do table.insert(owned, tonumber(r.Id)) end
+    return owned
+end
+
+local function Teleport(area)
+    if STATE.Teleporting or not FishingAreas[area] then return end
+    STATE.Teleporting = true
+    STATE.CurrentArea = "TP -> " .. area
+    pcall(function()
+        lp.Character.HumanoidRootPart.CFrame = CFrame.new(FishingAreas[area].Pos, FishingAreas[area].Pos+FishingAreas[area].Look)
+        task.wait(GetRandomBetween(2.0, 3.5)) -- Manusia butuh waktu loading map setelah teleport
+        STATE.CurrentArea = area
+    end)
+    STATE.Teleporting = false
+end
+
+-- ===============================
+-- PERBAIKAN JITTER: BAIT FUNCTIONS
+-- ===============================
+local function AutoBuyBestBait()
+    if not STATE.HasAstralRod then return end 
+    if not PlayerDataReplion then return end
+    local data = PlayerDataReplion:Get()
+    local inv = data.Inventory or {}
+    local owned = {}
+    for _, b in pairs(inv["Baits"] or inv["Bait"] or {}) do owned[tonumber(b.Id)] = true end
+    
+    for i = #ShopBaits, 1, -1 do
+        local bait = ShopBaits[i]
+        if data.Coins >= bait.Price and not owned[bait.ID] then
+            if RF_PurchaseBait then 
+                -- Jeda sangat lama (manusia melihat UI toko)
+                task.wait(GetRandomBetween(1.5, 3.0)) 
+                RF_PurchaseBait:InvokeServer(bait.ID) 
+            end
+            task.wait(GetRandomBetween(1.0, 2.0))
+            break
+        end
+    end
+end
+
+local function EquipBestBait()
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local bestBaitUUID, bestBaitPrice = nil, -1
+    local baitList = inv["Baits"] or inv["Bait"] or {}
+    
+    for _, baitData in pairs(baitList) do
+        local baitId = tonumber(baitData.Id)
+        for _, shopBait in ipairs(ShopBaits) do
+            if shopBait.ID == baitId and shopBait.Price > bestBaitPrice then
+                bestBaitUUID = baitData.UUID
+                bestBaitPrice = shopBait.Price
+                STATE.CurrentBait = "Bait: " .. (shopBait.Name or baitId)
+            end
+        end
+    end
+    
+    if bestBaitUUID then 
+        pcall(function() 
+            if RE_EquipItem then 
+                task.wait(GetRandomBetween(0.8, 1.5)) -- Animasi UI Inventory
+                RE_EquipItem:FireServer(bestBaitUUID, "Baits") 
+            end 
+        end)
+    else 
+        STATE.CurrentBait = "No Bait" 
+    end
+end
+
+-- ===============================
+-- CORE LOGIC 
+-- ===============================
+local function CheckDeepSeaQuest(data)
+    local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
+    if not quest then return "Done" end
+    local sObj = quest.CurrentObj or 1
+    local progMap = {}
+    for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
+    local actObj = sObj
+    if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
+    if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
+    if actObj==3 and (progMap[3] or 0)>=1 then actObj=4 end
+    if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end 
+    if actObj==1 then return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
+    elseif actObj==2 then return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
+    elseif actObj==3 then return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
+    elseif actObj==4 then return "DeepSea", (table.find(GetOwnedRods(data.Inventory),5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins"
+    end
+    return "Done"
+end
+
+local function UpdateGameMode()
+    if not PlayerDataReplion then return end
+    local data = PlayerDataReplion:Get()
+    if not data then return end
+    STATE.TotalCoins = data.Coins or 0
+    local inv = data.Inventory or {}
+    local ownedRods = GetOwnedRods(inv)
+    STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
+    local hasGhostfin = table.find(ownedRods, 169) ~= nil
+
+    if hasGhostfin then
+        STATE.Mode = "Farm Enchant"
+        STATE.TargetInfo = "Farming (Ghostfin)"
+        STATE.NextLocation = "Enchant Room"
+        return
+    end
+
+    if not STATE.HasAstralRod then
+        local nextRodToBuy = nil
+        for _, rod in ipairs(ShopRods) do
+            if not table.find(ownedRods, rod.ID) then nextRodToBuy = rod; break end
+        end
+        if nextRodToBuy then
+            STATE.Mode = "FarmNextRod"
+            local progressText
+            if STATE.TotalCoins >= nextRodToBuy.Price then 
+                progressText = "AUTO BUYING " .. nextRodToBuy.Name 
+                if RF_PurchaseFishingRod then 
+                    task.wait(GetRandomBetween(1.5, 3.0)) -- Jeda beli rod
+                    RF_PurchaseFishingRod:InvokeServer(nextRodToBuy.ID) 
+                end
+                task.wait(GetRandomBetween(1.5, 2.5)) 
+            else 
+                progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
+            end
+            local bestArea = "Volcano"
+            local currentBestRodValue = 0
+            for _, ownedId in ipairs(ownedRods) do
+                for _, shopRod in ipairs(ShopRods) do
+                    if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
+                        currentBestRodValue = shopRod.Price
+                        if shopRod.Price >= 100000 then bestArea = "Treasure Room" else bestArea = "Volcano" end
+                    end
+                end
+            end
+            STATE.TargetInfo = progressText; STATE.NextLocation = bestArea; STATE.NextRodInfo = nextRodToBuy
+            return
+        end
+    end
+
+    local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
+    if dsMode == "DeepSea" then
+        STATE.Mode = "DeepSea"; STATE.TargetInfo = dsProg; STATE.NextLocation = dsLoc
+        return
+    end
+    STATE.Mode = "Finished"; STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
+end
+
+local function EquipRod(nameID)
+    if not PlayerDataReplion then return end
+    local inv = PlayerDataReplion:GetExpect("Inventory")
+    local rods = inv["Fishing Rods"] or {}
+    local targetRod = nil
+    
+    for _, r in pairs(rods) do
+        if nameID == "Best" then
+            local bestPrice = -1
+            for _, s in ipairs(ShopRods) do
+                if tonumber(r.Id) == s.ID and s.Price > bestPrice then targetRod = r; bestPrice = s.Price; STATE.CurrentRod = s.Name; STATE.CurrentRodID = s.ID end
+            end
+        else
+            if tonumber(r.Id) == nameID then targetRod = r; STATE.CurrentRodID = tonumber(r.Id); break end
+        end
+    end
+
+    if nameID == "Best" and not targetRod then
+        for _, r in pairs(rods) do targetRod = r; STATE.CurrentRod = "Basic/Unknown"; STATE.CurrentRodID = tonumber(r.Id) or 0; break end
+    end
+
+    if targetRod then
+        pcall(function()
+            if RE_EquipItem then 
+                task.wait(GetRandomBetween(0.8, 1.5)) -- Manusia mencari item di tas
+                RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods") 
+            end
+            task.wait(GetRandomBetween(0.5, 1.0))
+            if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end
+         end)
+    end
+end
+
+-- ===============================
+-- PERBAIKAN JITTER: AUTO SELL THREAD
+-- ===============================
+local AutoActive = true
+task.spawn(function()
+    -- Manusia jarang menjual barang setiap 1 menit. Diubah menjadi tiap 2 hingga 3.5 menit
+    while task.wait(GetRandomBetween(120, 210)) do 
+        if AutoActive then
+            pcall(function()
+                if RF_SellAllItems then 
+                    -- Berhenti sejenak sebelum jual (seakan buka menu NPC)
+                    task.wait(GetRandomBetween(2.0, 4.0))
+                    RF_SellAllItems:InvokeServer() 
+                end
+                print("💰 Inventory Sold Successfully")
+            end)
+        end
+    end
+end)
+
+-- ===============================
+-- MAIN LOOP
+-- ===============================
+task.spawn(function()
+    while task.wait(GetRandomBetween(0.8, 1.5)) do
+        if AutoActive then
+            local success, err = pcall(function()
+                UpdateGameMode()   
+                AutoBuyBestBait()     
+                EquipBestBait()        
+                
+                if STATE.Mode == "Farm Enchant" then
+                    EquipRod(169)
+                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
+                elseif STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
+                    EquipRod("Best")
+                    if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
+                end
+            end)
+            if not success then warn("Loop Error: " .. tostring(err)) end
+        end
+    end
+end)
+
+-- Notify Stats
+if RE_ObtainedNewFishNotification then
+    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() 
+        STATE.FishCount=STATE.FishCount+1; CalcStats(); 
+    end)
+end
+
+-- ===============================
+-- GUI
+-- ===============================
+local function CreateDashboard()
+    if game.CoreGui:FindFirstChild("EnochDashboard") then game.CoreGui.EnochDashboard:Destroy() end
+    local gui = Instance.new("ScreenGui", game.CoreGui); gui.Name = "EnochDashboard"; gui.IgnoreGuiInset = true
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0); toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0); toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242); toggleBtn.Text = "E - v1.3.9 (Heavy UI Jitter)"; toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextScaled = true; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    
+    local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 1); dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0); dashboard.Visible = true
+    local layout = Instance.new("UIListLayout", dashboard); layout.HorizontalAlignment = Enum.HorizontalAlignment.Center; layout.VerticalAlignment = Enum.VerticalAlignment.Center; layout.Padding = UDim.new(0.02, 0)
+    
+    local function Text(txt, h, col) local l = Instance.new("TextLabel", dashboard); l.Text=txt; l.TextColor3=col; l.Size=UDim2.new(1,0,h,0); l.BackgroundTransparency=1; l.Font=Enum.Font.GothamBold; l.TextScaled=true; return l end
+    local L_Coins = Text("$0", 0.12, Color3.fromRGB(255, 215, 0))
+    local L_Mode = Text("MODE: CHECKING", 0.08, Color3.fromRGB(0, 255, 255))
+    local L_Stats = Text("0 | 0.0 F/M", 0.06, Color3.fromRGB(255, 255, 255))
+    local L_Time  = Text("00h 00m 00s", 0.05, Color3.fromRGB(180, 180, 180))
+    local L_Info = Text("...", 0.05, Color3.fromRGB(200, 200, 200))
+    local L_Status = Text("Starting...", 0.05, Color3.fromRGB(255, 100, 100))
+    local L_Bait = Text("Bait: None", 0.04, Color3.fromRGB(255, 100, 255)) 
+    
+    toggleBtn.MouseButton1Click:Connect(function() dashboard.Visible=not dashboard.Visible end)
+    task.spawn(function()
+        while task.wait(0.5) do
+            if dashboard.Visible then
+                L_Coins.Text = "$" .. FormatNumber(STATE.TotalCoins)
+                L_Mode.Text = "MODE: " .. STATE.Mode
+                CalcStats()
+                L_Stats.Text = string.format("%d Fish | %.1f F/M", STATE.FishCount, STATE.FishPerMinute)
+                L_Time.Text = FormatTime(os.time() - STATE.StartTime)
+                L_Info.Text = STATE.TargetInfo
+                L_Status.Text = STATE.Status
+                L_Bait.Text = STATE.CurrentBait or "No Bait"
+            end
+        end
+    end)
+end
+
+task.spawn(ActivateGreenMode)
+task.spawn(DisableAudio)
+task.spawn(DisableNativeAutoFish)
+task.spawn(CreateDashboard)
+task.wait(2)
+if RF_UpdateAutoFishingState then 
+    task.wait(GetRandomBetween(1.0, 2.0))
+    RF_UpdateAutoFishingState:InvokeServer(true) 
+end
+print("🚀 EnochHub (v1.3.9) HEAVY UI JITTER STARTED!")
