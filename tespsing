@@ -1,0 +1,120 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+-- ===============================
+-- 1. UTILITY: RANDOMIZER (HUMANIZER)
+-- ===============================
+local rng = Random.new()
+
+-- Fungsi 1: Mendapatkan angka acak di antara dua nilai (min dan max)
+local function GetRandomBetween(min, max)
+    return rng:NextNumber(min, max)
+end
+
+-- Fungsi 2: Memberikan variasi waktu (jitter) pada nilai dasar (base)
+local function AddJitter(baseValue, variance)
+    return baseValue + GetRandomBetween(-variance, variance)
+end
+
+-- ===============================
+-- 2. DISABLE NATIVE AUTO FISH 
+-- ===============================
+local success, AutoFishCtrl = pcall(function() 
+    return require(game:GetService("ReplicatedStorage").Controllers.AutoFishingController) 
+end)
+
+if success and AutoFishCtrl then
+    if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+    if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+    AutoFishCtrl.Start = function() return end 
+end
+
+local s2, FishingController = pcall(function() 
+    return require(game:GetService("ReplicatedStorage").Controllers.FishingController) 
+end)
+
+if s2 and FishingController then
+    FishingController.RequestChargeFishingRod = function() end
+    FishingController.SendFishingRequestToServer = function() return false end
+end
+print("[-] Native Controller Disabled (Silent Mode)")
+
+-- ======================================================
+-- 3. SYSTEM REMOTE CACHE
+-- ======================================================
+local CachedRemotes = {}
+local TargetRemotes = {
+    "RE/EquipToolFromHotbar",
+    "RF/ChargeFishingRod",
+    "RF/RequestFishingMinigameStarted",
+    "RF/CatchFishCompleted"
+}
+
+local function InitializeRemotes()
+    local packages = ReplicatedStorage:WaitForChild("Packages", 10)
+    if not packages then return end
+    local index = packages:WaitForChild("_Index", 10)
+    if not index then return end
+    local sleit = index:WaitForChild("sleitnick_net@0.2.0", 10)
+    if not sleit then return end
+    local netFolder = sleit:WaitForChild("net", 10)
+    if not netFolder then return end
+
+    local children = netFolder:GetChildren()
+    local targetMap = {}
+    for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
+
+    for i = 1, #children do
+        local currentName = children[i].Name
+        if targetMap[currentName] and i < #children then
+            CachedRemotes[currentName] = children[i + 1]
+        end
+    end
+end
+
+InitializeRemotes()
+
+local Remotes = {
+    Equip   = CachedRemotes["RE/EquipToolFromHotbar"],
+    Charge  = CachedRemotes["RF/ChargeFishingRod"],
+    Request = CachedRemotes["RF/RequestFishingMinigameStarted"],
+    Catch   = CachedRemotes["RF/CatchFishCompleted"]
+}
+
+-- ==============================================================================
+-- 4. EQUIP ROD DARI HOTBAR
+-- ==============================================================================
+for i = 1, 3 do
+    if Remotes.Equip then 
+        Remotes.Equip:FireServer(1) 
+    end
+    -- Panggil fungsi untuk jeda equip yang natural
+    task.wait(GetRandomBetween(0.1, 0.3)) 
+end
+print("[+] Rod Equipped")
+
+-- ==============================================================================
+-- 5. FISHING BOT: AUTO START - HUMANIZED MODE
+-- ==============================================================================
+_G.FishBotActive = true
+
+-- Edit ID ini sesuai rod yang dipakai
+local CURRENT_EQUIPPED_ROD_ID = 169 
+
+local function GetRodDelay(rodID)
+    local rodDelays = {
+        [5] = 1.5,    [169] = 0.65, [80] = 2,   [4] = 2,
+        [78] = 2,     [77] = 2,     [85] = 2,   [76] = 2,
+        [79] = 2,
+    }
+    local baseDelay = rodDelays[rodID] or 2
+    
+    -- Panggil fungsi Jitter (tambah/kurang maksimal 0.15 detik dari baseDelay)
+    return AddJitter(baseDelay, 0.15)
+end
+
+local function Fire(remote)
+    if not remote then return end
+    task.spawn(function()
+        pcall(function()
+            if r
