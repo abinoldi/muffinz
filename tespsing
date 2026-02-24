@@ -1,6 +1,6 @@
 -- ======================================================
 -- STANDALONE AUTO FISHING | BYPASS PAYLOAD
--- VERSION: v1.1 (Custom Args + Stable Jitter)
+-- VERSION: v1.2 (Ping Simulator + Safe Jitter Vector)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -141,18 +141,20 @@ local function GetRodDelay(rodID)
     return AddJitter(rodDelays[rodID] or 2, 0.05) 
 end
 
-print("⚡ Payload Bypass Active (Custom Args + Jitter)")
+print("⚡ Payload Bypass v1.2 Active (Ping Sim + Safe Vector)")
 
 task.spawn(function()
     while _G.FishBotActive do
         local Delay_ChargeToRequest = GetRodDelay(CURRENT_ROD_ID)
         
-        -- 1. MENGIRIM TIMESTAMP KE SERVER (MENGGUNAKAN WAKTU SERVER ROBLOX REAL-TIME)
+        -- 1. MENGIRIM TIMESTAMP DENGAN SIMULASI PING (LAG JARINGAN)
         if Remotes.Charge then 
             task.spawn(function()
                 pcall(function()
-                    -- workspace:GetServerTimeNow() adalah cara paling akurat untuk sinkronisasi timestamp di Roblox
-                    Remotes.Charge:InvokeServer(workspace:GetServerTimeNow())
+                    -- Mensimulasikan delay internet (ping) sebesar 20ms hingga 80ms ke masa lalu
+                    local simulatedPing = GetRandomBetween(0.02, 0.08)
+                    local safeTimestamp = workspace:GetServerTimeNow() - simulatedPing
+                    Remotes.Charge:InvokeServer(safeTimestamp)
                 end)
             end)
         end
@@ -161,14 +163,16 @@ task.spawn(function()
         while (os.clock() - t1) < Delay_ChargeToRequest and _G.FishBotActive do RunService.Heartbeat:Wait() end
         if not _G.FishBotActive then break end
 
-        -- 2. MENGIRIM KOORDINAT/VECTOR ACAK UNTUK MEMULAI MINIGAME
+        -- 2. MENGIRIM KOORDINAT DENGAN SAFE CLAMPING (Mencegah Vector Mismatch)
         if Remotes.Request then 
             task.spawn(function()
                 pcall(function()
-                    -- Mengacak Argumen 1 (sekitar -139.63...) dengan variasi +/- 2.0
-                    local arg1 = AddJitter(-139.630452165, 2.0)
-                    -- Mengacak Argumen 2 (sekitar 0.99...) dengan variasi +/- 0.05
-                    local arg2 = AddJitter(0.99647927980797, 0.05)
+                    -- Arah hadap X/Z bisa diacak agak lebar (+/- 1.5 derajat)
+                    local arg1 = AddJitter(-139.630452165, 1.5)
+                    
+                    -- LookVector (Y-Axis) diacak sangat kecil (+/- 0.002) dan DIBATASI maksimal 1.0 agar tidak terdeteksi bot
+                    local rawArg2 = AddJitter(0.99647927980797, 0.002)
+                    local arg2 = math.clamp(rawArg2, -1, 1) 
                     
                     Remotes.Request:InvokeServer(arg1, arg2)
                 end)
@@ -181,8 +185,6 @@ task.spawn(function()
         if not _G.FishBotActive then break end
 
         -- 3. CATCH FISH
-        -- Catatan: Jika CatchFishCompleted juga membutuhkan argumen khusus di Remote Spy-mu, 
-        -- beritahu saya. Untuk sementara, ini dibiarkan kosong/default.
         if Remotes.Catch then 
             task.spawn(function()
                 pcall(function()
@@ -233,4 +235,4 @@ if RF_UpdateAutoFishingState then
     task.wait(GetRandomBetween(0.1, 0.3))
     RF_UpdateAutoFishingState:InvokeServer(true) 
 end
-print("🚀 STANDALONE FISHING STARTED!")
+print("🚀 STANDALONE FISHING v1.2 STARTED!")
