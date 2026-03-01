@@ -60,7 +60,7 @@ _G.FishBotActive = true
 -- ==========================================================
 local function GetRodDelay(rodID)
     local rodDelays = {
-        [5] = 0.65,    -- Astral Rod
+        [5] = 0.75,    -- Astral Rod
         [169] = 0.65, -- Ghostfin Rod
         [80] = 1.8,   -- Midnight Rod
         [4] = 2,      -- Lucky Rod
@@ -116,7 +116,8 @@ local function ApplyExtremePotato()
     end)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then 
-            v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
+            v.Transparency = 1; v.Reflectance = 0;
+            v.CastShadow = false
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then 
             v:Destroy()
         end
@@ -124,7 +125,8 @@ local function ApplyExtremePotato()
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
             if v:IsA("BasePart") then 
-                v.Transparency = 1; v.Reflectance = 0
+                v.Transparency = 1;
+                v.Reflectance = 0
             elseif v:IsA("Decal") or v:IsA("Texture") then 
                 v:Destroy() 
             end
@@ -153,6 +155,7 @@ local function DisableNativeAutoFish()
         if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
         AutoFishCtrl.Start = function() return end 
     end
+ 
     local s2, FishingController = pcall(function() 
         return require(Services.ReplicatedStorage.Controllers.FishingController) 
     end)
@@ -271,17 +274,27 @@ task.spawn(function()
                 if RE_EquipToolFromHotbar then 
                     pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
                 end
-                task.wait(0.3 + math.random())
+                task.wait(0.5 + math.random())
             end
-            
+        
             -- Ambil delay dinamis berdasarkan Rod ID saat ini
             local dynamicDelay = GetRodDelay(STATE.CurrentRodID)
             
-            -- Standalone Logic Auto Fishing (PENGECUALIAN RANDOM DELAY)
+            -- Memulai lemparan
             if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
             task.wait(dynamicDelay)
+  
+            -- Minigame / Challenge Intercept
+            if RF_RequestFishingMinigameStarted then 
+                pcall(function()
+                    local challengeData = RF_RequestFishingMinigameStarted:InvokeServer()
+                    -- Deteksi challenge type proofofspace dan langsung buat valid tanpa disolve
+                    if type(challengeData) == "table" and challengeData.ChallengeType == "proofofspace" then
+                        challengeData.IsValid = true
+                    end
+                end)
+            end
             
-            if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
             task.wait(Config.DelayReqToCatch)
             
             if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
@@ -345,11 +358,25 @@ end
 
 local function Teleport(area)
     if STATE.Teleporting or not FishingAreas[area] then return end
+    local char = lp.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    
     STATE.Teleporting = true
     STATE.CurrentArea = "TP -> " .. area
+    
     pcall(function()
-        lp.Character.HumanoidRootPart.CFrame = CFrame.new(FishingAreas[area].Pos, FishingAreas[area].Pos+FishingAreas[area].Look)
-        task.wait(1.5 + math.random())
+        local targetPos = FishingAreas[area].Pos
+        local lookAt = FishingAreas[area].Pos + FishingAreas[area].Look
+        local targetCFrame = CFrame.new(targetPos, lookAt)
+        
+        char:PivotTo(targetCFrame)
+        task.wait(0.5)
+        
+        if (char.HumanoidRootPart.Position - targetPos).Magnitude > 10 then
+            char:PivotTo(targetCFrame)
+        end
+        
+        task.wait(1 + math.random())
         STATE.CurrentArea = area
     end)
     STATE.Teleporting = false
@@ -369,7 +396,8 @@ local function AutoBuyBestBait()
         local bait = ShopBaits[i]
         if data.Coins >= bait.Price and not owned[bait.ID] then
             if RF_PurchaseBait then RF_PurchaseBait:InvokeServer(bait.ID) end
-            task.wait(0.3 + math.random()); break
+            task.wait(0.3 + math.random());
+            break
         end
     end
 end
@@ -405,6 +433,7 @@ local function CheckDeepSeaQuest(data)
     local sObj = quest.CurrentObj or 1
     local progMap = {}
     for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
+  
     local actObj = sObj
     if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
     if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
@@ -453,6 +482,7 @@ local function UpdateGameMode()
                 progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
             end
             local bestArea = "Volcano"
+           
             local currentBestRodValue = 0
             for _, ownedId in ipairs(ownedRods) do
                 for _, shopRod in ipairs(ShopRods) do
@@ -463,7 +493,8 @@ local function UpdateGameMode()
                 end
             end
             STATE.TargetInfo = progressText
-            STATE.NextLocation = bestArea; STATE.NextRodInfo = nextRodToBuy
+            STATE.NextLocation = bestArea;
+            STATE.NextRodInfo = nextRodToBuy
             return
         end
     end
@@ -476,7 +507,8 @@ local function UpdateGameMode()
         return
     end
 
-    STATE.Mode = "Finished"; STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
+    STATE.Mode = "Finished";
+    STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
 end
 
 -- ===============================
@@ -493,31 +525,46 @@ local function EquipRod(nameID)
             local bestPrice = -1
             for _, s in ipairs(ShopRods) do
                 if tonumber(r.Id) == s.ID and s.Price > bestPrice then 
-                    targetRod = r; bestPrice = s.Price
-                    STATE.CurrentRod = s.Name; STATE.CurrentRodID = s.ID 
+                    targetRod = r
+                    bestPrice = s.Price
+                    STATE.CurrentRod = s.Name
+                    STATE.CurrentRodID = s.ID 
                 end
             end
         else
             if tonumber(r.Id) == nameID then 
-                targetRod = r; STATE.CurrentRodID = tonumber(r.Id); break 
+                targetRod = r
+                STATE.CurrentRodID = tonumber(r.Id)
+                break 
             end
         end
     end
 
     if nameID == "Best" and not targetRod then
         for _, r in pairs(rods) do
-            targetRod = r; STATE.CurrentRod = "Basic/Unknown"; STATE.CurrentRodID = tonumber(r.Id) or 0; break
+            targetRod = r
+            STATE.CurrentRod = "Basic/Unknown"
+            STATE.CurrentRodID = tonumber(r.Id) or 0
+            break
         end
     end
 
     if targetRod then
         pcall(function()
-            -- Equip ke Hotbar Inventory
+            -- 1. Equip ke Hotbar Inventory
             if RE_EquipItem then RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods") end
-            task.wait(0.2 + math.random())
             
-            -- Equip ke Tangan Karakter (BARIS YANG DITAMBAHKAN KEMBALI)
-            if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end
+            -- Jeda dinamis awal untuk memberikan waktu item masuk ke hotbar
+            task.wait(0.5 + math.random())
+            
+            -- 2. Loop Validasi: Paksa equip ke tangan karakter (Anti Gagal)
+            local char = lp.Character
+            local retries = 0
+            while char and not char:FindFirstChildOfClass("Tool") and retries < 4 do
+                if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end
+                task.wait(0.6) -- Tunggu respons server
+                retries = retries + 1
+            end
         end)
     end
 end
