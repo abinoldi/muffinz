@@ -197,6 +197,7 @@ local FishingLocations = {
     ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
     ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
     ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
+    ["Crystal Depth"] = {Pos = Vector3.new(5748.393, -904.818, 15390.896),  Look = Vector3.new(-0.995, 0.000, -0.103)},
 }
 
 -- ===============================
