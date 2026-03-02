@@ -549,13 +549,14 @@ function StartFishingRouter()
                                 local itemName = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
                                 local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
-                                local isRuby = (itemName == "Ruby")
                                 
-                                if isRuby and not isFavorited then
+                                local isRubyGemstone = (itemName == "Ruby" and mutation == "Gemstone")
+                                
+                                if isRubyGemstone and not isFavorited then
                                     task.spawn(function()
                                         if RE_FavoriteItem then
                                             RE_FavoriteItem:FireServer(item.UUID)
-                                            print("✅ Favorited Ruby:", itemName, mutation)
+                                            print("✅ Favorited Ruby Gemstone:", itemName, mutation)
                                         end
                                     end)
                                     task.wait(0.5)
