@@ -1083,6 +1083,13 @@ task.delay(10, function()
     task.spawn(function() ToggleWalkOnWater(true) end)
     
     if MasterConfig.AutoTeleport then 
+        -- Memegang pancing sebelum teleportasi
+        local char = lp.Character or lp.CharacterAdded:Wait()
+        if not char:FindFirstChildOfClass("Tool") and RE_EquipToolFromHotbar then
+            pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
+            task.wait(1) -- Jeda sebentar agar server memproses equip item
+        end
+        
         TeleportToFishingLocation() 
         task.wait(1) 
     end
