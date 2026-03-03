@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v3.8 (AUTO-MIGRATE DB TO TXT)
+# ROBLOX CLONE MANAGER v3.9 (SH-COMPATIBLE / TERMUX SAFE)
 # ==========================================================
 
 BACKUP_DIR="/sdcard/RobloxBackups"
@@ -43,25 +43,24 @@ prepare_sqlite() {
     chmod 777 "$TEMP_DB_DIR"
 }
 
-# --- FITUR BARU: MIGRASI BACKUP LAMA (.db) ke (.txt) ---
+# --- FITUR: MIGRASI BACKUP LAMA TANPA ARRAY ---
 convert_legacy_backups() {
-    local old_dbs=($(ls "$BACKUP_DIR"/*.db 2>/dev/null))
-    
-    if [ ${#old_dbs[@]} -gt 0 ]; then
+    # Cek apakah ada file .db menggunakan ls biasa
+    if ls "$BACKUP_DIR"/*.db 1> /dev/null 2>&1; then
         echo "------------------------------------------"
         echo "🔄 MENDETEKSI BACKUP LAMA (.db)"
         echo "⚠️ Memulai konversi ke format Universal (.txt)..."
         prepare_sqlite
         
-        for db_file in "${old_dbs[@]}"; do
+        # Looping standar POSIX tanpa array
+        for db_file in "$BACKUP_DIR"/*.db; do
+            [ -e "$db_file" ] || continue
             local base_name=$(basename "$db_file" .db)
-            # Ekstrak cookie dari file .db lama
             local cookie_val=$("$SQLITE_BIN" "$db_file" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
             
             if [ -n "$cookie_val" ]; then
                 echo "$cookie_val" > "$BACKUP_DIR/${base_name}.txt"
                 echo "  ✅ Berhasil konversi: ${base_name}.txt"
-                # Rename file .db lama menjadi .bak agar tidak terbaca dua kali, tapi tetap aman jika butuh rollback
                 mv "$db_file" "${db_file}.bak"
             else
                 echo "  ❌ Gagal ekstrak (DB Kosong/Corrupt): $db_file"
@@ -115,7 +114,7 @@ do_backup() {
 }
 
 do_restore_sequential() {
-    convert_legacy_backups # Panggil konverter sebelum restore
+    convert_legacy_backups
     
     echo ""
     echo "=========================================="
@@ -123,18 +122,26 @@ do_restore_sequential() {
     echo "=========================================="
     prepare_sqlite
     
-    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null))
-    pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
+    # Menggunakan file sementara sebagai pengganti Array agar kompatibel dengan 'sh'
+    ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null > "$TEMP_DB_DIR/backup_list.txt"
+    pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":" > "$TEMP_DB_DIR/pkg_list.txt"
 
-    total_backups=${#backups[@]}
-    if [ "$total_backups" -eq 0 ]; then echo "❌ Tidak ada file backup (.txt)."; return 1; fi
+    total_backups=$(wc -l < "$TEMP_DB_DIR/backup_list.txt")
+    total_pkgs=$(wc -l < "$TEMP_DB_DIR/pkg_list.txt")
 
-    i=0
-    while [ $i -lt $total_backups ] && [ $i -lt ${#pkgs[@]} ]; do
-        current_txt="${backups[$i]}"
-        current_pkg="${pkgs[$i]}"
-        target_dir="/data/data/$current_pkg/app_webview/Default"
+    if [ "$total_backups" -eq 0 ]; then 
+        echo "❌ Tidak ada file backup (.txt)."
+        rm -f "$TEMP_DB_DIR/backup_list.txt" "$TEMP_DB_DIR/pkg_list.txt"
+        return 1
+    fi
+
+    i=1
+    while [ "$i" -le "$total_backups" ] && [ "$i" -le "$total_pkgs" ]; do
+        # Membaca baris ke-i menggunakan sed
+        current_txt=$(sed -n "${i}p" "$TEMP_DB_DIR/backup_list.txt")
+        current_pkg=$(sed -n "${i}p" "$TEMP_DB_DIR/pkg_list.txt")
         
+        target_dir="/data/data/$current_pkg/app_webview/Default"
         local raw_cookie=$(cat "$current_txt")
         
         generate_db_file "seq_$i" "$raw_cookie"
@@ -151,6 +158,8 @@ do_restore_sequential() {
         i=$((i + 1))
     done
     
+    # Bersihkan file list sementara
+    rm -f "$TEMP_DB_DIR/backup_list.txt" "$TEMP_DB_DIR/pkg_list.txt"
     rm -rf "$TEMP_DB_DIR"
     echo "✅ Restore Selesai."
 }
@@ -168,7 +177,7 @@ do_auto_process() {
     echo "   🚀 PROSES OTOMATIS (BACKUP -> INSTALL) "
     echo "=========================================="
     
-    convert_legacy_backups # Pastikan file lama dikonversi dulu
+    convert_legacy_backups
     
     total_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null | wc -l)
     if [ "$total_files" -eq 0 ]; then echo "❌ Tidak ada backup file .txt."; return; fi
@@ -203,7 +212,6 @@ do_download_install_only() {
     echo "=========================================="
     echo "   📥 DOWNLOAD & INSTALL SAJA (NO RESTORE) "
     echo "=========================================="
-    echo "⚠️  Fitur ini akan mendownload APK dari 1.apk s/d N.apk"
     echo -n "🔢 Masukkan jumlah clone yang mau diinstall: "
     read target_qty
 
@@ -251,7 +259,7 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX MANAGER v3.8 (AUTO-MIGRATE)    "
+    echo "  ROBLOX MANAGER v3.9 (SH/TERMUX SAFE)    "
     echo "=========================================="
     echo "1. Backup Akun (Format Universal .txt)"
     echo "2. Restore Akun (Otomatis Build DB & Migrasi Lama)"
