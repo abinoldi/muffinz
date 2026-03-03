@@ -1,14 +1,13 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX INJECTOR v11.0 (BACKUP, RESTORE & VALIDATOR)
+# ROBLOX INJECTOR v10.1 (OVERWRITE + VALIDATOR)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
 TMP_SQLITE="/data/local/tmp/sqlite3_exec"
 TEMP_DB_DIR="/data/local/tmp/rbx_temp_cookies"
 COOKIE_QUEUE="/data/local/tmp/rbx_queue.txt"
-BACKUP_DIR="/sdcard/RobloxBackups"
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -18,6 +17,7 @@ check_root() {
 }
 
 prepare_env() {
+    # Cek Curl untuk validasi
     if ! command -v curl >/dev/null 2>&1; then
         echo "❌ Curl tidak ditemukan. Install dulu: pkg install curl"
         exit 1
@@ -39,10 +39,10 @@ prepare_env() {
 
     rm -rf "$TEMP_DB_DIR"
     mkdir -p "$TEMP_DB_DIR"
-    mkdir -p "$BACKUP_DIR"
     chmod 777 "$TEMP_DB_DIR"
 }
 
+# --- FUNGSI 1: CEK APAKAH APK SUDAH LOGIN ---
 check_existing_cookie() {
     local pkg="$1"
     local db_path="/data/data/$pkg/app_webview/Default/Cookies"
@@ -52,15 +52,20 @@ check_existing_cookie() {
     local cookie_value=$("$SQLITE_BIN" "$db_path" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
     
     if [ -n "$cookie_value" ]; then
-        return 0 # Sudah login
+        return 0 # Ada isinya (Sudah login)
     else
         return 1 # Kosong
     fi
 }
 
+# --- FUNGSI 2: CEK VALIDITAS COOKIE VIA INTERNET ---
 validate_cookie_online() {
     local cookie_val="$1"
+    
     echo -n "   ⏳ Mengecek validitas... "
+    
+    # Hit API Roblox untuk cek user login
+    # Timeout 10 detik agar tidak hang jika sinyal jelek
     response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
         -H "Cookie: .ROBLOSECURITY=$cookie_val" \
         "https://users.roblox.com/v1/users/authenticated")
@@ -97,6 +102,7 @@ restore_db() {
     echo "   🔄 Injecting: $pkg_name"
     am force-stop "$pkg_name" > /dev/null 2>&1
 
+    # Hapus cookie lama sebelum menimpa dengan yang baru
     if [ -e "$target_file" ]; then rm -f "$target_file"; fi
     if [ -d "$target_file" ]; then rm -rf "$target_file"; fi
 
@@ -112,96 +118,12 @@ restore_db() {
     chmod 660 "$target_file"
 }
 
-# --- FITUR BARU: BACKUP ---
-backup_cookies() {
-    echo "------------------------------------------"
-    echo "💾 MENCARI APLIKASI UNTUK DI-BACKUP..."
-    echo "------------------------------------------"
+do_main_process() {
+    echo "=========================================="
+    echo " ROBLOX INJECTOR v10.1 (OVERWRITE EDITION)"
+    echo "=========================================="
+    prepare_env
     
-    raw_pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    local found=0
-    
-    for pkg in "${raw_pkgs[@]}"; do
-        local db_path="/data/data/$pkg/app_webview/Default/Cookies"
-        if [ -f "$db_path" ]; then
-            local cookie_value=$("$SQLITE_BIN" "$db_path" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
-            if [ -n "$cookie_value" ]; then
-                # Simpan RAW Cookie ke SDCard
-                local timestamp=$(date +"%Y%m%d_%H%M%S")
-                local backup_file="$BACKUP_DIR/${pkg}_${timestamp}.txt"
-                echo "$cookie_value" > "$backup_file"
-                echo "✅ Tersimpan: ${pkg}_${timestamp}.txt"
-                found=1
-            fi
-        fi
-    done
-
-    if [ $found -eq 0 ]; then
-        echo "❌ Tidak ada aplikasi Roblox yang sedang login."
-    else
-        echo "📂 Semua backup tersimpan di: $BACKUP_DIR"
-    fi
-}
-
-# --- FITUR BARU: RESTORE ---
-restore_cookies() {
-    echo "------------------------------------------"
-    echo "🔄 RESTORE COOKIES KE APLIKASI"
-    echo "------------------------------------------"
-    
-    if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
-        echo "❌ Tidak ada file backup di $BACKUP_DIR"
-        return
-    fi
-
-    # 1. Pilih File Backup
-    echo "📂 File Backup Tersedia:"
-    backups=($(ls "$BACKUP_DIR" | grep ".txt"))
-    for i in "${!backups[@]}"; do
-        echo "  $((i+1)). ${backups[$i]}"
-    done
-    
-    echo -n "👉 Pilih nomor backup (0 untuk batal): "
-    read b_idx
-    if [ "$b_idx" -eq 0 ]; then return; fi
-    b_idx=$((b_idx-1))
-    
-    local selected_backup="${backups[$b_idx]}"
-    if [ -z "$selected_backup" ]; then echo "❌ Pilihan tidak valid."; return; fi
-    local saved_cookie=$(cat "$BACKUP_DIR/$selected_backup")
-
-    # 2. Pilih Aplikasi Tujuan
-    echo ""
-    echo "🎯 Aplikasi Tujuan (Roblox Clones):"
-    target_pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
-    for i in "${!target_pkgs[@]}"; do
-        echo "  $((i+1)). ${target_pkgs[$i]}"
-    done
-    
-    echo -n "👉 Pilih nomor target (0 untuk batal): "
-    read t_idx
-    if [ "$t_idx" -eq 0 ]; then return; fi
-    t_idx=$((t_idx-1))
-    
-    local target_app="${target_pkgs[$t_idx]}"
-    if [ -z "$target_app" ]; then echo "❌ Pilihan tidak valid."; return; fi
-
-    # 3. Validasi & Eksekusi Restore
-    echo ""
-    if validate_cookie_online "$saved_cookie"; then
-        generate_db_file "restore" "$saved_cookie"
-        restore_db "$target_app" "$TEMP_DB_DIR/cookie_restore.db"
-        echo "✨ Restore ke $target_app BERHASIL!"
-    else
-        echo "❌ Cookie dalam backup ini sudah expired/invalid."
-    fi
-}
-
-# --- FITUR LAMA: MANUAL INJECT ---
-inject_manual() {
-    echo "------------------------------------------"
-    echo "💉 INJECT MANUAL KOTAK KOSONG"
-    echo "------------------------------------------"
     raw_pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
     
     if [ ${#raw_pkgs[@]} -eq 0 ]; then
@@ -209,44 +131,56 @@ inject_manual() {
         return
     fi
 
-    echo "🔍 Memfilter aplikasi yang belum login..."
+    echo "🔍 Memeriksa status login & menyiapkan target..."
     target_pkgs=()
 
+    # MODIFIKASI: Semua aplikasi sekarang masuk ke target_pkgs
     for pkg in "${raw_pkgs[@]}"; do
         if check_existing_cookie "$pkg"; then
-            echo "   ⏩ SKIP: $pkg (Sudah Login)"
+            echo "   ⚠️ TARGET: $pkg (Sudah Login -> AKAN DITIMPA)"
         else
-            echo "   🎯 TARGET: $pkg (Kosong)"
-            target_pkgs+=("$pkg")
+            echo "   🎯 TARGET: $pkg (Kosong -> Perlu Injeksi)"
         fi
+        target_pkgs+=("$pkg")
     done
 
     total_targets=${#target_pkgs[@]}
+
     if [ $total_targets -eq 0 ]; then
-        echo "✅ Semua aplikasi sudah terisi. Kembali ke menu."
-        return
+        echo "✅ Tidak ada target yang bisa diproses. Keluar."
+        rm -rf "$TEMP_DB_DIR"
+        exit 0
     fi
 
-    echo "📝 Terdapat $total_targets slot kosong. (Ketik 'done' untuk batal)"
+    echo "------------------------------------------"
+    echo "📝 Mengisi $total_targets slot aplikasi."
+    echo "   Ketik 'done' untuk batal/keluar."
+    echo "------------------------------------------"
+    
     rm -f "$COOKIE_QUEUE"
     
     i=0
     while [ $i -lt $total_targets ]; do
+        display_num=$((i + 1))
         current_target_pkg="${target_pkgs[$i]}"
         
         while true; do
             echo ""
-            echo "👉 [$((i+1))/$total_targets] Target: ...${current_target_pkg: -15}"
+            echo "👉 [$display_num/$total_targets] Target: ...${current_target_pkg: -15}"
             echo -n "   Paste Cookie: "
             read -r input_cookie
 
             if [ "$input_cookie" = "done" ]; then 
-                echo "⚠️  Pengisian dihentikan."
+                echo "⚠️  Proses dihentikan user."
                 break 2 
             fi
 
-            if [ -z "$input_cookie" ]; then continue; fi
+            if [ -z "$input_cookie" ]; then
+                echo "   ❌ Cookie tidak boleh kosong!"
+                continue
+            fi
 
+            # --- VALIDASI ONLINE ---
             if validate_cookie_online "$input_cookie"; then
                 echo "$input_cookie" >> "$COOKIE_QUEUE"
                 i=$((i + 1))
@@ -257,45 +191,36 @@ inject_manual() {
         done
     done
     
-    if [ ! -f "$COOKIE_QUEUE" ]; then return; fi
+    total_cookies_input=$i
 
-    echo "🚀 Memproses Injeksi..."
+    if [ $total_cookies_input -eq 0 ]; then
+        echo "❌ Tidak ada cookie valid yang diinput."
+        rm -rf "$TEMP_DB_DIR"
+        exit 0
+    fi
+
+    echo "------------------------------------------"
+    echo "🚀 Memproses & Mengirim ke Aplikasi..."
+    
     idx=0
     while read -r valid_cookie; do
         if [ $idx -ge ${#target_pkgs[@]} ]; then break; fi
+        
         generate_db_file "$((idx+1))" "$valid_cookie"
-        restore_db "${target_pkgs[$idx]}" "$TEMP_DB_DIR/cookie_$((idx+1)).db"
+        
+        target_app="${target_pkgs[$idx]}"
+        source_db="$TEMP_DB_DIR/cookie_$((idx+1)).db"
+        
+        restore_db "$target_app" "$source_db"
+        
         idx=$((idx + 1))
     done < "$COOKIE_QUEUE"
 
+    rm -rf "$TEMP_DB_DIR"
     rm -f "$COOKIE_QUEUE"
-    echo "✨ INJEKSI MANUAL SELESAI!"
+    echo "------------------------------------------"
+    echo "✨ SELESAI! Semua cookie berhasil di-inject/ditimpa."
 }
 
-# ==========================================================
-# MAIN MENU
-# ==========================================================
 check_root
-prepare_env
-
-while true; do
-    echo ""
-    echo "=========================================="
-    echo "   ROBLOX INJECTOR v11 (BACKUP & RESTORE) "
-    echo "=========================================="
-    echo " 1. 💉 Inject Manual (Ke aplikasi kosong)"
-    echo " 2. 💾 Backup Cookies (Dari semua aplikasi)"
-    echo " 3. 🔄 Restore Cookies (Pilih target bebas)"
-    echo " 0. ❌ Keluar"
-    echo "=========================================="
-    echo -n "Pilih Menu [0-3]: "
-    read menu_choice
-
-    case $menu_choice in
-        1) inject_manual ;;
-        2) backup_cookies ;;
-        3) restore_cookies ;;
-        0) echo "👋 Keluar..."; rm -rf "$TEMP_DB_DIR"; exit 0 ;;
-        *) echo "❌ Pilihan tidak valid!" ;;
-    esac
-done
+do_main_process
