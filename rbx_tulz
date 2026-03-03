@@ -1,12 +1,17 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v3.6 (ADDED INSTALL ONLY MODE)
+# ROBLOX CLONE MANAGER v3.7 (UNIVERSAL BACKUP/RESTORE + INSTALL)
 # ==========================================================
 
 BACKUP_DIR="/sdcard/RobloxBackups"
 DOWNLOAD_DIR="/sdcard/Download/RobloxAPKs"
 BASE_URL="http://43.134.116.2:5555/uploaded"
+
+# KONFIGURASI SQLITE & TEMP
+TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
+TMP_SQLITE="/data/local/tmp/sqlite3_exec"
+TEMP_DB_DIR="/data/local/tmp/rbx_temp_cookies"
 
 # KONFIGURASI TIMEOUT
 TIMEOUT_SEC=300
@@ -18,11 +23,47 @@ check_root() {
     fi
 }
 
+prepare_sqlite() {
+    rm -f "$TMP_SQLITE"
+    if [ -f "$TERMUX_SQLITE" ]; then
+        cp "$TERMUX_SQLITE" "$TMP_SQLITE"
+        chmod 755 "$TMP_SQLITE"
+        SQLITE_BIN="$TMP_SQLITE"
+    else
+        SQLITE_BIN=$(which sqlite3)
+    fi
+
+    if [ -z "$SQLITE_BIN" ] || [ ! -x "$SQLITE_BIN" ]; then
+        echo "❌ sqlite3 tidak ditemukan. Wajib install: pkg install sqlite"
+        exit 1
+    fi
+
+    rm -rf "$TEMP_DB_DIR"
+    mkdir -p "$TEMP_DB_DIR"
+    chmod 777 "$TEMP_DB_DIR"
+}
+
+# --- FITUR: GENERATE DB BARU ---
+generate_db_file() {
+    local index="$1"
+    local raw_cookie="$2"
+    local db_path="$TEMP_DB_DIR/cookie_$index.db"
+
+    rm -f "$db_path"
+    "$SQLITE_BIN" "$db_path" "CREATE TABLE cookies(creation_utc INTEGER NOT NULL, top_frame_site_key TEXT NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, encrypted_value BLOB DEFAULT '', path TEXT NOT NULL, expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL, last_access_utc INTEGER NOT NULL, has_expires INTEGER NOT NULL DEFAULT 1, is_persistent INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 1, samesite INTEGER NOT NULL DEFAULT -1, source_scheme INTEGER NOT NULL DEFAULT 0, source_port INTEGER NOT NULL DEFAULT -1, is_same_party INTEGER NOT NULL DEFAULT 0, UNIQUE (top_frame_site_key, host_key, name, path));"
+    "$SQLITE_BIN" "$db_path" "CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);"
+    "$SQLITE_BIN" "$db_path" "INSERT INTO meta(key, value) VALUES('version','15');"
+    "$SQLITE_BIN" "$db_path" "INSERT INTO meta(key, value) VALUES('last_compatible_version','15');"
+    "$SQLITE_BIN" "$db_path" "INSERT INTO cookies (creation_utc, top_frame_site_key, host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, source_scheme, source_port, is_same_party) VALUES ((strftime('%s','now')*1000000), '', '.roblox.com', '.ROBLOSECURITY', '$raw_cookie', '', '/', 253402300799000000, 1, 1, (strftime('%s','now')*1000000), 1, 1, 1, -1, 1, -1, 0);"
+}
+
 do_backup() {
     echo "=========================================="
-    echo "       MEMULAI PROSES BACKUP...           "
+    echo "       MEMULAI PROSES BACKUP (RAW TEXT)... "
     echo "=========================================="
     mkdir -p "$BACKUP_DIR"
+    prepare_sqlite
+    
     count=0
     for folder in /data/data/com.roblox.clien*; do
         [ -e "$folder" ] || continue
@@ -33,19 +74,27 @@ do_backup() {
         [ -f "$folder/app_webview/Cookies" ] && cookie_file="$folder/app_webview/Cookies"
 
         if [ -n "$cookie_file" ]; then
-             cp "$cookie_file" "$BACKUP_DIR/${pkg_name}.db"
-             count=$((count + 1))
+             # Ekstrak HANYA string cookie-nya, simpan sebagai .txt
+             local cookie_value=$("$SQLITE_BIN" "$cookie_file" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
+             
+             if [ -n "$cookie_value" ]; then
+                 echo "$cookie_value" > "$BACKUP_DIR/${pkg_name}.txt"
+                 count=$((count + 1))
+             fi
         fi
     done
-    echo "✅ Backup Selesai! $count akun tersimpan."
+    echo "✅ Backup Selesai! $count akun tersimpan dengan aman (Format Universal)."
 }
 
 do_restore_sequential() {
     echo ""
     echo "=========================================="
-    echo "    RESTORE BERDASARKAN URUTAN (SEQ)      "
+    echo "  RESTORE LINTAS PACKAGE (SEQUENTIAL)     "
     echo "=========================================="
-    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null))
+    prepare_sqlite
+    
+    # Membaca file backup berformat .txt
+    backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
@@ -53,13 +102,22 @@ do_restore_sequential() {
 
     i=0
     while [ $i -lt $total_backups ] && [ $i -lt ${#pkgs[@]} ]; do
-        current_db="${backups[$i]}"
+        current_txt="${backups[$i]}"
         current_pkg="${pkgs[$i]}"
         target_dir="/data/data/$current_pkg/app_webview/Default"
         
+        # 1. Baca isi cookie dari file txt
+        local raw_cookie=$(cat "$current_txt")
+        
+        # 2. Build ulang database khusus untuk target ini
+        generate_db_file "seq_$i" "$raw_cookie"
+        local source_db="$TEMP_DB_DIR/cookie_seq_$i.db"
+        
         echo "🔄 Restore: $current_pkg"
         mkdir -p "$target_dir"
-        cp "$current_db" "$target_dir/Cookies"
+        
+        # 3. Inject DB yang baru dibuat
+        cp "$source_db" "$target_dir/Cookies"
         
         uid=$(stat -c "%u" "/data/data/$current_pkg")
         chown -R "$uid:$uid" "/data/data/$current_pkg/app_webview"
@@ -67,6 +125,8 @@ do_restore_sequential() {
         
         i=$((i + 1))
     done
+    
+    rm -rf "$TEMP_DB_DIR"
     echo "✅ Restore Selesai."
 }
 
@@ -83,8 +143,9 @@ do_auto_process() {
     echo "   🚀 PROSES OTOMATIS (BACKUP -> INSTALL) "
     echo "=========================================="
     
-    total_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.db 2>/dev/null | wc -l)
-    if [ "$total_files" -eq 0 ]; then echo "❌ Tidak ada backup."; return; fi
+    # Hitung berdasarkan file .txt sekarang
+    total_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null | wc -l)
+    if [ "$total_files" -eq 0 ]; then echo "❌ Tidak ada backup file .txt."; return; fi
 
     rm -rf "$DOWNLOAD_DIR"
     mkdir -p "$DOWNLOAD_DIR"
@@ -123,7 +184,6 @@ do_download_install_only() {
     echo -n "🔢 Masukkan jumlah clone yang mau diinstall: "
     read target_qty
 
-    # Validasi input harus angka
     if ! [ "$target_qty" -eq "$target_qty" ] 2>/dev/null; then
         echo "❌ Input harus berupa angka!"
         return
@@ -135,7 +195,6 @@ do_download_install_only() {
     echo "------------------------------------------"
     echo "📡 Target: $target_qty Aplikasi"
     
-    # 1. DOWNLOAD PHASE
     for i in $(seq 1 "$target_qty"); do
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
@@ -175,10 +234,10 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX MANAGER v3.6 (SAFE MODE)       "
+    echo "    ROBLOX MANAGER v3.7 (UNIVERSAL MODE)  "
     echo "=========================================="
-    echo "1. Backup Akun"
-    echo "2. Restore Akun"
+    echo "1. Backup Akun (Format Universal .txt)"
+    echo "2. Restore Akun (Otomatis Build .db)"
     echo "3. Hapus Semua Aplikasi"
     echo "4. AUTO PROCESS (Download + Install + Restore)"
     echo "5. DOWNLOAD & INSTALL SAJA (No Restore)"
@@ -191,7 +250,7 @@ while true; do
         3) do_uninstall ;;
         4) do_auto_process ;;
         5) do_download_install_only ;;
-        6) exit 0 ;;
+        6) rm -rf "$TEMP_DB_DIR"; exit 0 ;;
         *) echo "⚠️ Salah." ;;
     esac
 done
