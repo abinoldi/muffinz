@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX CLONE MANAGER v3.7 (UNIVERSAL BACKUP/RESTORE + INSTALL)
+# ROBLOX CLONE MANAGER v3.8 (AUTO-MIGRATE DB TO TXT)
 # ==========================================================
 
 BACKUP_DIR="/sdcard/RobloxBackups"
@@ -43,7 +43,36 @@ prepare_sqlite() {
     chmod 777 "$TEMP_DB_DIR"
 }
 
-# --- FITUR: GENERATE DB BARU ---
+# --- FITUR BARU: MIGRASI BACKUP LAMA (.db) ke (.txt) ---
+convert_legacy_backups() {
+    local old_dbs=($(ls "$BACKUP_DIR"/*.db 2>/dev/null))
+    
+    if [ ${#old_dbs[@]} -gt 0 ]; then
+        echo "------------------------------------------"
+        echo "🔄 MENDETEKSI BACKUP LAMA (.db)"
+        echo "⚠️ Memulai konversi ke format Universal (.txt)..."
+        prepare_sqlite
+        
+        for db_file in "${old_dbs[@]}"; do
+            local base_name=$(basename "$db_file" .db)
+            # Ekstrak cookie dari file .db lama
+            local cookie_val=$("$SQLITE_BIN" "$db_file" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
+            
+            if [ -n "$cookie_val" ]; then
+                echo "$cookie_val" > "$BACKUP_DIR/${base_name}.txt"
+                echo "  ✅ Berhasil konversi: ${base_name}.txt"
+                # Rename file .db lama menjadi .bak agar tidak terbaca dua kali, tapi tetap aman jika butuh rollback
+                mv "$db_file" "${db_file}.bak"
+            else
+                echo "  ❌ Gagal ekstrak (DB Kosong/Corrupt): $db_file"
+                mv "$db_file" "${db_file}.error"
+            fi
+        done
+        echo "✨ Konversi selesai!"
+        echo "------------------------------------------"
+    fi
+}
+
 generate_db_file() {
     local index="$1"
     local raw_cookie="$2"
@@ -74,7 +103,6 @@ do_backup() {
         [ -f "$folder/app_webview/Cookies" ] && cookie_file="$folder/app_webview/Cookies"
 
         if [ -n "$cookie_file" ]; then
-             # Ekstrak HANYA string cookie-nya, simpan sebagai .txt
              local cookie_value=$("$SQLITE_BIN" "$cookie_file" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
              
              if [ -n "$cookie_value" ]; then
@@ -83,22 +111,23 @@ do_backup() {
              fi
         fi
     done
-    echo "✅ Backup Selesai! $count akun tersimpan dengan aman (Format Universal)."
+    echo "✅ Backup Selesai! $count akun tersimpan dengan aman."
 }
 
 do_restore_sequential() {
+    convert_legacy_backups # Panggil konverter sebelum restore
+    
     echo ""
     echo "=========================================="
     echo "  RESTORE LINTAS PACKAGE (SEQUENTIAL)     "
     echo "=========================================="
     prepare_sqlite
     
-    # Membaca file backup berformat .txt
     backups=($(ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null))
     pkgs=($(pm list packages | grep "com.roblox.clien" | cut -f 2 -d ":"))
 
     total_backups=${#backups[@]}
-    if [ "$total_backups" -eq 0 ]; then echo "❌ Tidak ada backup."; return 1; fi
+    if [ "$total_backups" -eq 0 ]; then echo "❌ Tidak ada file backup (.txt)."; return 1; fi
 
     i=0
     while [ $i -lt $total_backups ] && [ $i -lt ${#pkgs[@]} ]; do
@@ -106,17 +135,13 @@ do_restore_sequential() {
         current_pkg="${pkgs[$i]}"
         target_dir="/data/data/$current_pkg/app_webview/Default"
         
-        # 1. Baca isi cookie dari file txt
         local raw_cookie=$(cat "$current_txt")
         
-        # 2. Build ulang database khusus untuk target ini
         generate_db_file "seq_$i" "$raw_cookie"
         local source_db="$TEMP_DB_DIR/cookie_seq_$i.db"
         
-        echo "🔄 Restore: $current_pkg"
+        echo "🔄 Restore ke: $current_pkg"
         mkdir -p "$target_dir"
-        
-        # 3. Inject DB yang baru dibuat
         cp "$source_db" "$target_dir/Cookies"
         
         uid=$(stat -c "%u" "/data/data/$current_pkg")
@@ -143,7 +168,8 @@ do_auto_process() {
     echo "   🚀 PROSES OTOMATIS (BACKUP -> INSTALL) "
     echo "=========================================="
     
-    # Hitung berdasarkan file .txt sekarang
+    convert_legacy_backups # Pastikan file lama dikonversi dulu
+    
     total_files=$(ls "$BACKUP_DIR"/com.roblox.clien*.txt 2>/dev/null | wc -l)
     if [ "$total_files" -eq 0 ]; then echo "❌ Tidak ada backup file .txt."; return; fi
 
@@ -152,7 +178,6 @@ do_auto_process() {
 
     echo "📡 Mendeteksi $total_files backup. Mulai download..."
     
-    # DOWNLOAD LOOP
     for i in $(seq 1 "$total_files"); do
         APK_NAME="$i.apk"
         SAVE_PATH="$DOWNLOAD_DIR/$APK_NAME"
@@ -161,7 +186,6 @@ do_auto_process() {
         if [ $? -eq 0 ]; then echo " ✅ OK"; else echo " ❌ GAGAL"; fi
     done
 
-    # INSTALL LOOP
     echo "📦 Menginstall..."
     for i in $(seq 1 "$total_files"); do
         APK_NAME="$i.apk"
@@ -175,7 +199,6 @@ do_auto_process() {
     echo "✨ SELESAI!"
 }
 
-# --- FITUR BARU: DOWNLOAD & INSTALL ONLY ---
 do_download_install_only() {
     echo "=========================================="
     echo "   📥 DOWNLOAD & INSTALL SAJA (NO RESTORE) "
@@ -202,11 +225,7 @@ do_download_install_only() {
         echo -n "⬇️  [$i/$target_qty] Mendownload $APK_NAME... "
         curl -L -f --retry 3 --retry-delay 2 -m $TIMEOUT_SEC "$BASE_URL/$APK_NAME" -o "$SAVE_PATH"
         
-        if [ $? -eq 0 ]; then
-            echo " ✅ Sukses."
-        else
-            echo " ❌ GAGAL! (Skip)"
-        fi
+        if [ $? -eq 0 ]; then echo " ✅ Sukses."; else echo " ❌ GAGAL! (Skip)"; fi
     done
 
     echo "------------------------------------------"
@@ -221,8 +240,6 @@ do_download_install_only() {
             echo "   💿 Menginstall $APK_NAME..."
             pm install -r "$SAVE_PATH" > /dev/null 2>&1
             installed_count=$((installed_count + 1))
-        else
-            echo "   ⚠️ File $APK_NAME tidak valid."
         fi
     done
 
@@ -234,10 +251,10 @@ check_root
 while true; do
     echo ""
     echo "=========================================="
-    echo "    ROBLOX MANAGER v3.7 (UNIVERSAL MODE)  "
+    echo "    ROBLOX MANAGER v3.8 (AUTO-MIGRATE)    "
     echo "=========================================="
     echo "1. Backup Akun (Format Universal .txt)"
-    echo "2. Restore Akun (Otomatis Build .db)"
+    echo "2. Restore Akun (Otomatis Build DB & Migrasi Lama)"
     echo "3. Hapus Semua Aplikasi"
     echo "4. AUTO PROCESS (Download + Install + Restore)"
     echo "5. DOWNLOAD & INSTALL SAJA (No Restore)"
