@@ -434,13 +434,15 @@ local function UpdateGameMode()
     if not PlayerDataReplion then return end
     local data = PlayerDataReplion:Get()
     if not data then return end
+    
     STATE.TotalCoins = data.Coins or 0
     local inv = data.Inventory or {}
     local ownedRods = GetOwnedRods(inv)
- 
+
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     local hasGhostfin = table.find(ownedRods, 169) ~= nil
 
+    -- 1. PRIORITAS UTAMA: GHOSTFIN (ENCHANT ROOM)
     if hasGhostfin then
         STATE.Mode = "Farm Enchant"
         STATE.TargetInfo = "Farming (Ghostfin)"
@@ -448,46 +450,97 @@ local function UpdateGameMode()
         return
     end
 
+    -- 2. CEK QUEST DEEP SEA (Jika Aktif / Belum Selesai)
+    local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
+    if dsMode == "DeepSea" then
+        STATE.Mode = "DeepSea"
+        STATE.TargetInfo = dsProg
+        STATE.NextLocation = dsLoc
+        
+        -- Optimasi Beli Rod: Tetap coba beli rod menuju Astral selagi quest jalan jika koin cukup
+        if not STATE.HasAstralRod then
+            for _, rod in ipairs(ShopRods) do
+                if not table.find(ownedRods, rod.ID) and STATE.TotalCoins >= rod.Price then
+                    if RF_PurchaseFishingRod then 
+                        pcall(function() RF_PurchaseFishingRod:InvokeServer(rod.ID) end)
+                    end
+                    break
+                end
+            end
+        end
+        return
+    end
+
+    -- 3. JIKA QUEST TIDAK TERDETEKSI/SELESAI, TAPI BELUM PUNYA ASTRAL
     if not STATE.HasAstralRod then
         local nextRodToBuy = nil
+        
+        -- Cari rod selanjutnya yang belum dimiliki
         for _, rod in ipairs(ShopRods) do
-            if not table.find(ownedRods, rod.ID) then nextRodToBuy = rod; break end
+            if not table.find(ownedRods, rod.ID) then 
+                nextRodToBuy = rod
+                break 
+            end
         end
+        
         if nextRodToBuy then
             STATE.Mode = "FarmNextRod"
             local progressText
+            
+            -- Eksekusi Beli jika koin cukup
             if STATE.TotalCoins >= nextRodToBuy.Price then 
                 progressText = "AUTO BUYING " .. nextRodToBuy.Name 
-                if RF_PurchaseFishingRod then RF_PurchaseFishingRod:InvokeServer(nextRodToBuy.ID) end
-                task.wait(1 + math.random()) 
+                if RF_PurchaseFishingRod then 
+                    pcall(function() RF_PurchaseFishingRod:InvokeServer(nextRodToBuy.ID) end)
+                end
+                task.wait(0.5 + math.random()) 
             else 
-                progressText = string.format("%s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
+                progressText = string.format("Farming %s: %d%%", nextRodToBuy.Name, math.floor((STATE.TotalCoins/nextRodToBuy.Price)*100)) 
             end
+            
+            -- Optimasi Lokasi Farming berdasarkan Rod terbaik yg sudah dimiliki saat ini
             local bestArea = "Volcano"
             local currentBestRodValue = 0
             for _, ownedId in ipairs(ownedRods) do
                 for _, shopRod in ipairs(ShopRods) do
                     if shopRod.ID == ownedId and shopRod.Price > currentBestRodValue then
                         currentBestRodValue = shopRod.Price
-                        if shopRod.Price >= 100000 then bestArea = "Treasure Room" else bestArea = "Volcano" end
                     end
                 end
             end
+            
+            -- Jika sudah pegang rod sekelas Midnight (50k+), Treasure Room lebih optimal
+            if currentBestRodValue >= 50000 then 
+                bestArea = "Treasure Room" 
+            else 
+                bestArea = "Volcano" 
+            end
+            
             STATE.TargetInfo = progressText
-            STATE.NextLocation = bestArea; STATE.NextRodInfo = nextRodToBuy
+            STATE.NextLocation = bestArea
+            STATE.NextRodInfo = nextRodToBuy
+            return
+        else
+            -- Fallback darurat jika list di ShopRods habis tapi HasAstralRod mendeteksi false
+            STATE.Mode = "FarmNextRod"
+            STATE.TargetInfo = "Farming Astral (Fallback)"
+            STATE.NextLocation = "Treasure Room"
             return
         end
     end
 
-    local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data)
-    if dsMode == "DeepSea" then
-        STATE.Mode = "DeepSea"
-        STATE.TargetInfo = dsProg
-        STATE.NextLocation = dsLoc
+    -- 4. JIKA ASTRAL SUDAH PUNYA, TAPI GHOSTFIN BELUM, DAN QUEST SUDAH DONE
+    if STATE.HasAstralRod and not hasGhostfin then
+        STATE.Mode = "Farm Ghostfin"
+        STATE.TargetInfo = "Farming Ghostfin"
+        STATE.NextLocation = "Treasure Room" 
         return
     end
 
-    STATE.Mode = "Finished"; STATE.TargetInfo = "All Quests Done"; STATE.NextLocation = "Esoteric Island"
+    -- 5. SEMUA KONDISI TERPENUHI (Endgame)
+    STATE.Mode = "Finished"
+    STATE.TargetInfo = "All Quests Done"
+    STATE.NextLocation = "Esoteric Island"
 end
 
 -- ===============================
