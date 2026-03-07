@@ -401,39 +401,75 @@ local function ApplyExtremePotato()
         local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
         if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
     end
+    
     pcall(function()
         local CutsceneController = require(Services.ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
         if CutsceneController and CutsceneController.Play then CutsceneController.Play = function() return end end
     end)
     DisableAnimations()
+    
+    -- [TAMBAHAN] Turunkan Kualitas Render Roblox ke Minimum
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
+    end)
+
     pcall(function()
         Services.Lighting.GlobalShadows = false
         Services.Lighting.FogEnd = 9e9
         Services.Lighting.Brightness = 0
+        
+        -- [TAMBAHAN] Hapus Semua Efek Langit dan Cahaya yang berat
+        for _, v in pairs(Services.Lighting:GetChildren()) do
+            if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
+                v:Destroy()
+            end
+        end
+
         if workspace.Terrain then
             workspace.Terrain.WaterWaveSize = 0
             workspace.Terrain.WaterTransparency = 1
             workspace.Terrain.WaterReflectance = 0
+            workspace.Terrain.Decoration = false -- Matikan rumput 3D
         end
     end)
+
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then 
-            v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false
-        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then 
+            v.Transparency = 1
+            v.Reflectance = 0
+            v.CastShadow = false
+            v.Material = Enum.Material.SmoothPlastic -- [TAMBAHAN] Hapus beban tekstur material
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SurfaceLight") or v:IsA("SpotLight") then 
+            -- [TAMBAHAN] Hapus semua sumber partikel dan cahaya tambahan
             v:Destroy()
         end
     end
+
     if lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
             if v:IsA("BasePart") then 
-                v.Transparency = 1; v.Reflectance = 0
-            elseif v:IsA("Decal") or v:IsA("Texture") then 
+                v.Transparency = 1
+                v.Reflectance = 0
+                v.Material = Enum.Material.SmoothPlastic
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("Clothing") or v:IsA("ShirtGraphic") or v:IsA("Accessory") then 
+                -- [TAMBAHAN] Hapus pakaian dan aksesoris agar lebih enteng
                 v:Destroy() 
             end
             if v:IsA("MeshPart") then v.Transparency = 1 end
         end
     end
-    if setfpscap then pcall(function() setfpscap(20) end) end
+
+    -- [TAMBAHAN] Ubah teknologi rendering ke Compatibility (paling ringan) jika didukung oleh executor
+    local sethidden = sethiddenproperty or set_hidden_property or set_hidden_prop
+    if sethidden then
+        pcall(function() sethidden(Services.Lighting, "Technology", Enum.Technology.Compatibility) end)
+    end
+
+    -- [UPDATE] Set FPS Cap ke 5 sesuai permintaan
+    if setfpscap then 
+        pcall(function() setfpscap(5) end) 
+    end
 end
 
 local function StartPotatoLoop()
