@@ -60,8 +60,8 @@ _G.FishBotActive = true
 -- ==========================================================
 local function GetRodDelay(rodID)
     local rodDelays = {
-        [5] = 0.65,    -- Astral Rod
-        [169] = 0.65, -- Ghostfin Rod
+        [5] = 0.55,    -- Astral Rod
+        [169] = 0.55, -- Ghostfin Rod
         [80] = 1.8,   -- Midnight Rod
         [4] = 2,      -- Lucky Rod
         [78] = 2,     -- Ice Rod
@@ -300,7 +300,7 @@ task.spawn(function()
                 if RF_EquipToolFromHotbar then 
                     pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  
                 end
-                task.wait(0.05) -- Fixed delay tanpa math.random
+                task.wait(0.15) -- Fixed delay tanpa math.random
             end
             
             -- Ambil delay sesuai dengan tipe Rod (Penting agar rod standar tidak bug)
