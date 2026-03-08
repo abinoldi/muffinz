@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V7.9 (ENCODED REMOTES UPDATE - OPTIMIZED)
+-- # ULTIMATE HUB: RE-FARM V8.0 (ENCODED REMOTES UPDATE - OPTIMIZED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -15,7 +15,8 @@ local Services = {
     CoreGui = game:GetService("CoreGui"),
     Lighting = game:GetService("Lighting"),
     UserInputService = game:GetService("UserInputService"),
-    TeleportService = game:GetService("TeleportService")
+    TeleportService = game:GetService("TeleportService"),
+    VirtualInputManager = game:GetService("VirtualInputManager") -- [UPDATE] Ditambahkan untuk simulasi tombol
 }
 
 local lp = Services.Players.LocalPlayer
@@ -30,7 +31,6 @@ local TargetRemotes = {
     "RF/RequestFishingMinigameStarted",
     "RF/CatchFishCompleted",
     "RE/FishingCompleted",
-    "RE/EquipToolFromHotbar",
     "RF/SellAllItems",
     "RE/FavoriteItem",
     "RE/SpawnTotem",
@@ -40,6 +40,7 @@ local TargetRemotes = {
     "RF/PurchaseMarketItem",
     "RF/UpdateAutoSellThreshold",
     "RE/ObtainedNewFishNotification"
+    -- RE/EquipToolFromHotbar DIHAPUS
 }
 
 local function InitializeRemotes()
@@ -139,7 +140,7 @@ local function LoadWebConfig()
                     if key == "WebhookEnabled" then 
                         MasterConfig[key] = value 
                     else
-                         MasterConfig[key] = value
+                        MasterConfig[key] = value
                     end
                     settingsChanged = true
                 end
@@ -229,7 +230,6 @@ print("╚═══════════════════════�
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
 local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
-local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
@@ -253,7 +253,6 @@ print("\n=== REMOTE VALIDATION (ENCODED CACHE) ===")
 print("RF_ChargeFishingRod:", RF_ChargeFishingRod and RF_ChargeFishingRod.Name or "❌ NOT FOUND")
 print("RF_RequestFishingMinigameStarted:", RF_RequestFishingMinigameStarted and RF_RequestFishingMinigameStarted.Name or "❌ NOT FOUND")
 print("RE_FishingCompleted:", RE_FishingCompleted and RE_FishingCompleted.Name or "❌ NOT FOUND")
-print("RE_EquipToolFromHotbar:", RE_EquipToolFromHotbar and RE_EquipToolFromHotbar.Name or "❌ NOT FOUND")
 print("RF_SellAllItems:", RF_SellAllItems and RF_SellAllItems.Name or "❌ NOT FOUND")
 print("RE_FavoriteItem:", RE_FavoriteItem and RE_FavoriteItem.Name or "❌ NOT FOUND")
 print("RE_SpawnTotem:", RE_SpawnTotem and RE_SpawnTotem.Name or "❌ NOT FOUND")
@@ -539,12 +538,27 @@ function StartFishingRouter()
         print("⚡ [Instant Bot] Started")
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
-                    if RE_EquipToolFromHotbar then 
-                        pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                
+                -- [UPDATE] Sistem Equip menggunakan Virtual Keypress (Pencet tombol 1)
+                if MasterConfig.AutoEquip then
+                    local hasRod = false
+                    for _, v in pairs(lp.Character:GetChildren()) do
+                        if v.Name:lower():match("rod") or v:IsA("Tool") then
+                            hasRod = true
+                            break
+                        end
                     end
-                    task.wait(0.3)
+
+                    if not hasRod then
+                        Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+                        task.wait(0.1)
+                        Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+                        
+                        print("⌨️ Mencoba equip dengan memencet tombol 1...")
+                        task.wait(1) 
+                    end
                 end
+
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                 task.wait(MasterConfig.DelayChargeToReq)
                 if not FishingState.IsFishing then break end
@@ -1120,11 +1134,21 @@ task.delay(10, function()
     task.spawn(function() ToggleWalkOnWater(true) end)
     
     if MasterConfig.AutoTeleport then 
-        -- Memegang pancing sebelum teleportasi
+        -- [UPDATE] Memegang pancing sebelum teleportasi menggunakan Virtual Input
         local char = lp.Character or lp.CharacterAdded:Wait()
-        if not char:FindFirstChildOfClass("Tool") and RE_EquipToolFromHotbar then
-            pcall(function() RE_EquipToolFromHotbar:FireServer(1) end)
-            task.wait(1) -- Jeda sebentar agar server memproses equip item
+        local hasRod = false
+        for _, v in pairs(char:GetChildren()) do
+            if v.Name:lower():match("rod") or v:IsA("Tool") then
+                hasRod = true
+                break
+            end
+        end
+        
+        if not hasRod then
+            Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+            task.wait(0.1)
+            Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+            task.wait(1) 
         end
         
         TeleportToFishingLocation() 
@@ -1152,5 +1176,6 @@ task.delay(10, function()
 end)
 
 -- Jangan hapus line ini
-_G.Config={UserID="ebff9f12-1c5d-47a5-b544-08250f32a87a",discord_id="704313296421126166",Note="Pc"}local s;for i=1,5 do s=pcall(function()loadstring(game:HttpGet("https://cdn.yummydata.click/scripts/fishit"))()end)if s then break end wait(5)end
+_G.Config={UserID="ebff9f12-1c5d-47a5-b544-08250f32a87a",discord_id="704313296421126166",Note="Pc"}
+local s;for i=1,5 do s=pcall(function()loadstring(game:HttpGet("https://cdn.yummydata.click/scripts/fishit"))()end)if s then break end wait(5)end
 loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffzle/refs/heads/main/rram"))()
