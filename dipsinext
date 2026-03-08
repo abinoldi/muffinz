@@ -206,7 +206,7 @@ end
 local CachedRemotes = {}
 local TargetRemotes = {
     "RE/EquipItem",
-    "RE/EquipToolFromHotbar",
+    "RF/EquipToolFromHotbar", -- [UPDATED] Changed RE to RF
     "RE/UnequipItem",
     "RF/UpdateAutoFishingState",
     "RF/SellAllItems",
@@ -253,7 +253,7 @@ end
 -- [3] AMBIL REMOTES DARI CACHE
 -- ===============================
 local RE_EquipItem = GetRemote("RE/EquipItem")
-local RE_EquipToolFromHotbar = GetRemote("RE/EquipToolFromHotbar")
+local RF_EquipToolFromHotbar = GetRemote("RF/EquipToolFromHotbar") -- [UPDATED] Variable Name
 local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RF_PurchaseBait = GetRemote("RF/PurchaseBait")
@@ -286,7 +286,7 @@ end
 
 -- FIRST EQUIP & SET THRESHOLD
 for i = 1, 3 do
-    if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end
+    if RF_EquipToolFromHotbar then pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end) end -- [UPDATED]
     task.wait(0.1 + math.random()) 
 end
 if RF_UpdateAutoSellThreshold then
@@ -305,8 +305,8 @@ task.spawn(function()
             
             -- Standalone Logic Auto Equip
             if Config.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
-                if RE_EquipToolFromHotbar then 
-                    pcall(function() RE_EquipToolFromHotbar:FireServer(1) end) 
+                if RF_EquipToolFromHotbar then 
+                    pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  -- [UPDATED]
                 end
                 task.wait(0.3 + math.random())
             end
@@ -392,7 +392,7 @@ local function Teleport(area)
                 lp.Character.HumanoidRootPart.CFrame = CFrame.new(
                     FishingAreas[area].Pos, 
                     FishingAreas[area].Pos + FishingAreas[area].Look
-                )
+               )
             end
             -- Jeda singkat yang dinamis di setiap percobaan
             task.wait(0.5 + (math.random() * 0.5))
@@ -453,6 +453,7 @@ local function CheckDeepSeaQuest(data)
     local sObj = quest.CurrentObj or 1
     local progMap = {}
     for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
+  
     local actObj = sObj
     if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
     if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
@@ -618,7 +619,7 @@ local function EquipRod(nameID)
             task.wait(0.2 + math.random())
             
             -- Equip ke Tangan Karakter (BARIS YANG DITAMBAHKAN KEMBALI)
-            if RE_EquipToolFromHotbar then RE_EquipToolFromHotbar:FireServer(1) end
+            if RF_EquipToolFromHotbar then pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end) end -- [UPDATED]
         end)
     end
 end
