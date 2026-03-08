@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V8.3 (ENCODED REMOTES UPDATE - OPTIMIZED)
+-- # ULTIMATE HUB: RE-FARM V8.4 (ENCODED REMOTES UPDATE - OPTIMIZED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -694,6 +694,15 @@ local function SpawnMutationTotem()
     local uuid = GetTotemUUID(TOTEM_ID)
     if not uuid then return false end
     
+    -- [UPDATE] HENTIKAN FISHING SEBELUM PASANG TOTEM
+    local wasFishing = FishingState.IsFishing
+    if wasFishing then
+        print("[SYSTEM] Menghentikan auto-fishing sementara untuk pasang totem...")
+        StopFishing()
+        task.wait(1.5) -- Pastikan semua thread memancing benar-benar mati
+    end
+    
+    -- Mulai Pasang Totem
     if RF_EquipOxygenTank then 
         pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) 
     end
@@ -714,7 +723,7 @@ local function SpawnMutationTotem()
         pcall(function() RF_UnequipOxygenTank:InvokeServer() end) 
     end
     
-    -- [UPDATE] Jeda sejenak lalu paksa equip pancingan setelah unequip Oxygen Tank
+    -- Jeda sejenak lalu paksa equip pancingan setelah unequip Oxygen Tank
     task.wait(0.8)
     local hasRod = false
     for _, v in pairs(char:GetChildren()) do
@@ -730,6 +739,12 @@ local function SpawnMutationTotem()
         task.wait(0.1)
         Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
         task.wait(1.5) -- Memberi waktu animasi equip selesai agar aman sebelum re-fishing
+    end
+    
+    -- [UPDATE] NYALAKAN KEMBALI FISHING SETELAH EQUIP ROD
+    if wasFishing and MasterConfig.FishingEnabled then
+        print("[SYSTEM] Melanjutkan auto-fishing...")
+        StartFishingRouter()
     end
     
     return success
