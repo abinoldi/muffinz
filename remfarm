@@ -468,7 +468,7 @@ local function ApplyExtremePotato()
 
     -- [UPDATE] Set FPS Cap ke 5 sesuai permintaan
     if setfpscap then 
-        pcall(function() setfpscap(5) end) 
+        pcall(function() setfpscap(10) end) 
     end
 end
 
