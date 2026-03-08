@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V8.0 (ENCODED REMOTES UPDATE - OPTIMIZED)
+-- # ULTIMATE HUB: RE-FARM V8.1 (ENCODED REMOTES UPDATE - OPTIMIZED)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -16,7 +16,7 @@ local Services = {
     Lighting = game:GetService("Lighting"),
     UserInputService = game:GetService("UserInputService"),
     TeleportService = game:GetService("TeleportService"),
-    VirtualInputManager = game:GetService("VirtualInputManager") -- [UPDATE] Ditambahkan untuk simulasi tombol
+    VirtualInputManager = game:GetService("VirtualInputManager") 
 }
 
 local lp = Services.Players.LocalPlayer
@@ -40,7 +40,6 @@ local TargetRemotes = {
     "RF/PurchaseMarketItem",
     "RF/UpdateAutoSellThreshold",
     "RE/ObtainedNewFishNotification"
-    -- RE/EquipToolFromHotbar DIHAPUS
 }
 
 local function InitializeRemotes()
@@ -539,7 +538,7 @@ function StartFishingRouter()
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 
-                -- [UPDATE] Sistem Equip menggunakan Virtual Keypress (Pencet tombol 1)
+                -- Sistem Equip tetap aktif di dalam loop sebagai pengaman (kalau rod mati/jatuh)
                 if MasterConfig.AutoEquip then
                     local hasRod = false
                     for _, v in pairs(lp.Character:GetChildren()) do
@@ -553,8 +552,6 @@ function StartFishingRouter()
                         Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
                         task.wait(0.1)
                         Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
-                        
-                        print("⌨️ Mencoba equip dengan memencet tombol 1...")
                         task.wait(1) 
                     end
                 end
@@ -1134,7 +1131,11 @@ task.delay(10, function()
     task.spawn(function() ToggleWalkOnWater(true) end)
     
     if MasterConfig.AutoTeleport then 
-        -- [UPDATE] Memegang pancing sebelum teleportasi menggunakan Virtual Input
+        -- [UPDATE] Teleportasi dulu, lalu tunggu 3 detik sebelum pegang pancingan
+        TeleportToFishingLocation() 
+        print("⏳ Menunggu 3 detik setelah teleport...")
+        task.wait(3) 
+        
         local char = lp.Character or lp.CharacterAdded:Wait()
         local hasRod = false
         for _, v in pairs(char:GetChildren()) do
@@ -1145,14 +1146,12 @@ task.delay(10, function()
         end
         
         if not hasRod then
+            print("⌨️ Equip pancingan (Pencet 1)...")
             Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
             task.wait(0.1)
             Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
             task.wait(1) 
         end
-        
-        TeleportToFishingLocation() 
-        task.wait(1) 
     end
     
     if MasterConfig.AutoTotem then 
