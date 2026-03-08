@@ -300,7 +300,7 @@ task.spawn(function()
                 if RF_EquipToolFromHotbar then 
                     pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  
                 end
-                task.wait(0.3) -- Fixed delay tanpa math.random
+                task.wait(0.05) -- Fixed delay tanpa math.random
             end
             
             -- Ambil delay sesuai dengan tipe Rod (Penting agar rod standar tidak bug)
