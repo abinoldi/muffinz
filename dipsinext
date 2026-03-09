@@ -63,7 +63,7 @@ local function GetRodDelay(rodID)
     local rodDelays = {
         [5] = 0.65,    -- Astral Rod
         [169] = 0.65, -- Ghostfin Rod
-        [80] = 1.8,   -- Midnight Rod
+        [80] = 0.7,   -- Midnight Rod
         [4] = 2,      -- Lucky Rod
         [78] = 2,     -- Ice Rod
         [77] = 2,     -- Demascus Rod
