@@ -1,5 +1,5 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHS
 -- ======================================================
 
 local Services = {
@@ -54,7 +54,7 @@ pcall(function()
     Replion = require(Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Replion", 5)).Client
     ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
     if Replion then
-        PlayerData = Replion:WaitReplion("Data", 5) -- Timeout cepat 5 detik agar tidak nyangkut
+        PlayerData = Replion:WaitReplion("Data", 5)
     end
 end)
 
@@ -133,14 +133,13 @@ local function TeleportToLookAt(position, lookVector)
     local hum = char:FindFirstChild("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     
-    -- Paksa berdiri jika sedang duduk (Mencegah gagal teleport)
     if hum and hum.Sit then
         hum.Sit = false
         task.wait(0.1)
     end
     
     if hrp then 
-        hrp.Velocity = Vector3.new(0, 0, 0) -- Hentikan momentum
+        hrp.Velocity = Vector3.new(0, 0, 0)
         hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
     end
 end
@@ -148,7 +147,6 @@ end
 local function RunInstantFish()
     if not lp.Character then return end
     
-    -- Panggil equip pakai FireRemote agar TIDAK PERNAH NYANGKUT!
     if not lp.Character:FindFirstChildOfClass("Tool") and Remote_EquipTool then
         FireRemote(Remote_EquipTool, 1)
         task.wait(0.4)
@@ -230,10 +228,26 @@ end
 -- 5. FASE 1: AUTO LEVER LOGIC
 -- ======================================================
 local ArtifactData = {
-    ["Hourglass Diamond Artifact"] = { ChildReference = 6, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(255, 248, 49), TargetPos = FishingAreas["Hourglass Diamond Lever"] },
-    ["Diamond Artifact"] = { ChildReference = "TempleLever", CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(219, 38, 255), TargetPos = FishingAreas["Diamond Lever"] },
-    ["Arrow Artifact"] = { ChildReference = 5, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(255, 47, 47), TargetPos = FishingAreas["Arrow Lever"] },
-    ["Crescent Artifact"] = { ChildReference = 4, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(112, 255, 69), TargetPos = FishingAreas["Cresent Lever"] },
+    ["Hourglass Diamond Artifact"] = { 
+        ChildReference = 6, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(255, 248, 49), 
+        FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)},
+        TargetPos = FishingAreas["Hourglass Diamond Lever"] 
+    },
+    ["Diamond Artifact"] = { 
+        ChildReference = "TempleLever", CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(219, 38, 255), 
+        FishingPos = {Pos = Vector3.new(1844.159, 2.530, -288.755), Look = Vector3.new(0.981, 0.000, -0.193)},
+        TargetPos = FishingAreas["Diamond Lever"] 
+    },
+    ["Arrow Artifact"] = { 
+        ChildReference = 5, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(255, 47, 47), 
+        FishingPos = {Pos = Vector3.new(874.365, 2.530, -358.484), Look = Vector3.new(-0.990, 0.000, 0.144)},
+        TargetPos = FishingAreas["Arrow Lever"] 
+    },
+    ["Crescent Artifact"] = { 
+        ChildReference = 4, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(112, 255, 69), 
+        FishingPos = {Pos = Vector3.new(1401.070, 6.489, 116.738), Look = Vector3.new(-0.500, -0.000, 0.866)},
+        TargetPos = FishingAreas["Cresent Lever"] 
+    },
 }
 local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
 local ARTIFACT_IDS = { ["Arrow Artifact"] = 265, ["Crescent Artifact"] = 266, ["Diamond Artifact"] = 267, ["Hourglass Diamond Artifact"] = 271 }
@@ -285,27 +299,32 @@ local function DoAutoLever()
             local char = lp.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
-            -- Teleport jika berjarak > 5 stud
-            if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
-                print("🏃 [Teleport] Menuju ke " .. artifactToProcess)
-                TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look)
-                task.wait(1) 
-            end
-
             if HasArtifactItem(artifactToProcess) then
+                -- SUDAH PUNYA: Pergi ke tempat Lever untuk menaruhnya (TargetPos)
+                if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
+                    print("🏃 [Teleport] Menuju ke lokasi pemasangan: " .. artifactToProcess)
+                    TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look)
+                    task.wait(1.5) 
+                end
+
                 print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
                 if hrp then hrp.Anchored = true end
                 
-                -- Lepas Pancingan menggunakan pcall murni agar tidak nyangkut
                 if Remote_EquipTool then pcall(function() if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(0) else Remote_EquipTool:FireServer(0) end end) end
                 task.wait(0.5)
                 
-                -- Pasang Lever
                 if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
                 task.wait(2.5) 
                 
                 if hrp then hrp.Anchored = false end
             else
+                -- BELUM PUNYA: Pergi ke FishingPos untuk memancing Artifact
+                if hrp and (hrp.Position - artData.FishingPos.Pos).Magnitude > 5 then
+                    print("🎣 [Teleport] Menuju lokasi memancing Artifact: " .. artifactToProcess)
+                    TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look)
+                    task.wait(1.5)
+                end
+
                 RunInstantFish()
                 task.wait(0.1)
             end
@@ -397,7 +416,7 @@ local function DoAutoRuin()
             isFarming = false
             if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
                  TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
-                 task.wait(1)
+                 task.wait(1.5)
             end
             task.wait(1)
         end
