@@ -1,5 +1,5 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHZ
 -- ======================================================
 
 local Services = {
@@ -140,16 +140,16 @@ local function GetFishNameAndRarity(item)
 end
 
 -- ======================================================
--- 4. LOGIKA AUTO FISHING (FULL MILIKMU)
+-- 4. LOGIKA AUTO FISHING (FULL MILIKMU + ANTI CONFLICT)
 -- ======================================================
 local FishingConfig = {
     AutoEquip = true,
-    DelayChargeToReq = 0.65, -- Jeda dari Charge ke Request
-    DelayReqToCatch = 0.35,  -- Jeda dari Request ke Catch
+    DelayChargeToReq = 0.65, 
+    DelayReqToCatch = 0.35,  
 }
 
 _G.IsAutoFishing = true 
-_G.PauseFishing = false -- [TAMBAHAN] Untuk Pause saat mau pasang lever
+_G.PauseFishing = false -- Switch untuk menghentikan pancingan sementara
 
 local function StartAutoFishing()
     print("🎣 Auto Fishing Started! (Background Mode)")
@@ -157,7 +157,9 @@ local function StartAutoFishing()
 
     task.spawn(function()
         while _G.IsAutoFishing do
-            if not _G.PauseFishing then
+            if _G.PauseFishing then
+                task.wait(0.5) -- Jika sedang dipause, tunggu dan jangan lakukan apa-apa
+            else
                 if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                     
                     -- 1. Auto Equip Tool (Pancingan)
@@ -170,21 +172,25 @@ local function StartAutoFishing()
                         task.wait(0.3)
                     end
 
+                    -- Cek lagi apakah mendadak dipause sebelum Charge
+                    if _G.PauseFishing then continue end 
+
                     -- 2. Mulai Charge Pancingan
                     if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                     task.wait(FishingConfig.DelayChargeToReq)
-                    if not _G.IsAutoFishing or _G.PauseFishing then continue end
+                    
+                    if _G.PauseFishing then continue end 
                     
                     -- 3. Mulai Minigame / Cast
                     if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
                     task.wait(FishingConfig.DelayReqToCatch)
-                    if not _G.IsAutoFishing or _G.PauseFishing then continue end
+                    
+                    if _G.PauseFishing then continue end 
                     
                     -- 4. Selesaikan Minigame (Catch)
                     if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
+                    task.wait(0.3)
                 end
-            else
-                task.wait(0.5) -- Jika sedang di-pause (saat masang lever), istirahat
             end
             
             if not lp.Character then task.wait(1) end
@@ -317,9 +323,10 @@ local function DoAutoLever()
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
             if HasArtifactItem(artifactToProcess) then
-                -- [ JIKA SUDAH PUNYA ARTIFACT: PASANG ] --
-                _G.PauseFishing = true -- Hentikan pancingan agar bisa pasang!
-                task.wait(0.5)
+                -- [ HARD PAUSE FISHING AGAR TIDAK BENTROK ] --
+                _G.PauseFishing = true 
+                FishingConfig.AutoEquip = false 
+                task.wait(1) -- Beri waktu pancingan agar benar-benar berhenti beroperasi
                 
                 if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
                     print("🏃 [Teleport] Menuju ke lokasi pemasangan: " .. artifactToProcess)
@@ -330,25 +337,25 @@ local function DoAutoLever()
                 print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
                 if hrp then hrp.Anchored = true end
                 
-                -- Copot pancingan sebelum masang
+                -- Lepas pancingan (Aman karena AutoEquip sudah kita tembak mati sementara)
                 if Remote_EquipTool then pcall(function() if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(0) else Remote_EquipTool:FireServer(0) end end) end
                 task.wait(0.5)
                 
-                -- Pasang
+                -- Pasang Lever
                 if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
                 task.wait(2.5) 
                 
                 if hrp then hrp.Anchored = false end
             else
-                -- [ JIKA BELUM PUNYA ARTIFACT: MEMANCING ] --
-                _G.PauseFishing = false -- Aktifkan pancingan
+                -- [ LANJUTKAN MEMANCING ] --
+                _G.PauseFishing = false 
+                FishingConfig.AutoEquip = true 
+                
                 if hrp and (hrp.Position - artData.FishingPos.Pos).Magnitude > 5 then
                     print("🎣 [Teleport] Menuju lokasi memancing Artifact: " .. artifactToProcess)
                     TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look)
                     task.wait(1.5)
                 end
-                -- Cukup biarkan Background Auto Fishing Loop berjalan memancing
-                task.wait(1) 
             end
         end
         task.wait(0.1)
@@ -417,7 +424,7 @@ local function DoAutoRuin()
         if doorStatus == "UNLOCKED" then
             print("✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED!")
             runningRuin = false
-            _G.IsAutoFishing = false -- Hentikan sepenuhnya fishing
+            _G.IsAutoFishing = false -- Hentikan sepenuhnya fishing karena game sudah tamat
             break
         end
 
@@ -426,16 +433,20 @@ local function DoAutoRuin()
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
         if missingItem then
-            _G.PauseFishing = false -- Jalankan Pancingan
+            _G.PauseFishing = false 
+            FishingConfig.AutoEquip = true 
+            
             if hrp and (hrp.Position - FishingAreas["Sacred Temple"].Pos).Magnitude > 5 then
                 print("🎣 [Auto Ruin] Kurang Bahan! Teleport ke Sacred Temple mencari: " .. missingItem)
                 TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
                 task.wait(1.5)
             end
-            task.wait(1) -- Tunggu fishing jalan
+            task.wait(1) 
         else
-            _G.PauseFishing = true -- Matikan pancingan agar siap masuk
-            task.wait(0.5)
+            -- MATIKAN PANCINGAN AGAR BISA MASUK RUIN DOOR DENGAN TENANG
+            _G.PauseFishing = true 
+            FishingConfig.AutoEquip = false 
+            task.wait(1)
             
             if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
                  print("🏃 [Auto Ruin] Semua bahan siap, menuju Ruin Door!")
