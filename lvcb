@@ -1,5 +1,5 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHz
 -- ======================================================
 
 local Services = {
@@ -10,7 +10,7 @@ local Services = {
 local lp = Services.Players.LocalPlayer
 
 print("\n=============================================")
-print("🚀 [SynceHub] Script Ultimate (Anti-Conflict) Dimulai!")
+print("🚀 [SynceHub] Script Ultimate (Auto-Equip Artifact) Dimulai!")
 print("=============================================\n")
 
 -- ======================================================
@@ -140,7 +140,7 @@ local function GetFishNameAndRarity(item)
 end
 
 -- ======================================================
--- 4. LOGIKA AUTO FISHING (FULL MILIKMU + ANTI CONFLICT)
+-- 4. LOGIKA AUTO FISHING
 -- ======================================================
 local FishingConfig = {
     AutoEquip = true,
@@ -157,8 +157,6 @@ local function StartAutoFishing()
 
     task.spawn(function()
         while _G.IsAutoFishing do
-            -- [ SISTEM SENSOR SENTUH MANUAL ]
-            -- Cek apakah player mencoba memegang item Artifact secara manual di tangannya
             local holdingArtifact = false
             if lp.Character then
                 local currentTool = lp.Character:FindFirstChildOfClass("Tool")
@@ -168,11 +166,10 @@ local function StartAutoFishing()
             end
 
             if _G.PauseFishing or holdingArtifact then
-                task.wait(0.5) -- Jika sedang dipause script atau sedang dipegang player, hentikan pancingan!
+                task.wait(0.5) 
             else
                 if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                     
-                    -- 1. Auto Equip Tool (Pancingan)
                     if FishingConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
                         if Remote_EquipTool then
                             pcall(function() 
@@ -182,27 +179,22 @@ local function StartAutoFishing()
                         task.wait(0.3)
                     end
 
-                    -- Cek lagi jika mendadak dipause
                     if _G.PauseFishing or holdingArtifact then continue end 
 
-                    -- 2. Mulai Charge Pancingan
                     if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                     task.wait(FishingConfig.DelayChargeToReq)
                     
                     if _G.PauseFishing or holdingArtifact then continue end 
                     
-                    -- 3. Mulai Minigame / Cast
                     if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
                     task.wait(FishingConfig.DelayReqToCatch)
                     
                     if _G.PauseFishing or holdingArtifact then continue end 
                     
-                    -- 4. Selesaikan Minigame (Catch)
                     if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
                     task.wait(0.3)
                 end
             end
-            
             if not lp.Character then task.wait(1) end
         end
         print("🛑 Auto Fishing Stopped!")
@@ -297,9 +289,8 @@ local function IsLeverUnlocked(artifactName)
     return (math.abs(cC.R*255 - tC.R*255) < 1.1 and math.abs(cC.G*255 - tC.G*255) < 1.1 and math.abs(cC.B*255 - tC.B*255) < 1.1)
 end
 
--- PENGECEKAN BYPASS REAL-TIME
 local function HasArtifactItem(artifactName)
-    -- 1. Cek Langsung ke Tas Fisik (Backpack) agar tidak terkena delay server!
+    -- Cek langsung ke tas fisik untuk kecepatan
     if lp.Character then
         for _, v in ipairs(lp.Character:GetChildren()) do
             if v:IsA("Tool") and string.find(v.Name, artifactName) then return true end
@@ -312,7 +303,6 @@ local function HasArtifactItem(artifactName)
         end
     end
 
-    -- 2. Pengecekan Server (Replion) sebagai Backup
     if not PlayerData then return false end
     local hasItem = false
     pcall(function()
@@ -346,9 +336,9 @@ local function DoAutoLever()
             local artData = ArtifactData[artifactToProcess]
             local char = lp.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
 
             if HasArtifactItem(artifactToProcess) then
-                -- [ JIKA SUDAH PUNYA ARTIFACT: PASANG ] --
                 _G.PauseFishing = true 
                 task.wait(0.5)
                 
@@ -358,20 +348,29 @@ local function DoAutoLever()
                     task.wait(1.5) 
                 end
 
-                print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
                 if hrp then hrp.Anchored = true end
                 
-                -- Copot pancingan sebelum masang
-                if Remote_EquipTool then pcall(function() if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(0) else Remote_EquipTool:FireServer(0) end end) end
-                task.wait(0.5)
+                -- [[ FITUR BARU: AUTO EQUIP ARTIFACT ]]
+                -- Kita cari tool artifact-nya di tas lalu paksa pegang (Equip)
+                local backpack = lp:FindFirstChild("Backpack")
+                if hum and backpack then
+                    for _, tool in ipairs(backpack:GetChildren()) do
+                        if tool:IsA("Tool") and string.find(tool.Name, artifactToProcess) then
+                            hum:EquipTool(tool)
+                            print("🎒 [Equip] Memegang " .. tool.Name)
+                            break
+                        end
+                    end
+                end
                 
-                -- Pasang
+                task.wait(1.5) -- Beri jeda 1.5 detik agar animasi memegang selesai dan server merespon
+                
+                print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
                 if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
                 task.wait(2.5) 
                 
                 if hrp then hrp.Anchored = false end
             else
-                -- [ JIKA BELUM PUNYA ARTIFACT: MEMANCING ] --
                 _G.PauseFishing = false 
                 if hrp and (hrp.Position - artData.FishingPos.Pos).Magnitude > 5 then
                     print("🎣 [Teleport] Menuju lokasi memancing Artifact: " .. artifactToProcess)
@@ -447,7 +446,7 @@ local function DoAutoRuin()
         if doorStatus == "UNLOCKED" then
             print("✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED!")
             runningRuin = false
-            _G.IsAutoFishing = false -- Hentikan sepenuhnya fishing
+            _G.IsAutoFishing = false
             break
         end
 
