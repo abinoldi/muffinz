@@ -536,100 +536,229 @@ local function DoAutoLever()
 end
 
 -- ======================================================
--- 7. FASE 2: AUTO RUIN DOOR LOGIC
+-- 7. FASE 2: AUTO RUIN DOOR LOGIC (DIPERBAIKI)
 -- ======================================================
 local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
+local RUIN_DOOR_POS = FishingAreas["Ancient Ruin"].Pos
+local RUIN_DOOR_LOOK = FishingAreas["Ancient Ruin"].Look
+local SACRED_TEMPLE_POS = FishingAreas["Sacred Temple"].Pos
+local SACRED_TEMPLE_LOOK = FishingAreas["Sacred Temple"].Look
+
+-- Lokasi untuk farming item Ruin (Sacred Temple)
+local FARM_POS = SACRED_TEMPLE_POS
+local FARM_LOOK = SACRED_TEMPLE_LOOK
 
 local function GetRuinDoorStatus()
-    local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
-    local status = "LOCKED"
-    if ruinDoor and ruinDoor:FindFirstChild("RuinDoor") then
+    local ruinInteractions = workspace:FindFirstChild("RUIN INTERACTIONS")
+    if not ruinInteractions then return "NO_FOLDER" end
+    
+    local ruinDoor = ruinInteractions:FindFirstChild("Door")
+    if not ruinDoor then return "NO_DOOR" end
+    
+    if ruinDoor:FindFirstChild("RuinDoor") then
         local LDoor = ruinDoor.RuinDoor:FindFirstChild("LDoor")
         if LDoor then
             local currentX = nil
-            if LDoor:IsA("BasePart") then currentX = LDoor.Position.X
-            elseif LDoor:IsA("Model") then local s, p = pcall(function() return LDoor:GetPivot() end) if s and p then currentX = p.Position.X end end
-            if currentX ~= nil and currentX > 6075 then status = "UNLOCKED" end
+            if LDoor:IsA("BasePart") then 
+                currentX = LDoor.Position.X
+                print("[DEBUG] LDoor X (BasePart):", currentX)
+            elseif LDoor:IsA("Model") then 
+                local s, p = pcall(function() return LDoor:GetPivot() end) 
+                if s and p then 
+                    currentX = p.Position.X
+                    print("[DEBUG] LDoor X (Model):", currentX)
+                end
+            end
+            if currentX ~= nil and currentX > 6075 then 
+                return "UNLOCKED" 
+            elseif currentX ~= nil then
+                return "LOCKED (X=" .. math.floor(currentX) .. ")"
+            end
         end
     end
-    return status
+    return "UNKNOWN"
 end
 
 local function IsItemAvailable(itemName)
+    -- Cek di karakter dulu
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetChildren()) do
+            if v:IsA("Tool") and v.Name == itemName then return true end
+        end
+    end
+    
+    -- Cek di backpack
+    local backpack = lp:FindFirstChild("Backpack")
+    if backpack then
+        for _, v in ipairs(backpack:GetChildren()) do
+            if v:IsA("Tool") and v.Name == itemName then return true end
+        end
+    end
+
+    -- Cek di PlayerData
     if not PlayerData then return false end
     local hasItem = false
     pcall(function()
         local inv = PlayerData:Get("Inventory")
         for _, items in pairs(inv) do
             for _, item in ipairs(items) do
-                if GetFishNameAndRarity(item) == itemName then hasItem = true return end
+                if GetFishNameAndRarity(item) == itemName then 
+                    hasItem = true 
+                    return 
+                end
             end
         end
     end)
     return hasItem
 end
 
-local function GetMissingItem()
+local function GetMissingItems()
+    local missing = {}
     for _, name in ipairs(ITEM_FISH_NAMES) do
-        if not IsItemAvailable(name) then return name end
+        if not IsItemAvailable(name) then
+            table.insert(missing, name)
+        end
     end
-    return nil
+    return missing
+end
+
+local function GetAllItemsStatus()
+    local status = {}
+    for _, name in ipairs(ITEM_FISH_NAMES) do
+        status[name] = IsItemAvailable(name)
+    end
+    return status
 end
 
 local function DoAutoRuin()
     print("⏳ [FASE 2] Memulai Auto Ruin Door...")
+    print("📍 Target: Membuka Ruin Door di Ancient Ruin")
+    print("🎯 Butuh 4 item: Freshwater Piranha, Goliath Tiger, Sacred Guardian Squid, Crocodile")
     
     local runningRuin = true
-    task.spawn(function()
+    local lastStatus = ""
+    local lastMissingCount = 4
+    local attemptCount = 0
+    local maxAttempts = 50 -- Maksimal 50 iterasi sebelum reset posisi
+    
+    -- THREAD 1: Background spammer untuk unlock door (tetap jalan)
+    local spammerThread = task.spawn(function()
+        local spamCounter = 0
         while runningRuin do
-            if GetRuinDoorStatus() == "LOCKED" and RE_PlacePressureItem then
+            local doorStatus = GetRuinDoorStatus()
+            if doorStatus == "UNLOCKED" then
+                print("✅ [Spammer] Door sudah UNLOCKED, menghentikan spam...")
+                break
+            end
+            
+            if RE_PlacePressureItem then
+                spamCounter = spamCounter + 1
+                print("🔄 [Spammer #" .. spamCounter .. "] Mencoba unlock dengan semua item...")
                 for _, name in ipairs(ITEM_FISH_NAMES) do
-                    task.wait(2.1)
-                    FireRemote(RE_PlacePressureItem, name)
+                    if runningRuin then
+                        FireRemote(RE_PlacePressureItem, name)
+                        task.wait(0.5)
+                    end
                 end
             end
-            task.wait(5)
+            task.wait(3)
         end
     end)
 
-    while true do
+    -- THREAD 2: Main logic untuk farming dan teleport
+    while runningRuin do
+        attemptCount = attemptCount + 1
         local doorStatus = GetRuinDoorStatus()
+        local missingItems = GetMissingItems()
+        local missingCount = #missingItems
+        local allItemsStatus = GetAllItemsStatus()
+        
+        -- Status update setiap 5 iterasi
+        if attemptCount % 5 == 1 or missingCount ~= lastMissingCount or doorStatus ~= lastStatus then
+            print("\n📊 [Status Ruin Door] " .. doorStatus)
+            print("📦 [Inventory] Item yang dimiliki:")
+            for name, available in pairs(allItemsStatus) do
+                local icon = available and "✅" or "❌"
+                print("   " .. icon .. " " .. name)
+            end
+            
+            if missingCount > 0 then
+                print("🎣 [Farming] Butuh " .. missingCount .. " item: " .. table.concat(missingItems, ", "))
+            else
+                print("🎉 [Inventory] SEMUA ITEM LENGKAP! Siap unlock door.")
+            end
+            
+            lastStatus = doorStatus
+            lastMissingCount = missingCount
+        end
+
+        -- CEK KONDISI SELESAI
         if doorStatus == "UNLOCKED" then
-            print("✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED!")
+            print("\n✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED! Misi selesai.")
             runningRuin = false
-            _G.IsAutoFishing = false
             break
         end
 
-        local missingItem = GetMissingItem()
-        local char = lp.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
-        if missingItem then
+        -- CEK JIKA ADA ITEM YANG KURANG
+        if missingCount > 0 then
+            -- Butuh item, aktifkan fishing
             _G.PauseFishing = false 
             
-            if hrp and (hrp.Position - FishingAreas["Sacred Temple"].Pos).Magnitude > 5 then
-                print("🎣 [Auto Ruin] Kurang Bahan! Teleport ke Sacred Temple mencari: " .. missingItem)
-                TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
-                task.wait(1.5)
+            -- Cek posisi, kalau tidak di Sacred Temple, teleport
+            local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local distToFarm = (hrp.Position - FARM_POS).Magnitude
+                if distToFarm > 20 then
+                    print("🏃 [Teleport] Menuju Sacred Temple untuk farming (jarak: " .. math.floor(distToFarm) .. ")")
+                    TeleportToLookAt(FARM_POS, FARM_LOOK)
+                    task.wait(2)
+                else
+                    -- Sudah di lokasi, reset attempt counter biar ga ke-reset posisi
+                    attemptCount = 0
+                end
             end
-            task.wait(1) 
-        else
-            _G.PauseFishing = true 
-            task.wait(0.5)
+            task.wait(1)
             
-            if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
-                 print("🏃 [Auto Ruin] Semua bahan siap, menuju Ruin Door!")
-                 TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
-                 task.wait(1.5)
+        else
+            -- Semua item lengkap, fokus ke unlock door
+            _G.PauseFishing = true 
+            
+            -- Cek posisi, kalau tidak di Ancient Ruin, teleport
+            local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local distToRuin = (hrp.Position - RUIN_DOOR_POS).Magnitude
+                if distToRuin > 20 then
+                    print("🏃 [Teleport] Menuju Ancient Ruin untuk unlock door (jarak: " .. math.floor(distToRuin) .. ")")
+                    TeleportToLookAt(RUIN_DOOR_POS, RUIN_DOOR_LOOK)
+                    task.wait(2)
+                end
             end
+            
+            -- Reset posisi jika terlalu lama stuck (50 iterasi di tempat yang sama)
+            if attemptCount > maxAttempts then
+                print("⚠️ [Warning] Terlalu lama di posisi yang sama, mereset posisi...")
+                if hrp then
+                    TeleportToLookAt(RUIN_DOOR_POS, RUIN_DOOR_LOOK)
+                    task.wait(1)
+                end
+                attemptCount = 0
+            end
+            
             task.wait(1)
         end
     end
+    
+    -- Bersihkan thread spammer
+    if spammerThread then
+        task.cancel(spammerThread)
+    end
+    
+    _G.IsAutoFishing = false
+    print("✅ [Auto Ruin] Selesai!")
 end
 
 -- ======================================================
--- 8. EXECUTION (WORKFLOW)
+-- 8. EXECUTION (WORKFLOW) - DENGAN VALIDASI
 -- ======================================================
 StartAutoFishing()        
 StartBackgroundTasks()    
@@ -638,7 +767,37 @@ StartBackgroundTasks()
 task.wait(2)
 DebugLeverStatus()
 
-DoAutoLever()             
-DoAutoRuin()              
+print("\n" .. string.rep("=", 50))
+print("🔄 [SYSTEM] Memulai FASE 1: Auto Lever Temple...")
+print(string.rep("=", 50))
 
-print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI!")
+DoAutoLever()             
+
+print("\n" .. string.rep("=", 50))
+print("✅ [SYSTEM] FASE 1 SELESAI! Semua lever terbuka.")
+print(string.rep("=", 50))
+
+-- Cek apakah benar-benar sudah selesai
+local allUnlocked = true
+for _, artifactName in ipairs(ArtifactOrder) do
+    if not IsLeverUnlocked(artifactName) then
+        allUnlocked = false
+        print("⚠️ [Warning] " .. artifactName .. " masih tertutup?")
+    end
+end
+
+if allUnlocked then
+    print("\n" .. string.rep("=", 50))
+    print("🔄 [SYSTEM] Memulai FASE 2: Auto Ruin Door...")
+    print(string.rep("=", 50))
+    
+    -- Beri jeda sebentar sebelum mulai fase 2
+    task.wait(2)
+    DoAutoRuin()
+    
+    print("\n" .. string.rep("=", 50))
+    print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI!")
+    print(string.rep("=", 50))
+else
+    print("\n⚠️ [ERROR] Tidak semua lever terbuka! Periksa manual.")
+end
