@@ -1,84 +1,62 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE + STATUS GUI (FIXED)
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHX
 -- ======================================================
 
 local Services = {
     Players = game:GetService("Players"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    CoreGui = game:GetService("CoreGui")
+    ReplicatedStorage = game:GetService("ReplicatedStorage")
 }
 
 local lp = Services.Players.LocalPlayer
+
+print("\n=============================================")
+print("🚀 [SynceHub] Script Ultimate (Auto-Equip Artifact) Dimulai!")
+print("=============================================\n")
 
 -- ======================================================
 -- 0. TABEL KOORDINAT LOKASI
 -- ======================================================
 local FishingAreas = {
+    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
+    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
+    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
+    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
     ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
+    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
+    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
     ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
     ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
+    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
+    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
+    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
+    ["Treasure Room"] = {Pos = Vector3.new(-3598.440, -281.274, -1645.855), Look = Vector3.new(-0.065, 0.000, -0.998)},
+    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
+    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
+    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
+    ["Heartflew Island"] = {Pos = Vector3.new(1259.866, 7.566, 2698.328), Look = Vector3.new(-0.499, 0.000, 0.867)},
 }
 
 -- ======================================================
--- 1. CREATING GUI STATUS
+-- 1. SETUP MODULES & DATA SECARA AMAN
 -- ======================================================
-local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local Title = Instance.new("TextLabel")
-local UIListLayout = Instance.new("UIListLayout")
-
-ScreenGui.Name = "SynceHubTracker"
-ScreenGui.Parent = (gethui and gethui()) or Services.CoreGui
-ScreenGui.ResetOnSpawn = false
-
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-MainFrame.BorderSizePixel = 0
-MainFrame.Position = UDim2.new(0, 10, 0.4, 0)
-MainFrame.Size = UDim2.new(0, 200, 0, 180)
-
-Title.Parent = MainFrame
-Title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "MISSION TRACKER"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 14
-Title.Font = Enum.Font.SourceSansBold
-
-UIListLayout.Parent = MainFrame
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 5)
-
-local StatusLabels = {}
-local Items = {
-    "Hourglass Diamond Artifact",
-    "Diamond Artifact",
-    "Arrow Artifact",
-    "Crescent Artifact",
-    "Ruin Door"
-}
-
-for i, itemName in ipairs(Items) do
-    local lbl = Instance.new("TextLabel")
-    lbl.Name = itemName
-    lbl.Parent = MainFrame
-    lbl.Size = UDim2.new(1, -10, 0, 25)
-    lbl.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    lbl.BorderSizePixel = 0
-    lbl.Text = " ❌ " .. itemName
-    lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.SourceSansItalic
-    lbl.TextSize = 13
-    StatusLabels[itemName] = lbl
-end
+local Replion, ItemUtility, PlayerData
+pcall(function()
+    Replion = require(Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Replion", 5)).Client
+    ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
+    if Replion then PlayerData = Replion:WaitReplion("Data", 5) end
+end)
 
 -- ======================================================
--- 2. SETUP REMOTES & DATA
+-- 2. SETUP REMOTES SECARA AMAN
 -- ======================================================
 local CachedRemotes = {}
 local TargetRemotes = {
@@ -87,20 +65,21 @@ local TargetRemotes = {
     "RE/PlacePressureItem", "RF/CancelFishingInputs", "RF/SellAllItems", "RE/ObtainedNewFishNotification"
 }
 
-local function InitializeRemotes()
-    local netFolder = Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("_Index", 5):WaitForChild("sleitnick_net@0.2.0", 5):WaitForChild("net", 5)
-    if netFolder then
-        local children = netFolder:GetChildren()
-        local targetMap = {}
-        for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
-        for i = 1, #children do
-            if targetMap[children[i].Name] and i < #children then
-                CachedRemotes[children[i].Name] = children[i + 1]
-            end
+local netFolder
+pcall(function()
+    netFolder = Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("_Index", 5):WaitForChild("sleitnick_net@0.2.0", 5):WaitForChild("net", 5)
+end)
+
+if netFolder then
+    local children = netFolder:GetChildren()
+    local targetMap = {}
+    for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
+    for i = 1, #children do
+        if targetMap[children[i].Name] and i < #children then
+            CachedRemotes[children[i].Name] = children[i + 1]
         end
     end
 end
-InitializeRemotes()
 
 local RF_ChargeFishingRod = CachedRemotes["RF/ChargeFishingRod"]
 local RF_RequestFishingMinigameStarted = CachedRemotes["RF/RequestFishingMinigameStarted"]
@@ -112,16 +91,22 @@ local RE_PlacePressureItem = CachedRemotes["RE/PlacePressureItem"]
 local RF_SellAllItems = CachedRemotes["RF/SellAllItems"]
 local RE_ObtainedNewFishNotification = CachedRemotes["RE/ObtainedNewFishNotification"]
 
-local Replion = require(Services.ReplicatedStorage.Packages.Replion).Client
-local ItemUtility = require(Services.ReplicatedStorage.Shared.ItemUtility)
-local PlayerData = Replion:WaitReplion("Data", 10)
-
 -- ======================================================
 -- 3. HELPER FUNCTIONS
 -- ======================================================
+local function DisableNativeAutoFish()
+    pcall(function()
+        local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController)
+        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+        AutoFishCtrl.Start = function() return end 
+    end)
+end
+
 local function FireRemote(remote, ...)
     if not remote then return end
     local args = {...}
+    if #args == 0 then args = {1} end
     task.spawn(function()
         pcall(function()
             if remote:IsA("RemoteFunction") then remote:InvokeServer(unpack(args))
@@ -132,10 +117,13 @@ end
 
 local function TeleportToLookAt(position, lookVector)
     local char = lp.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        local hum = char:FindFirstChild("Humanoid")
-        if hum and hum.Sit then hum.Sit = false task.wait(0.1) end
-        char.HumanoidRootPart.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hum and hum.Sit then hum.Sit = false task.wait(0.1) end
+    if hrp then 
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
     end
 end
 
@@ -152,175 +140,505 @@ local function GetFishNameAndRarity(item)
 end
 
 -- ======================================================
--- 4. DETECTION LOGIC
+-- 4. LOGIKA AUTO FISHING
 -- ======================================================
-local ArtifactData = {
-    ["Hourglass Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)}, TargetPos = FishingAreas["Hourglass Diamond Lever"], ChildId = 6, UnlockColor = Color3.fromRGB(255, 248, 49) },
-    ["Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1844.159, 2.530, -288.755), Look = Vector3.new(0.981, 0.000, -0.193)}, TargetPos = FishingAreas["Diamond Lever"], ChildId = "TempleLever", UnlockColor = Color3.fromRGB(219, 38, 255) },
-    ["Arrow Artifact"] = { FishingPos = {Pos = Vector3.new(874.365, 2.530, -358.484), Look = Vector3.new(-0.990, 0.000, 0.144)}, TargetPos = FishingAreas["Arrow Lever"], ChildId = 5, UnlockColor = Color3.fromRGB(255, 47, 47) },
-    ["Crescent Artifact"] = { FishingPos = {Pos = Vector3.new(1401.070, 6.489, 116.738), Look = Vector3.new(-0.500, -0.000, 0.866)}, TargetPos = FishingAreas["Cresent Lever"], ChildId = 4, UnlockColor = Color3.fromRGB(112, 255, 69) },
+local FishingConfig = {
+    AutoEquip = true,
+    DelayChargeToReq = 0.65, 
+    DelayReqToCatch = 0.35,  
 }
 
-local function IsLeverUnlocked(artifactName)
-    local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
-    if not JUNGLE then return false end
-    local data = ArtifactData[artifactName]
-    local folder = (type(data.ChildId) == "string") and JUNGLE:FindFirstChild(data.ChildId) or JUNGLE:GetChildren()[data.ChildId]
-    if folder then
-        local crystal = folder:FindFirstChild("Crystal")
-        if crystal then
-            local cC, tC = crystal.Color, data.UnlockColor
-            return (math.abs(cC.R*255 - tC.R*255) < 1.5 and math.abs(cC.G*255 - tC.G*255) < 1.5 and math.abs(cC.B*255 - tC.B*255) < 1.5)
-        end
-    end
-    return false
-end
-
-local function GetRuinDoorStatus()
-    local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
-    if ruinDoor and ruinDoor:FindFirstChild("RuinDoor") then
-        local LDoor = ruinDoor.RuinDoor:FindFirstChild("LDoor")
-        if LDoor and LDoor.Position.X > 6075 then return true end
-    end
-    return false
-end
-
--- ======================================================
--- 5. GUI UPDATE LOOP
--- ======================================================
-task.spawn(function()
-    while true do
-        for name, label in pairs(StatusLabels) do
-            if name == "Ruin Door" then
-                if GetRuinDoorStatus() then
-                    label.Text = " ✅ " .. name
-                    label.TextColor3 = Color3.fromRGB(100, 255, 100)
-                end
-            else
-                if IsLeverUnlocked(name) then
-                    label.Text = " ✅ " .. name
-                    label.TextColor3 = Color3.fromRGB(100, 255, 100)
-                end
-            end
-        end
-        task.wait(1)
-    end
-end)
-
--- ======================================================
--- 6. AUTO FISHING & BACKGROUND TASKS
--- ======================================================
-local FishingConfig = { AutoEquip = true, DelayChargeToReq = 0.65, DelayReqToCatch = 0.35 }
 _G.IsAutoFishing = true 
 _G.PauseFishing = false 
 
-task.spawn(function()
-    while _G.IsAutoFishing do
-        if _G.PauseFishing then task.wait(0.5) continue end
-        if lp.Character then
-            if not lp.Character:FindFirstChildOfClass("Tool") then FireRemote(Remote_EquipTool, 1) task.wait(0.3) end
-            FireRemote(RF_ChargeFishingRod)
-            task.wait(FishingConfig.DelayChargeToReq)
-            FireRemote(RF_RequestFishingMinigameStarted)
-            task.wait(FishingConfig.DelayReqToCatch)
-            FireRemote(RE_FishingCompleted)
-            task.wait(0.3)
-        end
-        task.wait(0.1)
-    end
-end)
+local function StartAutoFishing()
+    print("🎣 Auto Fishing Started! (Background Mode)")
+    DisableNativeAutoFish()
 
--- Auto Sell & Favorite
-local UnsoldCount = 0
-if RE_ObtainedNewFishNotification then
-    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() UnsoldCount = UnsoldCount + 1 end)
+    task.spawn(function()
+        while _G.IsAutoFishing do
+            local holdingArtifact = false
+            if lp.Character then
+                local currentTool = lp.Character:FindFirstChildOfClass("Tool")
+                if currentTool and (string.find(currentTool.Name, "Artifact") or string.find(currentTool.Name, "Lever")) then
+                    holdingArtifact = true
+                end
+            end
+
+            if _G.PauseFishing or holdingArtifact then
+                task.wait(0.5) 
+            else
+                if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    
+                    if FishingConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
+                        if Remote_EquipTool then
+                            pcall(function() 
+                                if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(1) else Remote_EquipTool:FireServer(1) end
+                            end)
+                        end
+                        task.wait(0.3)
+                    end
+
+                    if _G.PauseFishing or holdingArtifact then continue end 
+
+                    if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
+                    task.wait(FishingConfig.DelayChargeToReq)
+                    
+                    if _G.PauseFishing or holdingArtifact then continue end 
+                    
+                    if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
+                    task.wait(FishingConfig.DelayReqToCatch)
+                    
+                    if _G.PauseFishing or holdingArtifact then continue end 
+                    
+                    if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
+                    task.wait(0.3)
+                end
+            end
+            if not lp.Character then task.wait(1) end
+        end
+        print("🛑 Auto Fishing Stopped!")
+    end)
 end
 
-task.spawn(function()
+-- ======================================================
+-- 5. BACKGROUND TASKS (FAVORITE & SELL)
+-- ======================================================
+local RuinItemsToFavorite = { ["Freshwater Piranha"] = true, ["Goliath Tiger"] = true, ["Sacred Guardian Squid"] = true, ["Crocodile"] = true }
+local AutoSellConfig = { Enabled = true, Threshold = 100, CheckDelay = 1 }
+local UnsoldFishCount = 0
+
+local function StartBackgroundTasks()
+    task.spawn(function()
+        while true do
+            if PlayerData and RE_FavoriteItem then
+                pcall(function()
+                    local inv = PlayerData:Get("Inventory")
+                    for _, items in pairs(inv) do
+                        for _, item in ipairs(items) do
+                            if item.UUID then
+                                local itemName = GetFishNameAndRarity(item)
+                                local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
+                                if RuinItemsToFavorite[itemName] and not isFavorited then
+                                    RE_FavoriteItem:FireServer(item.UUID)
+                                    print("⭐ [Auto Favorite] Diamankan:", itemName)
+                                    task.wait(0.5) 
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            task.wait(3)
+        end
+    end)
+
+    if RE_ObtainedNewFishNotification then
+        RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() UnsoldFishCount = UnsoldFishCount + 1 end)
+    end
+
+    task.spawn(function()
+        while AutoSellConfig.Enabled do
+            if UnsoldFishCount >= AutoSellConfig.Threshold and RF_SellAllItems then
+                print("🛒 [Auto Sell] Limit tercapai. Menjual otomatis...")
+                pcall(function() RF_SellAllItems:InvokeServer() end)
+                UnsoldFishCount = 0
+            end
+            task.wait(AutoSellConfig.CheckDelay)
+        end
+    end)
+end
+
+-- ======================================================
+-- 6. FASE 1: AUTO LEVER LOGIC (DENGAN DETEKSI CYCLIC SHIFT)
+-- ======================================================
+local ArtifactData = {
+    ["Hourglass Diamond Artifact"] = { 
+        ItemName = "Hourglass Diamond Artifact",
+        LeverName = "Hourglass Diamond Lever",
+        ChildReference = 6, 
+        CrystalPathSuffix = "Crystal", 
+        -- Warna target yang benar untuk Hourglass adalah KUNING
+        TargetColor = Color3.fromRGB(255, 248, 49), 
+        FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)},
+        TargetPos = FishingAreas["Hourglass Diamond Lever"] 
+    },
+    ["Diamond Artifact"] = { 
+        ItemName = "Diamond Artifact",
+        LeverName = "Diamond Lever",
+        ChildReference = "TempleLever", 
+        CrystalPathSuffix = "Crystal", 
+        -- Warna target yang benar untuk Diamond adalah UNGU
+        TargetColor = Color3.fromRGB(219, 38, 255), 
+        FishingPos = {Pos = Vector3.new(1844.159, 2.530, -288.755), Look = Vector3.new(0.981, 0.000, -0.193)},
+        TargetPos = FishingAreas["Diamond Lever"] 
+    },
+    ["Arrow Artifact"] = { 
+        ItemName = "Arrow Artifact",
+        LeverName = "Arrow Lever",
+        ChildReference = 5, 
+        CrystalPathSuffix = "Crystal", 
+        -- Warna target yang benar untuk Arrow adalah MERAH
+        TargetColor = Color3.fromRGB(255, 47, 47), 
+        FishingPos = {Pos = Vector3.new(874.365, 2.530, -358.484), Look = Vector3.new(-0.990, 0.000, 0.144)},
+        TargetPos = FishingAreas["Arrow Lever"] 
+    },
+    ["Crescent Artifact"] = { 
+        ItemName = "Crescent Artifact",
+        LeverName = "Crescent Lever",
+        ChildReference = 4, 
+        CrystalPathSuffix = "Crystal", 
+        -- Warna target yang benar untuk Crescent adalah HIJAU
+        TargetColor = Color3.fromRGB(112, 255, 69), 
+        FishingPos = {Pos = Vector3.new(1401.070, 6.489, 116.738), Look = Vector3.new(-0.500, -0.000, 0.866)},
+        TargetPos = FishingAreas["Cresent Lever"] 
+    },
+}
+local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
+local ARTIFACT_IDS = { 
+    ["Arrow Artifact"] = 265, 
+    ["Crescent Artifact"] = 266, 
+    ["Diamond Artifact"] = 267, 
+    ["Hourglass Diamond Artifact"] = 271 
+}
+
+-- MAPPING CYCLIC SHIFT: Mapping dari warna yang TERLIHAT ke artifact yang SEHARUSNYA terbuka
+-- Berdasarkan data debug:
+-- Ungu (219,38,255) ada di crystal Hourglass → Diamond yang terbuka
+-- Merah (255,47,47) ada di crystal Diamond → Arrow yang terbuka
+-- Kuning (255,248,49) ada di crystal Arrow → Hourglass yang terbuka
+-- Hijau (112,255,69) ada di crystal Crescent → Crescent yang terbuka
+local ColorMapping = {
+    [string.format("%d,%d,%d", 219, 38, 255)] = "Diamond Artifact",           -- Ungu milik Diamond
+    [string.format("%d,%d,%d", 255, 47, 47)] = "Arrow Artifact",               -- Merah milik Arrow
+    [string.format("%d,%d,%d", 255, 248, 49)] = "Hourglass Diamond Artifact", -- Kuning milik Hourglass
+    [string.format("%d,%d,%d", 112, 255, 69)] = "Crescent Artifact",           -- Hijau milik Crescent
+}
+
+-- Cache untuk menyimpan warna crystal yang terbaca
+local CrystalColorCache = {}
+
+-- Fungsi untuk membaca warna semua crystal
+local function ScanCrystalColors()
+    local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
+    if not JUNGLE then return false end
+    
+    CrystalColorCache = {}
+    
+    for _, artifactName in ipairs(ArtifactOrder) do
+        local data = ArtifactData[artifactName]
+        
+        -- Cari folder lever
+        local leverFolder = nil
+        if type(data.ChildReference) == "string" then
+            leverFolder = JUNGLE:FindFirstChild(data.ChildReference)
+        elseif type(data.ChildReference) == "number" then
+            local children = JUNGLE:GetChildren()
+            leverFolder = children[data.ChildReference]
+        end
+        
+        if leverFolder then
+            -- Cari crystal
+            local crystal = leverFolder:FindFirstChild(data.CrystalPathSuffix)
+            
+            -- Coba cari di descendant
+            if not crystal then
+                for _, child in ipairs(leverFolder:GetDescendants()) do
+                    if child.Name == data.CrystalPathSuffix and child:IsA("BasePart") then
+                        crystal = child
+                        break
+                    end
+                end
+            end
+            
+            if crystal and crystal:IsA("BasePart") then
+                local color = crystal.Color
+                local r = math.floor(color.R * 255)
+                local g = math.floor(color.G * 255)
+                local b = math.floor(color.B * 255)
+                
+                CrystalColorCache[artifactName] = {
+                    r = r, g = g, b = b,
+                    colorKey = string.format("%d,%d,%d", r, g, b)
+                }
+                
+                print(string.format("[WARNA] %s: R=%d G=%d B=%d", artifactName, r, g, b))
+            end
+        end
+    end
+    
+    return true
+end
+
+-- Fungsi untuk menentukan lever mana yang terbuka berdasarkan cyclic shift
+local function GetUnlockedArtifacts()
+    ScanCrystalColors()
+    
+    local unlockedArtifacts = {}
+    
+    for crystalLocation, colorData in pairs(CrystalColorCache) do
+        local mappedArtifact = ColorMapping[colorData.colorKey]
+        
+        if mappedArtifact then
+            print(string.format("[MAPPING] Warna %s (di %s) milik %s", 
+                colorData.colorKey, crystalLocation, mappedArtifact))
+            unlockedArtifacts[mappedArtifact] = true
+        else
+            -- Fallback ke metode lama jika tidak ada di mapping
+            print(string.format("[WARNING] Warna %s tidak dikenal dalam mapping", colorData.colorKey))
+        end
+    end
+    
+    return unlockedArtifacts
+end
+
+-- Fungsi IsLeverUnlocked yang baru (menggunakan cyclic shift detection)
+local function IsLeverUnlocked(artifactName)
+    local unlockedArtifacts = GetUnlockedArtifacts()
+    return unlockedArtifacts[artifactName] == true
+end
+
+-- Fungsi debug untuk melihat status semua lever
+local function DebugLeverStatus()
+    print("\n--- [ DEBUG LEVER STATUS ] ---")
+    local unlockedArtifacts = GetUnlockedArtifacts()
+    
+    for _, artifactName in ipairs(ArtifactOrder) do
+        local isUnlocked = unlockedArtifacts[artifactName] == true
+        local hasItem = HasArtifactItem(artifactName)
+        
+        if isUnlocked then
+            print("✅ " .. artifactName .. " : TERBUKA" .. 
+                  (hasItem and " (Memiliki item)" or " (Tidak punya item - tapi lever sudah terbuka!)"))
+        else
+            print("❌ " .. artifactName .. " : TERTUTUP" .. 
+                  (hasItem and " (Memiliki item - siap pasang!)" or " (Belum punya item)"))
+        end
+    end
+    
+    -- Tampilkan mapping untuk referensi
+    print("\n--- [ COLOR MAPPING REFERENCE ] ---")
+    for colorKey, artifactName in pairs(ColorMapping) do
+        print(string.format("Warna %s → %s", colorKey, artifactName))
+    end
+    print("------------------------------------\n")
+end
+
+local function HasArtifactItem(artifactName)
+    -- Cek langsung ke tas fisik untuk kecepatan
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetChildren()) do
+            if v:IsA("Tool") and string.find(v.Name, artifactName) then return true end
+        end
+    end
+    local backpack = lp:FindFirstChild("Backpack")
+    if backpack then
+        for _, v in ipairs(backpack:GetChildren()) do
+            if v:IsA("Tool") and string.find(v.Name, artifactName) then return true end
+        end
+    end
+
+    if not PlayerData then return false end
+    local hasItem = false
+    pcall(function()
+        local inv = PlayerData:Get("Inventory")
+        local targetId = ARTIFACT_IDS[artifactName]
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if tonumber(item.Id) == targetId then hasItem = true return end
+            end
+        end
+    end)
+    return hasItem
+end
+
+local function DoAutoLever()
+    print("⏳ [FASE 1] Memulai Auto Lever Temple...")
+    
+    -- Tampilkan status awal
+    DebugLeverStatus()
+    
     while true do
-        if UnsoldCount >= 100 and RF_SellAllItems then FireRemote(RF_SellAllItems) UnsoldCount = 0 end
-        if PlayerData and RE_FavoriteItem then
-            pcall(function()
-                local inv = PlayerData:Get("Inventory")
-                for _, g in pairs(inv) do
-                    for _, i in ipairs(g) do
-                        local n = GetFishNameAndRarity(i)
-                        if (n == "Freshwater Piranha" or n == "Goliath Tiger" or n == "Sacred Guardian Squid" or n == "Crocodile") and not (i.IsFavorite or i.Favorited) then
-                            RE_FavoriteItem:FireServer(i.UUID)
+        local unlockedArtifacts = GetUnlockedArtifacts()
+        local allUnlocked = true
+        local artifactToProcess = nil
+        
+        for _, artifactName in ipairs(ArtifactOrder) do
+            local isUnlocked = unlockedArtifacts[artifactName] == true
+            if not isUnlocked and not artifactToProcess then
+                artifactToProcess = artifactName
+            end
+            if not isUnlocked then allUnlocked = false end
+        end
+
+        if allUnlocked then
+            print("✅ [Auto Lever] SEMUA LEVER SUDAH UNLOCKED!")
+            print("📊 Detail status lever:")
+            for _, artifactName in ipairs(ArtifactOrder) do
+                print("   ✅ " .. artifactName .. " : TERBUKA")
+            end
+            break
+        elseif artifactToProcess then
+            local artData = ArtifactData[artifactToProcess]
+            local char = lp.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+
+            if HasArtifactItem(artifactToProcess) then
+                print("🔧 [Auto Lever] Memproses: " .. artifactToProcess .. " (Item tersedia)")
+                _G.PauseFishing = true 
+                task.wait(0.5)
+                
+                if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
+                    print("🏃 [Teleport] Menuju ke lokasi pemasangan: " .. artifactToProcess)
+                    TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look)
+                    task.wait(1.5) 
+                end
+
+                if hrp then hrp.Anchored = true end
+                
+                -- AUTO EQUIP ARTIFACT
+                local backpack = lp:FindFirstChild("Backpack")
+                if hum and backpack then
+                    for _, tool in ipairs(backpack:GetChildren()) do
+                        if tool:IsA("Tool") and string.find(tool.Name, artifactToProcess) then
+                            hum:EquipTool(tool)
+                            print("🎒 [Equip] Memegang " .. tool.Name)
+                            break
                         end
                     end
                 end
-            end)
+                
+                task.wait(1.5) -- Beri jeda agar animasi memegang selesai
+                
+                print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
+                if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
+                task.wait(2.5) 
+                
+                if hrp then hrp.Anchored = false end
+                
+                -- Update status setelah pemasangan
+                task.wait(1)
+                print("🔄 Mengecek ulang status lever...")
+            else
+                print("🎣 [Auto Lever] Farming untuk: " .. artifactToProcess .. " (Item belum tersedia)")
+                _G.PauseFishing = false 
+                if hrp and (hrp.Position - artData.FishingPos.Pos).Magnitude > 5 then
+                    print("🎣 [Teleport] Menuju lokasi memancing Artifact: " .. artifactToProcess)
+                    TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look)
+                    task.wait(1.5)
+                end
+                task.wait(1) 
+            end
         end
-        task.wait(5)
+        task.wait(0.1)
     end
-end)
-
--- ======================================================
--- 7. WORKFLOW EXECUTION
--- ======================================================
-local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
-local ARTIFACT_IDS = { ["Arrow Artifact"] = 265, ["Crescent Artifact"] = 266, ["Diamond Artifact"] = 267, ["Hourglass Diamond Artifact"] = 271 }
-
-local function HasArtifact(name)
-    if lp.Character:FindFirstChild(name) or lp.Backpack:FindFirstChild(name) then return true end
-    local h = false
-    pcall(function()
-        local inv = PlayerData:Get("Inventory")
-        local id = ARTIFACT_IDS[name]
-        for _, g in pairs(inv) do for _, i in ipairs(g) do if tonumber(i.Id) == id then h = true break end end end
-    end)
-    return h
 end
 
-task.spawn(function()
-    pcall(function() require(Services.ReplicatedStorage.Controllers.AutoFishingController):Stop() end)
+-- ======================================================
+-- 7. FASE 2: AUTO RUIN DOOR LOGIC
+-- ======================================================
+local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
 
-    -- FASE 1: LEVERS
-    for _, name in ipairs(ArtifactOrder) do
-        while not IsLeverUnlocked(name) do
-            if HasArtifact(name) then
-                _G.PauseFishing = true
-                TeleportToLookAt(ArtifactData[name].TargetPos.Pos, ArtifactData[name].TargetPos.Look)
-                task.wait(1)
-                local tool = lp.Backpack:FindFirstChild(name) or lp.Character:FindFirstChild(name)
-                if lp.Character.Humanoid and tool then lp.Character.Humanoid:EquipTool(tool) end
-                task.wait(1)
-                FireRemote(RE_PlaceLeverItem, name)
-                task.wait(3)
-            else
-                _G.PauseFishing = false
-                TeleportToLookAt(ArtifactData[name].FishingPos.Pos, ArtifactData[name].FishingPos.Look)
+local function GetRuinDoorStatus()
+    local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
+    local status = "LOCKED"
+    if ruinDoor and ruinDoor:FindFirstChild("RuinDoor") then
+        local LDoor = ruinDoor.RuinDoor:FindFirstChild("LDoor")
+        if LDoor then
+            local currentX = nil
+            if LDoor:IsA("BasePart") then currentX = LDoor.Position.X
+            elseif LDoor:IsA("Model") then local s, p = pcall(function() return LDoor:GetPivot() end) if s and p then currentX = p.Position.X end end
+            if currentX ~= nil and currentX > 6075 then status = "UNLOCKED" end
+        end
+    end
+    return status
+end
+
+local function IsItemAvailable(itemName)
+    if not PlayerData then return false end
+    local hasItem = false
+    pcall(function()
+        local inv = PlayerData:Get("Inventory")
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if GetFishNameAndRarity(item) == itemName then hasItem = true return end
+            end
+        end
+    end)
+    return hasItem
+end
+
+local function GetMissingItem()
+    for _, name in ipairs(ITEM_FISH_NAMES) do
+        if not IsItemAvailable(name) then return name end
+    end
+    return nil
+end
+
+local function DoAutoRuin()
+    print("⏳ [FASE 2] Memulai Auto Ruin Door...")
+    
+    local runningRuin = true
+    task.spawn(function()
+        while runningRuin do
+            if GetRuinDoorStatus() == "LOCKED" and RE_PlacePressureItem then
+                for _, name in ipairs(ITEM_FISH_NAMES) do
+                    task.wait(2.1)
+                    FireRemote(RE_PlacePressureItem, name)
+                end
+            end
+            task.wait(5)
+        end
+    end)
+
+    while true do
+        local doorStatus = GetRuinDoorStatus()
+        if doorStatus == "UNLOCKED" then
+            print("✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED!")
+            runningRuin = false
+            _G.IsAutoFishing = false
+            break
+        end
+
+        local missingItem = GetMissingItem()
+        local char = lp.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+        if missingItem then
+            _G.PauseFishing = false 
+            
+            if hrp and (hrp.Position - FishingAreas["Sacred Temple"].Pos).Magnitude > 5 then
+                print("🎣 [Auto Ruin] Kurang Bahan! Teleport ke Sacred Temple mencari: " .. missingItem)
+                TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
+                task.wait(1.5)
+            end
+            task.wait(1) 
+        else
+            _G.PauseFishing = true 
+            task.wait(0.5)
+            
+            if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
+                 print("🏃 [Auto Ruin] Semua bahan siap, menuju Ruin Door!")
+                 TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
+                 task.wait(1.5)
             end
             task.wait(1)
         end
     end
+end
 
-    -- FASE 2: RUIN
-    while not GetRuinDoorStatus() do
-        local hasAll = true
-        pcall(function()
-            local inv = PlayerData:Get("Inventory")
-            for _, f in ipairs({"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}) do
-                local found = false
-                for _, g in pairs(inv) do for _, i in ipairs(g) do if GetFishNameAndRarity(i) == f then found = true break end end end
-                if not found then hasAll = false break end
-            end
-        end)
-        if hasAll then
-            _G.PauseFishing = true
-            TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
-            for _, n in ipairs({"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}) do
-                FireRemote(RE_PlacePressureItem, n)
-                task.wait(2.1)
-            end
-        else
-            _G.PauseFishing = false
-            TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
-        end
-        task.wait(5)
-    end
+-- ======================================================
+-- 8. EXECUTION (WORKFLOW)
+-- ======================================================
+StartAutoFishing()        
+StartBackgroundTasks()    
 
-    _G.IsAutoFishing = false
-    print("✅ MISSION COMPLETED!")
-end)
+-- Tampilkan status awal lever
+task.wait(2)
+DebugLeverStatus()
+
+DoAutoLever()             
+DoAutoRuin()              
+
+print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI!")
