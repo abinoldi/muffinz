@@ -10,12 +10,11 @@ local Services = {
 local lp = Services.Players.LocalPlayer
 
 print("\n=============================================")
-print("🚀 [SynceHub] Script All-in-One Dimulai!")
-print("Urutan: Auto Favorite & Sell (BG) -> Auto Lever -> Auto Ruin")
+print("🚀 [SynceHub] Script Ultimate Dimulai!")
 print("=============================================\n")
 
 -- ======================================================
--- 0. TABEL KOORDINAT LOKASI (DARI KAMU)
+-- 0. TABEL KOORDINAT LOKASI
 -- ======================================================
 local FishingAreas = {
     ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
@@ -47,9 +46,371 @@ local FishingAreas = {
 }
 
 -- ======================================================
--- 1. SISTEM MAPPING ENCODED REMOTES
+-- 1. SETUP MODULES & DATA SECARA AMAN
 -- ======================================================
+print("⏳ [1/3] Menyiapkan Modules & Player Data...")
+local Replion, ItemUtility, PlayerData
+pcall(function()
+    Replion = require(Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Replion", 5)).Client
+    ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
+    if Replion then
+        PlayerData = Replion:WaitReplion("Data", 5) -- Timeout cepat 5 detik agar tidak nyangkut
+    end
+end)
+
+if not PlayerData then warn("⚠️ PlayerData lambat dimuat, beberapa fitur inventory mungkin delay.") 
+else print("✅ [1/3] PlayerData berhasil dimuat!") end
+
+-- ======================================================
+-- 2. SETUP REMOTES SECARA AMAN
+-- ======================================================
+print("⏳ [2/3] Mengekstrak Remotes...")
 local CachedRemotes = {}
 local TargetRemotes = {
-    "RF/ChargeFishingRod",
-    "RF/RequestFishingMini
+    "RF/ChargeFishingRod", "RF/RequestFishingMinigameStarted", "RF/CatchFishCompleted", "RE/FishingCompleted",
+    "RF/EquipToolFromHotbar", "RE/EquipToolFromHotbar", "RE/FavoriteItem", "RE/PlaceLeverItem",
+    "RE/PlacePressureItem", "RF/CancelFishingInputs", "RF/SellAllItems", "RE/ObtainedNewFishNotification"
+}
+
+local netFolder
+pcall(function()
+    netFolder = Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("_Index", 5):WaitForChild("sleitnick_net@0.2.0", 5):WaitForChild("net", 5)
+end)
+
+if netFolder then
+    local children = netFolder:GetChildren()
+    local targetMap = {}
+    for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
+    for i = 1, #children do
+        if targetMap[children[i].Name] and i < #children then
+            CachedRemotes[children[i].Name] = children[i + 1]
+        end
+    end
+    print("✅ [2/3] Remotes siap digunakan!")
+else
+    warn("❌ Gagal menemukan folder network remotes!")
+end
+
+local RF_ChargeFishingRod = CachedRemotes["RF/ChargeFishingRod"]
+local RF_RequestFishingMinigameStarted = CachedRemotes["RF/RequestFishingMinigameStarted"]
+local RE_FishingCompleted = CachedRemotes["RF/CatchFishCompleted"] or CachedRemotes["RE/FishingCompleted"]
+local Remote_EquipTool = CachedRemotes["RF/EquipToolFromHotbar"] or CachedRemotes["RE/EquipToolFromHotbar"]
+local RF_CancelFishingInputs = CachedRemotes["RF/CancelFishingInputs"]
+local RE_FavoriteItem = CachedRemotes["RE/FavoriteItem"]
+local RE_PlaceLeverItem = CachedRemotes["RE/PlaceLeverItem"]
+local RE_PlacePressureItem = CachedRemotes["RE/PlacePressureItem"]
+local RF_SellAllItems = CachedRemotes["RF/SellAllItems"]
+local RE_ObtainedNewFishNotification = CachedRemotes["RE/ObtainedNewFishNotification"]
+
+-- ======================================================
+-- 3. HELPER FUNCTIONS
+-- ======================================================
+local function DisableNativeAutoFish()
+    pcall(function()
+        local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController)
+        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+        AutoFishCtrl.Start = function() return end 
+    end)
+end
+
+local function FireRemote(remote, ...)
+    if not remote then return end
+    local args = {...}
+    if #args == 0 then args = {1} end
+    task.spawn(function()
+        pcall(function()
+            if remote:IsA("RemoteFunction") then remote:InvokeServer(unpack(args))
+            else remote:FireServer(unpack(args)) end
+        end)
+    end)
+end
+
+local function TeleportToLookAt(position, lookVector)
+    local char = lp.Character
+    if not char then return end
+    
+    local hum = char:FindFirstChild("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    
+    -- Paksa berdiri jika sedang duduk (Mencegah gagal teleport)
+    if hum and hum.Sit then
+        hum.Sit = false
+        task.wait(0.1)
+    end
+    
+    if hrp then 
+        hrp.Velocity = Vector3.new(0, 0, 0) -- Hentikan momentum
+        hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
+    end
+end
+
+local function RunInstantFish()
+    if not lp.Character then return end
+    
+    -- Panggil equip pakai FireRemote agar TIDAK PERNAH NYANGKUT!
+    if not lp.Character:FindFirstChildOfClass("Tool") and Remote_EquipTool then
+        FireRemote(Remote_EquipTool, 1)
+        task.wait(0.4)
+    end
+
+    local timestamp = os.time() + os.clock()
+    if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod, timestamp) end
+    task.wait(0.65)
+    
+    if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted, -139.630, 0.996) end
+    task.wait(0.35)
+
+    if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
+    task.wait(0.3)
+    if RF_CancelFishingInputs then FireRemote(RF_CancelFishingInputs) end
+end
+
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local itemID = item.Id
+    if ItemUtility and itemID then
+        pcall(function()
+            local itemData = ItemUtility:GetItemData(itemID) or ItemUtility:GetItemData(tonumber(itemID) or tonumber(name))
+            if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        end)
+    end
+    return name
+end
+
+-- ======================================================
+-- 4. BACKGROUND TASKS
+-- ======================================================
+local RuinItemsToFavorite = { ["Freshwater Piranha"] = true, ["Goliath Tiger"] = true, ["Sacred Guardian Squid"] = true, ["Crocodile"] = true }
+local AutoSellConfig = { Enabled = true, Threshold = 100, CheckDelay = 1 }
+local UnsoldFishCount = 0
+
+local function StartBackgroundTasks()
+    task.spawn(function()
+        while true do
+            if PlayerData and RE_FavoriteItem then
+                pcall(function()
+                    local inv = PlayerData:Get("Inventory")
+                    for _, items in pairs(inv) do
+                        for _, item in ipairs(items) do
+                            if item.UUID then
+                                local itemName = GetFishNameAndRarity(item)
+                                local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
+                                if RuinItemsToFavorite[itemName] and not isFavorited then
+                                    RE_FavoriteItem:FireServer(item.UUID)
+                                    print("⭐ [Auto Favorite] Diamankan:", itemName)
+                                    task.wait(0.5) 
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            task.wait(3)
+        end
+    end)
+
+    if RE_ObtainedNewFishNotification then
+        RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() UnsoldFishCount = UnsoldFishCount + 1 end)
+    end
+
+    task.spawn(function()
+        while AutoSellConfig.Enabled do
+            if UnsoldFishCount >= AutoSellConfig.Threshold and RF_SellAllItems then
+                print("🛒 [Auto Sell] Jual otomatis tereksekusi.")
+                pcall(function() RF_SellAllItems:InvokeServer() end)
+                UnsoldFishCount = 0
+            end
+            task.wait(AutoSellConfig.CheckDelay)
+        end
+    end)
+end
+
+-- ======================================================
+-- 5. FASE 1: AUTO LEVER LOGIC
+-- ======================================================
+local ArtifactData = {
+    ["Hourglass Diamond Artifact"] = { ChildReference = 6, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(255, 248, 49), TargetPos = FishingAreas["Hourglass Diamond Lever"] },
+    ["Diamond Artifact"] = { ChildReference = "TempleLever", CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(219, 38, 255), TargetPos = FishingAreas["Diamond Lever"] },
+    ["Arrow Artifact"] = { ChildReference = 5, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(255, 47, 47), TargetPos = FishingAreas["Arrow Lever"] },
+    ["Crescent Artifact"] = { ChildReference = 4, CrystalPathSuffix = "Crystal", UnlockColor = Color3.fromRGB(112, 255, 69), TargetPos = FishingAreas["Cresent Lever"] },
+}
+local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
+local ARTIFACT_IDS = { ["Arrow Artifact"] = 265, ["Crescent Artifact"] = 266, ["Diamond Artifact"] = 267, ["Hourglass Diamond Artifact"] = 271 }
+
+local function IsLeverUnlocked(artifactName)
+    local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
+    if not JUNGLE then return false end
+    local data = ArtifactData[artifactName]
+    local folder = (type(data.ChildReference) == "string") and JUNGLE:FindFirstChild(data.ChildReference) or JUNGLE:GetChildren()[data.ChildReference]
+    if not folder then return false end
+    local crystal = folder:FindFirstChild(data.CrystalPathSuffix)
+    if not crystal or not crystal:IsA("BasePart") then return false end
+    local cC, tC = crystal.Color, data.UnlockColor
+    return (math.abs(cC.R*255 - tC.R*255) < 1.1 and math.abs(cC.G*255 - tC.G*255) < 1.1 and math.abs(cC.B*255 - tC.B*255) < 1.1)
+end
+
+local function HasArtifactItem(artifactName)
+    if not PlayerData then return false end
+    local hasItem = false
+    pcall(function()
+        local inv = PlayerData:Get("Inventory")
+        local targetId = ARTIFACT_IDS[artifactName]
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if tonumber(item.Id) == targetId then hasItem = true return end
+            end
+        end
+    end)
+    return hasItem
+end
+
+local function DoAutoLever()
+    print("⏳ [3/3] Memulai Auto Lever FASE 1...")
+    while true do
+        local allUnlocked = true
+        local artifactToProcess = nil
+        
+        for _, artifactName in ipairs(ArtifactOrder) do
+            local isUnlocked = IsLeverUnlocked(artifactName)
+            if not isUnlocked and not artifactToProcess then artifactToProcess = artifactName end
+            if not isUnlocked then allUnlocked = false end
+        end
+
+        if allUnlocked then
+            print("✅ [Auto Lever] SEMUA LEVER SUDAH UNLOCKED!")
+            break
+        elseif artifactToProcess then
+            local artData = ArtifactData[artifactToProcess]
+            local char = lp.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+            -- Teleport jika berjarak > 5 stud
+            if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
+                print("🏃 [Teleport] Menuju ke " .. artifactToProcess)
+                TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look)
+                task.wait(1) 
+            end
+
+            if HasArtifactItem(artifactToProcess) then
+                print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
+                if hrp then hrp.Anchored = true end
+                
+                -- Lepas Pancingan menggunakan pcall murni agar tidak nyangkut
+                if Remote_EquipTool then pcall(function() if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(0) else Remote_EquipTool:FireServer(0) end end) end
+                task.wait(0.5)
+                
+                -- Pasang Lever
+                if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
+                task.wait(2.5) 
+                
+                if hrp then hrp.Anchored = false end
+            else
+                RunInstantFish()
+                task.wait(0.1)
+            end
+        end
+        task.wait(0.1)
+    end
+end
+
+-- ======================================================
+-- 6. FASE 2: AUTO RUIN DOOR LOGIC
+-- ======================================================
+local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
+
+local function GetRuinDoorStatus()
+    local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
+    local status = "LOCKED"
+    if ruinDoor and ruinDoor:FindFirstChild("RuinDoor") then
+        local LDoor = ruinDoor.RuinDoor:FindFirstChild("LDoor")
+        if LDoor then
+            local currentX = nil
+            if LDoor:IsA("BasePart") then currentX = LDoor.Position.X
+            elseif LDoor:IsA("Model") then local s, p = pcall(function() return LDoor:GetPivot() end) if s and p then currentX = p.Position.X end end
+            if currentX ~= nil and currentX > 6075 then status = "UNLOCKED" end
+        end
+    end
+    return status
+end
+
+local function IsItemAvailable(itemName)
+    if not PlayerData then return false end
+    local hasItem = false
+    pcall(function()
+        local inv = PlayerData:Get("Inventory")
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if GetFishNameAndRarity(item) == itemName then hasItem = true return end
+            end
+        end
+    end)
+    return hasItem
+end
+
+local function GetMissingItem()
+    for _, name in ipairs(ITEM_FISH_NAMES) do
+        if not IsItemAvailable(name) then return name end
+    end
+    return nil
+end
+
+local function DoAutoRuin()
+    print("⏳ [FASE 2] Memulai Auto Ruin Door...")
+    
+    local runningRuin = true
+    task.spawn(function()
+        while runningRuin do
+            if GetRuinDoorStatus() == "LOCKED" and RE_PlacePressureItem then
+                for _, name in ipairs(ITEM_FISH_NAMES) do
+                    task.wait(2.1)
+                    FireRemote(RE_PlacePressureItem, name)
+                end
+            end
+            task.wait(5)
+        end
+    end)
+
+    local isFarming = false
+    while true do
+        local doorStatus = GetRuinDoorStatus()
+        if doorStatus == "UNLOCKED" then
+            print("✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED!")
+            runningRuin = false
+            break
+        end
+
+        local missingItem = GetMissingItem()
+        local char = lp.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+        if missingItem then
+            if not isFarming then
+                TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
+                task.wait(1.5)
+                isFarming = true
+                print("🎣 [Auto Ruin] Kurang Bahan! Farming ikan: " .. missingItem)
+            end
+            RunInstantFish()
+            task.wait(0.1)
+        else
+            isFarming = false
+            if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
+                 TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
+                 task.wait(1)
+            end
+            task.wait(1)
+        end
+    end
+end
+
+-- ======================================================
+-- 7. EXECUTION (WORKFLOW)
+-- ======================================================
+DisableNativeAutoFish()   
+StartBackgroundTasks()    
+
+DoAutoLever()             
+DoAutoRuin()              
+
+print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI!")
