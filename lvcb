@@ -1,5 +1,5 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHS
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
 -- ======================================================
 
 local Services = {
@@ -48,23 +48,16 @@ local FishingAreas = {
 -- ======================================================
 -- 1. SETUP MODULES & DATA SECARA AMAN
 -- ======================================================
-print("⏳ [1/3] Menyiapkan Modules & Player Data...")
 local Replion, ItemUtility, PlayerData
 pcall(function()
     Replion = require(Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Replion", 5)).Client
     ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
-    if Replion then
-        PlayerData = Replion:WaitReplion("Data", 5)
-    end
+    if Replion then PlayerData = Replion:WaitReplion("Data", 5) end
 end)
-
-if not PlayerData then warn("⚠️ PlayerData lambat dimuat, beberapa fitur inventory mungkin delay.") 
-else print("✅ [1/3] PlayerData berhasil dimuat!") end
 
 -- ======================================================
 -- 2. SETUP REMOTES SECARA AMAN
 -- ======================================================
-print("⏳ [2/3] Mengekstrak Remotes...")
 local CachedRemotes = {}
 local TargetRemotes = {
     "RF/ChargeFishingRod", "RF/RequestFishingMinigameStarted", "RF/CatchFishCompleted", "RE/FishingCompleted",
@@ -86,16 +79,12 @@ if netFolder then
             CachedRemotes[children[i].Name] = children[i + 1]
         end
     end
-    print("✅ [2/3] Remotes siap digunakan!")
-else
-    warn("❌ Gagal menemukan folder network remotes!")
 end
 
 local RF_ChargeFishingRod = CachedRemotes["RF/ChargeFishingRod"]
 local RF_RequestFishingMinigameStarted = CachedRemotes["RF/RequestFishingMinigameStarted"]
 local RE_FishingCompleted = CachedRemotes["RF/CatchFishCompleted"] or CachedRemotes["RE/FishingCompleted"]
 local Remote_EquipTool = CachedRemotes["RF/EquipToolFromHotbar"] or CachedRemotes["RE/EquipToolFromHotbar"]
-local RF_CancelFishingInputs = CachedRemotes["RF/CancelFishingInputs"]
 local RE_FavoriteItem = CachedRemotes["RE/FavoriteItem"]
 local RE_PlaceLeverItem = CachedRemotes["RE/PlaceLeverItem"]
 local RE_PlacePressureItem = CachedRemotes["RE/PlacePressureItem"]
@@ -129,39 +118,13 @@ end
 local function TeleportToLookAt(position, lookVector)
     local char = lp.Character
     if not char then return end
-    
     local hum = char:FindFirstChild("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    
-    if hum and hum.Sit then
-        hum.Sit = false
-        task.wait(0.1)
-    end
-    
+    if hum and hum.Sit then hum.Sit = false task.wait(0.1) end
     if hrp then 
         hrp.Velocity = Vector3.new(0, 0, 0)
         hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
     end
-end
-
-local function RunInstantFish()
-    if not lp.Character then return end
-    
-    if not lp.Character:FindFirstChildOfClass("Tool") and Remote_EquipTool then
-        FireRemote(Remote_EquipTool, 1)
-        task.wait(0.4)
-    end
-
-    local timestamp = os.time() + os.clock()
-    if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod, timestamp) end
-    task.wait(0.65)
-    
-    if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted, -139.630, 0.996) end
-    task.wait(0.35)
-
-    if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
-    task.wait(0.3)
-    if RF_CancelFishingInputs then FireRemote(RF_CancelFishingInputs) end
 end
 
 local function GetFishNameAndRarity(item)
@@ -177,7 +140,61 @@ local function GetFishNameAndRarity(item)
 end
 
 -- ======================================================
--- 4. BACKGROUND TASKS
+-- 4. LOGIKA AUTO FISHING (FULL MILIKMU)
+-- ======================================================
+local FishingConfig = {
+    AutoEquip = true,
+    DelayChargeToReq = 0.65, -- Jeda dari Charge ke Request
+    DelayReqToCatch = 0.35,  -- Jeda dari Request ke Catch
+}
+
+_G.IsAutoFishing = true 
+_G.PauseFishing = false -- [TAMBAHAN] Untuk Pause saat mau pasang lever
+
+local function StartAutoFishing()
+    print("🎣 Auto Fishing Started! (Background Mode)")
+    DisableNativeAutoFish()
+
+    task.spawn(function()
+        while _G.IsAutoFishing do
+            if not _G.PauseFishing then
+                if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    
+                    -- 1. Auto Equip Tool (Pancingan)
+                    if FishingConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
+                        if Remote_EquipTool then
+                            pcall(function() 
+                                if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(1) else Remote_EquipTool:FireServer(1) end
+                            end)
+                        end
+                        task.wait(0.3)
+                    end
+
+                    -- 2. Mulai Charge Pancingan
+                    if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
+                    task.wait(FishingConfig.DelayChargeToReq)
+                    if not _G.IsAutoFishing or _G.PauseFishing then continue end
+                    
+                    -- 3. Mulai Minigame / Cast
+                    if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
+                    task.wait(FishingConfig.DelayReqToCatch)
+                    if not _G.IsAutoFishing or _G.PauseFishing then continue end
+                    
+                    -- 4. Selesaikan Minigame (Catch)
+                    if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
+                end
+            else
+                task.wait(0.5) -- Jika sedang di-pause (saat masang lever), istirahat
+            end
+            
+            if not lp.Character then task.wait(1) end
+        end
+        print("🛑 Auto Fishing Stopped!")
+    end)
+end
+
+-- ======================================================
+-- 5. BACKGROUND TASKS (FAVORITE & SELL)
 -- ======================================================
 local RuinItemsToFavorite = { ["Freshwater Piranha"] = true, ["Goliath Tiger"] = true, ["Sacred Guardian Squid"] = true, ["Crocodile"] = true }
 local AutoSellConfig = { Enabled = true, Threshold = 100, CheckDelay = 1 }
@@ -215,7 +232,7 @@ local function StartBackgroundTasks()
     task.spawn(function()
         while AutoSellConfig.Enabled do
             if UnsoldFishCount >= AutoSellConfig.Threshold and RF_SellAllItems then
-                print("🛒 [Auto Sell] Jual otomatis tereksekusi.")
+                print("🛒 [Auto Sell] Limit tercapai. Menjual otomatis...")
                 pcall(function() RF_SellAllItems:InvokeServer() end)
                 UnsoldFishCount = 0
             end
@@ -225,7 +242,7 @@ local function StartBackgroundTasks()
 end
 
 -- ======================================================
--- 5. FASE 1: AUTO LEVER LOGIC
+-- 6. FASE 1: AUTO LEVER LOGIC
 -- ======================================================
 local ArtifactData = {
     ["Hourglass Diamond Artifact"] = { 
@@ -280,7 +297,7 @@ local function HasArtifactItem(artifactName)
 end
 
 local function DoAutoLever()
-    print("⏳ [3/3] Memulai Auto Lever FASE 1...")
+    print("⏳ [FASE 1] Memulai Auto Lever Temple...")
     while true do
         local allUnlocked = true
         local artifactToProcess = nil
@@ -300,7 +317,10 @@ local function DoAutoLever()
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
             if HasArtifactItem(artifactToProcess) then
-                -- SUDAH PUNYA: Pergi ke tempat Lever untuk menaruhnya (TargetPos)
+                -- [ JIKA SUDAH PUNYA ARTIFACT: PASANG ] --
+                _G.PauseFishing = true -- Hentikan pancingan agar bisa pasang!
+                task.wait(0.5)
+                
                 if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
                     print("🏃 [Teleport] Menuju ke lokasi pemasangan: " .. artifactToProcess)
                     TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look)
@@ -310,23 +330,25 @@ local function DoAutoLever()
                 print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
                 if hrp then hrp.Anchored = true end
                 
+                -- Copot pancingan sebelum masang
                 if Remote_EquipTool then pcall(function() if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(0) else Remote_EquipTool:FireServer(0) end end) end
                 task.wait(0.5)
                 
+                -- Pasang
                 if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
                 task.wait(2.5) 
                 
                 if hrp then hrp.Anchored = false end
             else
-                -- BELUM PUNYA: Pergi ke FishingPos untuk memancing Artifact
+                -- [ JIKA BELUM PUNYA ARTIFACT: MEMANCING ] --
+                _G.PauseFishing = false -- Aktifkan pancingan
                 if hrp and (hrp.Position - artData.FishingPos.Pos).Magnitude > 5 then
                     print("🎣 [Teleport] Menuju lokasi memancing Artifact: " .. artifactToProcess)
                     TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look)
                     task.wait(1.5)
                 end
-
-                RunInstantFish()
-                task.wait(0.1)
+                -- Cukup biarkan Background Auto Fishing Loop berjalan memancing
+                task.wait(1) 
             end
         end
         task.wait(0.1)
@@ -334,7 +356,7 @@ local function DoAutoLever()
 end
 
 -- ======================================================
--- 6. FASE 2: AUTO RUIN DOOR LOGIC
+-- 7. FASE 2: AUTO RUIN DOOR LOGIC
 -- ======================================================
 local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
 
@@ -390,12 +412,12 @@ local function DoAutoRuin()
         end
     end)
 
-    local isFarming = false
     while true do
         local doorStatus = GetRuinDoorStatus()
         if doorStatus == "UNLOCKED" then
             print("✅ [Auto Ruin] RUIN DOOR SUDAH UNLOCKED!")
             runningRuin = false
+            _G.IsAutoFishing = false -- Hentikan sepenuhnya fishing
             break
         end
 
@@ -404,17 +426,19 @@ local function DoAutoRuin()
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
         if missingItem then
-            if not isFarming then
+            _G.PauseFishing = false -- Jalankan Pancingan
+            if hrp and (hrp.Position - FishingAreas["Sacred Temple"].Pos).Magnitude > 5 then
+                print("🎣 [Auto Ruin] Kurang Bahan! Teleport ke Sacred Temple mencari: " .. missingItem)
                 TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
                 task.wait(1.5)
-                isFarming = true
-                print("🎣 [Auto Ruin] Kurang Bahan! Farming ikan: " .. missingItem)
             end
-            RunInstantFish()
-            task.wait(0.1)
+            task.wait(1) -- Tunggu fishing jalan
         else
-            isFarming = false
+            _G.PauseFishing = true -- Matikan pancingan agar siap masuk
+            task.wait(0.5)
+            
             if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
+                 print("🏃 [Auto Ruin] Semua bahan siap, menuju Ruin Door!")
                  TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
                  task.wait(1.5)
             end
@@ -424,10 +448,10 @@ local function DoAutoRuin()
 end
 
 -- ======================================================
--- 7. EXECUTION (WORKFLOW)
+-- 8. EXECUTION (WORKFLOW)
 -- ======================================================
-DisableNativeAutoFish()   
-StartBackgroundTasks()    
+StartAutoFishing()        -- Pancingan siap-siap di background
+StartBackgroundTasks()    -- Fitur amankan ikan & jual aktif
 
 DoAutoLever()             
 DoAutoRuin()              
