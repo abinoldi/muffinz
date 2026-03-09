@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # ULTIMATE HUB: RE-FARM V8.6 (ENCODED REMOTES UPDATE - OPTIMIZED)
+-- # ULTIMATE HUB: RE-FARM V8.6 (ENCODED REMOTES + AUTO WEATHER & TOTEM)
 -- ======================================================
 
 -- [1] SETUP URL CONFIG
@@ -30,7 +30,7 @@ local TargetRemotes = {
     "RF/RequestFishingMinigameStarted",
     "RF/CatchFishCompleted",
     "RE/FishingCompleted",
-    "RF/EquipToolFromHotbar", -- [UPDATED] Changed RE to RF
+    "RF/EquipToolFromHotbar", 
     "RF/SellAllItems",
     "RE/FavoriteItem",
     "RE/SpawnTotem",
@@ -39,7 +39,8 @@ local TargetRemotes = {
     "RF/InitiateTrade",
     "RF/PurchaseMarketItem",
     "RF/UpdateAutoSellThreshold",
-    "RE/ObtainedNewFishNotification"
+    "RE/ObtainedNewFishNotification",
+    "RF/PurchaseWeatherEvent" -- [TAMBAHAN] Remote untuk cuaca
 }
 
 local function InitializeRemotes()
@@ -52,7 +53,6 @@ local function InitializeRemotes()
                 net = net:FindFirstChild("net")
                 if net then
                     local children = net:GetChildren()
-                    
                     local targetMap = {}
                     for _, name in ipairs(TargetRemotes) do
                         targetMap[name] = true
@@ -73,7 +73,7 @@ end
 InitializeRemotes()
 
 -- ======================================================
--- FUNGSI GETREMOTE YANG DIUPDATE (MENGGUNAKAN CACHE)
+-- FUNGSI GETREMOTE MENGGUNAKAN CACHE
 -- ======================================================
 local function GetRemote(name)
     return CachedRemotes[name]
@@ -94,6 +94,13 @@ local MasterConfig = {
     AutoTeleport = true,
     SelectedLocation = "Treasure Room",
     AutoTotem = true,
+    
+    -- [TAMBAHAN] Fitur Auto Buy
+    AutoBuyTotem = false, 
+    AutoBuyWeather = false, 
+    TargetWeathers = {"Cloudy", "Storm", "Wind"},
+    WeatherLoopDelay = 300, 
+    
     PotatoMode = true,
     AutoTrade = false,
     TargetUsername = "mm3kenak",
@@ -229,7 +236,7 @@ print("╚═══════════════════════�
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
 local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
-local RF_EquipToolFromHotbar = GetRemote("RF/EquipToolFromHotbar") -- [UPDATED] Variable Name
+local RF_EquipToolFromHotbar = GetRemote("RF/EquipToolFromHotbar") 
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 
@@ -245,6 +252,9 @@ local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
 
+-- EVENT/WEATHER REMOTE [TAMBAHAN]
+local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
+
 -- NOTIFICATION REMOTE
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 
@@ -253,7 +263,7 @@ print("\n=== REMOTE VALIDATION (ENCODED CACHE) ===")
 print("RF_ChargeFishingRod:", RF_ChargeFishingRod and RF_ChargeFishingRod.Name or "❌ NOT FOUND")
 print("RF_RequestFishingMinigameStarted:", RF_RequestFishingMinigameStarted and RF_RequestFishingMinigameStarted.Name or "❌ NOT FOUND")
 print("RE_FishingCompleted:", RE_FishingCompleted and RE_FishingCompleted.Name or "❌ NOT FOUND")
-print("RF_EquipToolFromHotbar:", RF_EquipToolFromHotbar and RF_EquipToolFromHotbar.Name or "❌ NOT FOUND") -- [UPDATED] Variable Name
+print("RF_EquipToolFromHotbar:", RF_EquipToolFromHotbar and RF_EquipToolFromHotbar.Name or "❌ NOT FOUND") 
 print("RF_SellAllItems:", RF_SellAllItems and RF_SellAllItems.Name or "❌ NOT FOUND")
 print("RE_FavoriteItem:", RE_FavoriteItem and RE_FavoriteItem.Name or "❌ NOT FOUND")
 print("RE_SpawnTotem:", RE_SpawnTotem and RE_SpawnTotem.Name or "❌ NOT FOUND")
@@ -263,6 +273,7 @@ print("RF_InitiateTrade:", RF_InitiateTrade and RF_InitiateTrade.Name or "❌ NO
 print("RF_PurchaseMarketItem:", RF_PurchaseMarketItem and RF_PurchaseMarketItem.Name or "❌ NOT FOUND")
 print("RF_UpdateAutoSellThreshold:", RF_UpdateAutoSellThreshold and RF_UpdateAutoSellThreshold.Name or "❌ NOT FOUND")
 print("RE_ObtainedNewFishNotification:", RE_ObtainedNewFishNotification and RE_ObtainedNewFishNotification.Name or "❌ NOT FOUND")
+print("RF_PurchaseWeatherEvent:", RF_PurchaseWeatherEvent and RF_PurchaseWeatherEvent.Name or "❌ NOT FOUND") -- [TAMBAHAN]
 print("=====================================\n")
 
 local function GetFishNameAndRarity(item)
@@ -408,7 +419,6 @@ local function ApplyExtremePotato()
     end)
     DisableAnimations()
     
-    -- [TAMBAHAN] Turunkan Kualitas Render Roblox ke Minimum
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
@@ -419,7 +429,6 @@ local function ApplyExtremePotato()
         Services.Lighting.FogEnd = 9e9
         Services.Lighting.Brightness = 0
         
-        -- [TAMBAHAN] Hapus Semua Efek Langit dan Cahaya yang berat
         for _, v in pairs(Services.Lighting:GetChildren()) do
             if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
                 v:Destroy()
@@ -430,7 +439,7 @@ local function ApplyExtremePotato()
             workspace.Terrain.WaterWaveSize = 0
             workspace.Terrain.WaterTransparency = 1
             workspace.Terrain.WaterReflectance = 0
-            workspace.Terrain.Decoration = false -- Matikan rumput 3D
+            workspace.Terrain.Decoration = false 
         end
     end)
 
@@ -439,9 +448,8 @@ local function ApplyExtremePotato()
             v.Transparency = 1
             v.Reflectance = 0
             v.CastShadow = false
-            v.Material = Enum.Material.SmoothPlastic -- [TAMBAHAN] Hapus beban tekstur material
+            v.Material = Enum.Material.SmoothPlastic 
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SurfaceLight") or v:IsA("SpotLight") then 
-            -- [TAMBAHAN] Hapus semua sumber partikel dan cahaya tambahan
             v:Destroy()
         end
     end
@@ -453,20 +461,17 @@ local function ApplyExtremePotato()
                 v.Reflectance = 0
                 v.Material = Enum.Material.SmoothPlastic
             elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("Clothing") or v:IsA("ShirtGraphic") or v:IsA("Accessory") then 
-                -- [TAMBAHAN] Hapus pakaian dan aksesoris agar lebih enteng
                 v:Destroy() 
             end
             if v:IsA("MeshPart") then v.Transparency = 1 end
         end
     end
 
-    -- [TAMBAHAN] Ubah teknologi rendering ke Compatibility (paling ringan) jika didukung oleh executor
     local sethidden = sethiddenproperty or set_hidden_property or set_hidden_prop
     if sethidden then
         pcall(function() sethidden(Services.Lighting, "Technology", Enum.Technology.Compatibility) end)
     end
 
-    -- [UPDATE] Set FPS Cap ke 5 sesuai permintaan
     if setfpscap then 
         pcall(function() setfpscap(10) end) 
     end
@@ -540,8 +545,8 @@ function StartFishingRouter()
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
-                    if RF_EquipToolFromHotbar then  -- [UPDATED] Variable Name
-                        pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  -- [UPDATED] Changed to InvokeServer
+                    if RF_EquipToolFromHotbar then  
+                        pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  
                     end
                     task.wait(0.3)
                 end
@@ -573,7 +578,7 @@ function StartFishingRouter()
         end
     end))
 
-    -- AUTO FAVORITE (SEMUA RUBY DI-FAVORITE)
+    -- AUTO FAVORITE
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoFavorite then
@@ -585,7 +590,6 @@ function StartFishingRouter()
                                 local itemName = GetFishNameAndRarity(item)
                                 local mutation = GetMutation(item)
                                 local isFavorited = (item.IsFavorite or item.Favorited or item.Locked)
-                                
                                 local isRubyGemstone = (itemName == "Ruby" and mutation == "Gemstone")
                                 
                                 if isRubyGemstone and not isFavorited then
@@ -606,7 +610,7 @@ function StartFishingRouter()
         end
     end))
     
-    -- UNFAVORITE RUBY (HAPUS FAVORITE DARI RUBY BIASA)
+    -- UNFAVORITE RUBY
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if MasterConfig.AutoUnfavoriteRubies then 
@@ -822,32 +826,78 @@ local function StartMerchantAutoBuy()
     task.spawn(function()
         print("🛍️ [Merchant] Smart Auto Buy Started...")
         while true do
-            local currentCoins = GetCoins()
-            if currentCoins > 1000000 then
-                local merchantData = nil
-                if MerchantReplion then
-                     pcall(function() merchantData = MerchantReplion:Get("Items") end)
-                end
-                local isTotemInStock = false
-                if merchantData then
-                    for _, id in ipairs(merchantData) do
-                       if id == MUTATION_TOTEM_ID then isTotemInStock = true break end
+            -- Cek Toggle dari Config
+            if MasterConfig.AutoBuyTotem then
+                local currentCoins = GetCoins()
+                if currentCoins > 1000000 then
+                    local merchantData = nil
+                    if MerchantReplion then
+                         pcall(function() merchantData = MerchantReplion:Get("Items") end)
                     end
-                end
-                if isTotemInStock and RF_PurchaseMarketItem then
-                    print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
-                    while currentCoins > 1000000 do
-                        pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
-                        task.wait(0.5) 
-                        currentCoins = GetCoins() 
+                    local isTotemInStock = false
+                    if merchantData then
+                        for _, id in ipairs(merchantData) do
+                           if id == MUTATION_TOTEM_ID then isTotemInStock = true break end
+                        end
                     end
-                    print("🛑 [Merchant] Coin under 1M. Stopping purchase.")
+                    if isTotemInStock and RF_PurchaseMarketItem then
+                        print("💰 [Merchant] Coin > 1M & Totem Found! Buying Loop Started...")
+                        while currentCoins > 1000000 do
+                            pcall(function() RF_PurchaseMarketItem:InvokeServer(MUTATION_TOTEM_ID) end)
+                            task.wait(0.5) 
+                            currentCoins = GetCoins() 
+                        end
+                        print("🛑 [Merchant] Coin under 1M. Stopping purchase.")
+                    end
                 end
             end
             task.wait(3) 
         end
     end)
 end
+
+-- ===============================
+-- AUTO BUY WEATHER (MENGGUNAKAN ENCODED REMOTES)
+-- ===============================
+local function StartAutoWeatherLoop()
+    task.spawn(function()
+        print("🌤️ [Auto Weather] Smart Loop Started...")
+        while true do
+            -- Cek Toggle dari Config
+            if MasterConfig.AutoBuyWeather then
+                local weatherBought = {}
+                
+                if RF_PurchaseWeatherEvent then
+                    for _, weatherToBuy in ipairs(MasterConfig.TargetWeathers) do
+                        task.wait(0.05) 
+                        local success_buy, err_msg = pcall(function()
+                            return RF_PurchaseWeatherEvent:InvokeServer(weatherToBuy)
+                        end)
+
+                        if success_buy then
+                            print("[Auto Weather] Berhasil membeli: " .. weatherToBuy)
+                            table.insert(weatherBought, weatherToBuy)
+                        end
+                    end
+                    
+                    if #weatherBought > 0 then
+                        local boughtList = table.concat(weatherBought, ", ")
+                        print("[Auto Weather] Cycle selesai. Terbeli: " .. boughtList .. ". Menunggu " .. (MasterConfig.WeatherLoopDelay/60) .. " menit...")
+                    else
+                        print("[Auto Weather] Cycle selesai. Gagal / Cooldown. Menunggu " .. (MasterConfig.WeatherLoopDelay/60) .. " menit...")
+                    end
+                else
+                    warn("❌ [Auto Weather] Remote RF_PurchaseWeatherEvent tidak ditemukan!")
+                end
+                
+                task.wait(MasterConfig.WeatherLoopDelay)
+            else
+                task.wait(1) 
+            end
+        end
+    end)
+end
+
 
 -- ===============================
 -- GUI DASHBOARD (FULL SCREEN GRID LAYOUT)
@@ -890,7 +940,6 @@ function CreateDashboard()
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 0)
 
-    -- HELPER: Create Row Frame
     local function CreateRow(order)
         local row = Instance.new("Frame", gridContainer)
         row.Size = UDim2.new(1, 0, 0.23, 0) 
@@ -899,7 +948,6 @@ function CreateDashboard()
         return row
     end
 
-    -- HELPER: Create Column Label
     local function CreateCol(parent, text, posX)
         local lab = Instance.new("TextLabel", parent)
         lab.Size = UDim2.new(0.5, 0, 1, 0)
@@ -912,7 +960,6 @@ function CreateDashboard()
         return lab
     end
 
-    -- HELPER: Create Horizontal Line
     local function CreateLine()
         local line = Instance.new("Frame", gridContainer)
         line.Size = UDim2.new(1, 0, 0, 2)
@@ -922,7 +969,6 @@ function CreateDashboard()
         return line
     end
 
-    -- HELPER: Create Vertical Line
     local function CreateVLine(parent)
         local line = Instance.new("Frame", parent)
         line.Size = UDim2.new(0, 2, 1, 0)
@@ -932,43 +978,39 @@ function CreateDashboard()
         line.ZIndex = 2
     end
 
-    -- ROW 1: Location | Target
+    -- ROW 1
     local Row1 = CreateRow(1)
     local L_Mode = CreateCol(Row1, "...", 0)
     CreateVLine(Row1)
     local L_Target = CreateCol(Row1, "...", 0.5)
-    
     local Line1 = CreateLine()
     Line1.LayoutOrder = 2 
 
-    -- ROW 2: Caught | STATUS
+    -- ROW 2
     local Row2 = CreateRow(3)
     local L_Stats = CreateCol(Row2, "0", 0)
     CreateVLine(Row2)
     local L_Status = CreateCol(Row2, "Idle", 0.5)
     L_Status.TextColor3 = Color3.fromRGB(0, 255, 100)
-
     local Line2 = CreateLine()
     Line2.LayoutOrder = 4 
 
-    -- ROW 3: Secret | Gem
+    -- ROW 3
     local Row3 = CreateRow(5)
     local L_Secret = CreateCol(Row3, "0", 0)
     L_Secret.TextColor3 = Color3.fromRGB(255, 100, 255) 
     CreateVLine(Row3)
     local L_Gem = CreateCol(Row3, "0", 0.5)
     L_Gem.TextColor3 = Color3.fromRGB(255, 0, 0) 
-
     local Line3 = CreateLine()
     Line3.LayoutOrder = 6 
 
-    -- ROW 4: Totem Time | F/M
+    -- ROW 4
     local Row4 = CreateRow(7)
     local L_TotemTime = CreateCol(Row4, "T: --:--", 0)
     L_TotemTime.TextColor3 = Color3.fromRGB(255, 170, 0)
     CreateVLine(Row4)
     local L_FPM = CreateCol(Row4, "0.0 F/M", 0.5)
-
     local Line4 = CreateLine()
     Line4.LayoutOrder = 8
 
@@ -1013,7 +1055,7 @@ function CreateDashboard()
 end
 
 -- ===============================
--- NOTIFICATION LISTENER (MENGGUNAKAN ENCODED REMOTE)
+-- NOTIFICATION LISTENER
 -- ===============================
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
@@ -1110,21 +1152,21 @@ task.delay(10, function()
     
     -- Set auto sell threshold
     if RF_UpdateAutoSellThreshold then
-        pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) -- 6 = Mythic
+        pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) 
         print("✅ Auto sell threshold diset ke Mythic (encoded)")
     end
 
     ScanInventoryAndReport()
     StartMerchantAutoBuy()
+    StartAutoWeatherLoop() -- [TAMBAHAN] Memulai loop auto buy weather
     
     task.spawn(function() ToggleWalkOnWater(true) end)
     
     if MasterConfig.AutoTeleport then 
-        -- Memegang pancing sebelum teleportasi
         local char = lp.Character or lp.CharacterAdded:Wait()
-        if not char:FindFirstChildOfClass("Tool") and RF_EquipToolFromHotbar then  -- [UPDATED] Variable Name
-            pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  -- [UPDATED] Changed to InvokeServer
-            task.wait(1) -- Jeda sebentar agar server memproses equip item
+        if not char:FindFirstChildOfClass("Tool") and RF_EquipToolFromHotbar then  
+            pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end)  
+            task.wait(1) 
         end
         
         TeleportToFishingLocation() 
