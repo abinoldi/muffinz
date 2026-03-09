@@ -1,5 +1,5 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHS
 -- ======================================================
 
 local Services = {
@@ -251,14 +251,16 @@ end
 
 -- ======================================================
 -- 6. FASE 1: AUTO LEVER LOGIC (DENGAN DETEKSI CYCLIC SHIFT)
+--    (TIDAK MENGUBAH FUNGSI ASLI, HANYA MENAMBAHKAN)
 -- ======================================================
+
+-- DATA ARTIFACT (TETAP SAMA)
 local ArtifactData = {
     ["Hourglass Diamond Artifact"] = { 
         ItemName = "Hourglass Diamond Artifact",
         LeverName = "Hourglass Diamond Lever",
         ChildReference = 6, 
         CrystalPathSuffix = "Crystal", 
-        -- Warna target yang benar untuk Hourglass adalah KUNING
         TargetColor = Color3.fromRGB(255, 248, 49), 
         FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)},
         TargetPos = FishingAreas["Hourglass Diamond Lever"] 
@@ -268,7 +270,6 @@ local ArtifactData = {
         LeverName = "Diamond Lever",
         ChildReference = "TempleLever", 
         CrystalPathSuffix = "Crystal", 
-        -- Warna target yang benar untuk Diamond adalah UNGU
         TargetColor = Color3.fromRGB(219, 38, 255), 
         FishingPos = {Pos = Vector3.new(1844.159, 2.530, -288.755), Look = Vector3.new(0.981, 0.000, -0.193)},
         TargetPos = FishingAreas["Diamond Lever"] 
@@ -278,7 +279,6 @@ local ArtifactData = {
         LeverName = "Arrow Lever",
         ChildReference = 5, 
         CrystalPathSuffix = "Crystal", 
-        -- Warna target yang benar untuk Arrow adalah MERAH
         TargetColor = Color3.fromRGB(255, 47, 47), 
         FishingPos = {Pos = Vector3.new(874.365, 2.530, -358.484), Look = Vector3.new(-0.990, 0.000, 0.144)},
         TargetPos = FishingAreas["Arrow Lever"] 
@@ -288,7 +288,6 @@ local ArtifactData = {
         LeverName = "Crescent Lever",
         ChildReference = 4, 
         CrystalPathSuffix = "Crystal", 
-        -- Warna target yang benar untuk Crescent adalah HIJAU
         TargetColor = Color3.fromRGB(112, 255, 69), 
         FishingPos = {Pos = Vector3.new(1401.070, 6.489, 116.738), Look = Vector3.new(-0.500, -0.000, 0.866)},
         TargetPos = FishingAreas["Cresent Lever"] 
@@ -302,12 +301,20 @@ local ARTIFACT_IDS = {
     ["Hourglass Diamond Artifact"] = 271 
 }
 
--- MAPPING CYCLIC SHIFT: Mapping dari warna yang TERLIHAT ke artifact yang SEHARUSNYA terbuka
--- Berdasarkan data debug:
--- Ungu (219,38,255) ada di crystal Hourglass → Diamond yang terbuka
--- Merah (255,47,47) ada di crystal Diamond → Arrow yang terbuka
--- Kuning (255,248,49) ada di crystal Arrow → Hourglass yang terbuka
--- Hijau (112,255,69) ada di crystal Crescent → Crescent yang terbuka
+-- FUNGSI ASLI (JANGAN DIHAPUS/MODIFIKASI)
+local function OriginalIsLeverUnlocked(artifactName)
+    local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
+    if not JUNGLE then return false end
+    local data = ArtifactData[artifactName]
+    local folder = (type(data.ChildReference) == "string") and JUNGLE:FindFirstChild(data.ChildReference) or JUNGLE:GetChildren()[data.ChildReference]
+    if not folder then return false end
+    local crystal = folder:FindFirstChild(data.CrystalPathSuffix)
+    if not crystal or not crystal:IsA("BasePart") then return false end
+    local cC, tC = crystal.Color, data.TargetColor
+    return (math.abs(cC.R*255 - tC.R*255) < 1.1 and math.abs(cC.G*255 - tC.G*255) < 1.1 and math.abs(cC.B*255 - tC.B*255) < 1.1)
+end
+
+-- FUNGSI BARU UNTUK DETEKSI CYCLIC SHIFT (TAMBAHAN, TIDAK MENGGANTI YANG LAMA)
 local ColorMapping = {
     [string.format("%d,%d,%d", 219, 38, 255)] = "Diamond Artifact",           -- Ungu milik Diamond
     [string.format("%d,%d,%d", 255, 47, 47)] = "Arrow Artifact",               -- Merah milik Arrow
@@ -315,10 +322,8 @@ local ColorMapping = {
     [string.format("%d,%d,%d", 112, 255, 69)] = "Crescent Artifact",           -- Hijau milik Crescent
 }
 
--- Cache untuk menyimpan warna crystal yang terbaca
 local CrystalColorCache = {}
 
--- Fungsi untuk membaca warna semua crystal
 local function ScanCrystalColors()
     local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
     if not JUNGLE then return false end
@@ -328,7 +333,6 @@ local function ScanCrystalColors()
     for _, artifactName in ipairs(ArtifactOrder) do
         local data = ArtifactData[artifactName]
         
-        -- Cari folder lever
         local leverFolder = nil
         if type(data.ChildReference) == "string" then
             leverFolder = JUNGLE:FindFirstChild(data.ChildReference)
@@ -338,10 +342,8 @@ local function ScanCrystalColors()
         end
         
         if leverFolder then
-            -- Cari crystal
             local crystal = leverFolder:FindFirstChild(data.CrystalPathSuffix)
             
-            -- Coba cari di descendant
             if not crystal then
                 for _, child in ipairs(leverFolder:GetDescendants()) do
                     if child.Name == data.CrystalPathSuffix and child:IsA("BasePart") then
@@ -361,8 +363,6 @@ local function ScanCrystalColors()
                     r = r, g = g, b = b,
                     colorKey = string.format("%d,%d,%d", r, g, b)
                 }
-                
-                print(string.format("[WARNA] %s: R=%d G=%d B=%d", artifactName, r, g, b))
             end
         end
     end
@@ -370,7 +370,6 @@ local function ScanCrystalColors()
     return true
 end
 
--- Fungsi untuk menentukan lever mana yang terbuka berdasarkan cyclic shift
 local function GetUnlockedArtifacts()
     ScanCrystalColors()
     
@@ -380,50 +379,48 @@ local function GetUnlockedArtifacts()
         local mappedArtifact = ColorMapping[colorData.colorKey]
         
         if mappedArtifact then
-            print(string.format("[MAPPING] Warna %s (di %s) milik %s", 
-                colorData.colorKey, crystalLocation, mappedArtifact))
             unlockedArtifacts[mappedArtifact] = true
         else
-            -- Fallback ke metode lama jika tidak ada di mapping
-            print(string.format("[WARNING] Warna %s tidak dikenal dalam mapping", colorData.colorKey))
+            -- Fallback ke fungsi asli jika tidak ada di mapping
+            for _, artifactName in ipairs(ArtifactOrder) do
+                if OriginalIsLeverUnlocked(artifactName) then
+                    unlockedArtifacts[artifactName] = true
+                end
+            end
         end
     end
     
     return unlockedArtifacts
 end
 
--- Fungsi IsLeverUnlocked yang baru (menggunakan cyclic shift detection)
-local function IsLeverUnlocked(artifactName)
+-- FUNGSI BARU UNTUK CEK LEVER (MENGGUNAKAN DETEKSI CYCLIC SHIFT)
+local function IsLeverUnlockedCyclic(artifactName)
     local unlockedArtifacts = GetUnlockedArtifacts()
     return unlockedArtifacts[artifactName] == true
 end
 
--- Fungsi debug untuk melihat status semua lever
+-- FUNGSI DEBUG (AMAN, HANYA UNTUK INFORMASI)
 local function DebugLeverStatus()
-    print("\n--- [ DEBUG LEVER STATUS ] ---")
+    print("\n--- [ DEBUG LEVER STATUS (CYCLIC SHIFT DETECTION) ] ---")
     local unlockedArtifacts = GetUnlockedArtifacts()
     
     for _, artifactName in ipairs(ArtifactOrder) do
         local isUnlocked = unlockedArtifacts[artifactName] == true
+        local isOriginalUnlocked = OriginalIsLeverUnlocked(artifactName)
         local hasItem = HasArtifactItem(artifactName)
         
-        if isUnlocked then
-            print("✅ " .. artifactName .. " : TERBUKA" .. 
-                  (hasItem and " (Memiliki item)" or " (Tidak punya item - tapi lever sudah terbuka!)"))
-        else
-            print("❌ " .. artifactName .. " : TERTUTUP" .. 
-                  (hasItem and " (Memiliki item - siap pasang!)" or " (Belum punya item)"))
-        end
-    end
-    
-    -- Tampilkan mapping untuk referensi
-    print("\n--- [ COLOR MAPPING REFERENCE ] ---")
-    for colorKey, artifactName in pairs(ColorMapping) do
-        print(string.format("Warna %s → %s", colorKey, artifactName))
+        local statusIcon = isUnlocked and "✅" or "❌"
+        local originalIcon = isOriginalUnlocked and "✅" or "❌"
+        
+        print(string.format("%s %s | Original: %s | Item: %s", 
+            statusIcon, artifactName, 
+            originalIcon, 
+            hasItem and "✅" or "❌"))
     end
     print("------------------------------------\n")
 end
 
+-- FUNGSI HasArtifactItem (TETAP SAMA)
 local function HasArtifactItem(artifactName)
     -- Cek langsung ke tas fisik untuk kecepatan
     if lp.Character then
@@ -452,6 +449,7 @@ local function HasArtifactItem(artifactName)
     return hasItem
 end
 
+-- FUNGSI DoAutoLever YANG DIPERBAIKI (MENGGUNAKAN FUNGSI BARU)
 local function DoAutoLever()
     print("⏳ [FASE 1] Memulai Auto Lever Temple...")
     
@@ -473,7 +471,7 @@ local function DoAutoLever()
 
         if allUnlocked then
             print("✅ [Auto Lever] SEMUA LEVER SUDAH UNLOCKED!")
-            print("📊 Detail status lever:")
+            print("📊 Detail status lever (berdasarkan cyclic shift):")
             for _, artifactName in ipairs(ArtifactOrder) do
                 print("   ✅ " .. artifactName .. " : TERBUKA")
             end
@@ -509,7 +507,7 @@ local function DoAutoLever()
                     end
                 end
                 
-                task.wait(1.5) -- Beri jeda agar animasi memegang selesai
+                task.wait(1.5)
                 
                 print("🔧 [Auto Lever] Memasang Artifact: " .. artifactToProcess)
                 if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
