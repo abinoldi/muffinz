@@ -1,5 +1,5 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISHX
 -- [ DILENGKAPI DENGAN CYCLIC SHIFT DETECTION ]
 -- ======================================================
 
@@ -286,46 +286,33 @@ local ColorMapping = {
     [string.format("%d,%d,%d", 112, 255, 69)] = "Crescent Artifact",            -- Hijau
 }
 
--- FUNGSI BARU: Mengecek lever mana yang terbuka berdasarkan cyclic shift
+-- FUNGSI BARU: Mendeteksi Lever berdasarkan toleransi warna (Anti-Meleset)
 local function GetUnlockedArtifacts()
     local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
     local unlocked = {}
     if not JUNGLE then return unlocked end
 
-    for _, artifactName in ipairs(ArtifactOrder) do
-        local data = ArtifactData[artifactName]
-        local folder = nil
-        
-        if type(data.ChildReference) == "string" then
-            folder = JUNGLE:FindFirstChild(data.ChildReference)
-        elseif type(data.ChildReference) == "number" then
-            local children = JUNGLE:GetChildren()
-            folder = children[data.ChildReference]
-        end
-
-        if folder then
-            local crystal = folder:FindFirstChild(data.CrystalPathSuffix)
+    -- Cari semua part bernama "Crystal" di seluruh sudut JUNGLE INTERACTIONS
+    for _, desc in ipairs(JUNGLE:GetDescendants()) do
+        if desc.Name == "Crystal" and desc:IsA("BasePart") then
+            -- Ambil warna asli dari crystal
+            local r = desc.Color.R * 255
+            local g = desc.Color.G * 255
+            local b = desc.Color.B * 255
             
-            if not crystal then
-                for _, child in ipairs(folder:GetDescendants()) do
-                    if child.Name == data.CrystalPathSuffix and child:IsA("BasePart") then
-                        crystal = child
-                        break
-                    end
-                end
-            end
-
-            if crystal and crystal:IsA("BasePart") then
-                local color = crystal.Color
-                local r = math.floor(color.R * 255)
-                local g = math.floor(color.G * 255)
-                local b = math.floor(color.B * 255)
-                local colorKey = string.format("%d,%d,%d", r, g, b)
-
-                local mappedArtifact = ColorMapping[colorKey]
-                if mappedArtifact then
-                    unlocked[mappedArtifact] = true
-                end
+            -- Gunakan toleransi (selisih angka <= 4) agar pembulatan warna Roblox tidak bikin error
+            if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then
+                -- Warna Ungu -> Hourglass
+                unlocked["Hourglass Diamond Artifact"] = true
+            elseif math.abs(r - 255) <= 4 and math.abs(g - 47) <= 4 and math.abs(b - 47) <= 4 then
+                -- Warna Merah -> Diamond
+                unlocked["Diamond Artifact"] = true
+            elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then
+                -- Warna Kuning -> Arrow
+                unlocked["Arrow Artifact"] = true
+            elseif math.abs(r - 112) <= 4 and math.abs(g - 255) <= 4 and math.abs(b - 69) <= 4 then
+                -- Warna Hijau -> Crescent
+                unlocked["Crescent Artifact"] = true
             end
         end
     end
