@@ -1,6 +1,6 @@
 -- ======================================================
 -- STANDALONE ALL-IN-ONE: LEVER -> RUIN + SELL + FISH
--- [ CYCLIC SHIFT + Y-COORD CHECK + SMART FAVORITE + ENDGAME FISHING ]
+-- [ CYCLIC SHIFT + Y-COORD + HIERARCHY SMART FAVORITE + ENDGAME ]
 -- ======================================================
 
 local Services = {
@@ -20,7 +20,7 @@ print("=============================================\n")
 -- ======================================================
 _G.CurrentPhase = "Loading..."
 _G.CurrentAction = "Idle"
-_G.CurrentTargetFish = nil -- Smart Favorite Target
+_G.CurrentTargetFish = nil 
 _G.TotalFishCaught = 0
 _G.UnsoldFishCount = 0
 _G.LeverProgress = "0/4"
@@ -158,7 +158,7 @@ local function CreateDashboard()
                 elseif _G.IsAutoFishing then L_AutoFish.TextColor3 = Color3.fromRGB(0, 255, 100)
                 else L_AutoFish.TextColor3 = Color3.fromRGB(255, 50, 50) end
 
-                L_Target.Text = "Smart Target:\n" .. (_G.CurrentTargetFish or "Tidak Ada (Bebas)")
+                L_Target.Text = "Target Utama:\n" .. (_G.CurrentTargetFish or "Tidak Ada (Bebas)")
             end
         end
     end)
@@ -245,7 +245,37 @@ local function GetFishNameAndRarity(item)
 end
 
 -- ======================================================
--- 3. BACKGROUND TASKS (FISHING, SMART FAVORITE & SELL)
+-- 3. FUNGSI CEK STATUS PINTU & IKAN (Y-COORD CHECK)
+-- ======================================================
+local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
+local FishToRarity = {
+    ["Freshwater Piranha"] = "Rare",
+    ["Goliath Tiger"] = "Epic",
+    ["Sacred Guardian Squid"] = "Legendary",
+    ["Crocodile"] = "Mythic"
+}
+
+local function IsFishPlaced(itemName)
+    local ruinFolder = workspace:FindFirstChild("RUIN INTERACTIONS")
+    local platesFolder = ruinFolder and ruinFolder:FindFirstChild("PressurePlates")
+    if not platesFolder then return false end
+
+    local rarity = FishToRarity[itemName]
+    if not rarity then return false end
+
+    local plateModel = platesFolder:FindFirstChild(rarity)
+    if plateModel then
+        local movePart = plateModel:FindFirstChild("MOVE_PART")
+        local stepPlate = movePart and movePart:FindFirstChild("StepPlate")
+        if stepPlate and stepPlate.Position.Y < -541.1 then
+            return true
+        end
+    end
+    return false
+end
+
+-- ======================================================
+-- 4. BACKGROUND TASKS (FISHING, HIERARCHY FAVORITE & SELL)
 -- ======================================================
 local function StartAutoFishing()
     task.spawn(function()
@@ -285,21 +315,42 @@ end
 local AutoSellConfig = { Enabled = true, Threshold = 100 }
 
 local function StartBackgroundTasks()
-    -- SMART FAVORITE LOOP
+    -- HIERARCHY SMART FAVORITE LOOP
     task.spawn(function()
         while true do
-            -- Hanya favorite jika ada target spesifik dan Ruin belum terbuka
-            if _G.CurrentTargetFish and _G.RuinStatusStr ~= "UNLOCKED" and PlayerData and RE_FavoriteItem then
+            if _G.RuinStatusStr ~= "UNLOCKED" and PlayerData and RE_FavoriteItem then
                 pcall(function()
                     local inv = PlayerData:Get("Inventory")
+                    
+                    local alreadyFavorited = {
+                        ["Freshwater Piranha"] = false, 
+                        ["Goliath Tiger"] = false, 
+                        ["Sacred Guardian Squid"] = false, 
+                        ["Crocodile"] = false
+                    }
+                    
+                    -- SCAN 1: Tandai ikan mana saja yang sudah ada status Favorite di tas
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
-                            if item.UUID then
-                                local itemName = GetFishNameAndRarity(item)
-                                -- Hanya favorite ikan yang SEKARANG jadi target
-                                if itemName == _G.CurrentTargetFish and not (item.IsFavorite or item.Favorited or item.Locked) then
+                            local itemName = GetFishNameAndRarity(item)
+                            if FishToRarity[itemName] and (item.IsFavorite or item.Favorited or item.Locked) then
+                                alreadyFavorited[itemName] = true
+                            end
+                        end
+                    end
+                    
+                    -- SCAN 2: Terapkan logika Hierarki (Kunci SEMUA ikan yang belum terpasang di Ruin)
+                    for _, items in pairs(inv) do
+                        for _, item in ipairs(items) do
+                            local itemName = GetFishNameAndRarity(item)
+                            
+                            -- Jika ikan ini adalah bahan Ruin DAN platnya belum tertekan (berarti masih butuh)
+                            if FishToRarity[itemName] and not IsFishPlaced(itemName) then
+                                -- Dan kalau kita belum memfavoritekan 1 copy ikan jenis ini
+                                if not alreadyFavorited[itemName] then
                                     RE_FavoriteItem:FireServer(item.UUID)
-                                    print("⭐ [Smart Favorite] Mengamankan target: " .. itemName)
+                                    alreadyFavorited[itemName] = true 
+                                    print("⭐ [Smart Favorite] Mengamankan (Hierarki): " .. itemName)
                                 end
                             end
                         end
@@ -334,7 +385,7 @@ local function StartBackgroundTasks()
 end
 
 -- ======================================================
--- 4. FASE 1: AUTO LEVER (CYCLIC SHIFT COLOR DETECTION)
+-- 5. FASE 1: AUTO LEVER (CYCLIC SHIFT COLOR DETECTION)
 -- ======================================================
 local ArtifactData = {
     ["Hourglass Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)}, TargetPos = FishingAreas["Hourglass Diamond Lever"] },
@@ -456,16 +507,8 @@ local function DoAutoLever()
 end
 
 -- ======================================================
--- 5. FASE 2: AUTO RUIN DOOR LOGIC (Y-COORD CHECK)
+-- 6. FASE 2: AUTO RUIN DOOR LOGIC
 -- ======================================================
-local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
-local FishToRarity = {
-    ["Freshwater Piranha"] = "Rare",
-    ["Goliath Tiger"] = "Epic",
-    ["Sacred Guardian Squid"] = "Legendary",
-    ["Crocodile"] = "Mythic"
-}
-
 local function GetRuinDoorStatus()
     local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
     local status = "LOCKED"
@@ -494,26 +537,6 @@ local function IsItemAvailable(itemName)
         end
     end)
     return hasItem
-end
-
-local function IsFishPlaced(itemName)
-    local ruinFolder = workspace:FindFirstChild("RUIN INTERACTIONS")
-    local platesFolder = ruinFolder and ruinFolder:FindFirstChild("PressurePlates")
-    if not platesFolder then return false end
-
-    local rarity = FishToRarity[itemName]
-    if not rarity then return false end
-
-    local plateModel = platesFolder:FindFirstChild(rarity)
-    if plateModel then
-        local movePart = plateModel:FindFirstChild("MOVE_PART")
-        local stepPlate = movePart and movePart:FindFirstChild("StepPlate")
-        
-        if stepPlate and stepPlate.Position.Y < -541.1 then
-            return true
-        end
-    end
-    return false
 end
 
 local function GetMissingItem()
@@ -549,11 +572,11 @@ local function DoAutoRuin()
         if doorStatus == "UNLOCKED" then
             _G.CurrentAction = "Ruin Door Terbuka!"
             runningRuin = false
-            break -- Selesai fase Ruin, meluncur ke fase abadi
+            break -- Lanjut ke END-GAME
         end
 
         local missingItem = GetMissingItem()
-        _G.CurrentTargetFish = missingItem -- Sinkronisasi ke sistem Smart Favorite
+        _G.CurrentTargetFish = missingItem -- Update Target di GUI
 
         local char = lp.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -580,7 +603,7 @@ local function DoAutoRuin()
 end
 
 -- ======================================================
--- 6. EXECUTION (WORKFLOW & END-GAME)
+-- 7. EXECUTION (WORKFLOW & END-GAME)
 -- ======================================================
 pcall(function()
     local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController)
