@@ -1,6 +1,6 @@
 -- ======================================================
--- STANDALONE ALL-IN-ONE: LEVER -> RUIN + FAVORITE + SELL + FISH
--- [ CYCLIC SHIFT DETECTION + GUI DASHBOARD ]
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + SELL + FISH
+-- [ CYCLIC SHIFT + Y-COORD CHECK + SMART FAVORITE + ENDGAME FISHING ]
 -- ======================================================
 
 local Services = {
@@ -16,10 +16,11 @@ print("🚀 [SynceHub] Script Ultimate Dimulai!")
 print("=============================================\n")
 
 -- ======================================================
--- 0. VARIABEL TRACKING UNTUK GUI
+-- 0. VARIABEL TRACKING UNTUK GUI & LOGIKA
 -- ======================================================
 _G.CurrentPhase = "Loading..."
 _G.CurrentAction = "Idle"
+_G.CurrentTargetFish = nil -- Smart Favorite Target
 _G.TotalFishCaught = 0
 _G.UnsoldFishCount = 0
 _G.LeverProgress = "0/4"
@@ -36,14 +37,12 @@ local function CreateDashboard()
     gui.Name = "SynceHubDashboard"
     gui.IgnoreGuiInset = true
 
-    -- Full Screen Background
     local dashboard = Instance.new("Frame", gui)
     dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     dashboard.BorderSizePixel = 0
     dashboard.Visible = true
 
-    -- Toggle Button
     local toggleBtn = Instance.new("TextButton", gui)
     toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
     toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
@@ -59,14 +58,9 @@ local function CreateDashboard()
     toggleBtn.MouseButton1Click:Connect(function() 
         isGuiOpen = not isGuiOpen
         dashboard.Visible = isGuiOpen 
-        if not isGuiOpen then
-            toggleBtn.BackgroundTransparency = 0.5
-        else
-            toggleBtn.BackgroundTransparency = 0
-        end
+        toggleBtn.BackgroundTransparency = isGuiOpen and 0 or 0.5
     end)
 
-    -- CONTAINER
     local gridContainer = Instance.new("Frame", dashboard)
     gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0)
     gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -115,7 +109,6 @@ local function CreateDashboard()
         line.ZIndex = 2
     end
 
-    -- ROW 1 (Fase & Aksi)
     local Row1 = CreateRow(1)
     local L_Phase = CreateCol(Row1, "Fase:\n...", 0)
     L_Phase.TextColor3 = Color3.fromRGB(0, 255, 255)
@@ -125,7 +118,6 @@ local function CreateDashboard()
     local Line1 = CreateLine()
     Line1.LayoutOrder = 2 
 
-    -- ROW 2 (Status Lever & Ruin)
     local Row2 = CreateRow(3)
     local L_Levers = CreateCol(Row2, "Lever Terbuka:\n0/4", 0)
     CreateVLine(Row2)
@@ -133,7 +125,6 @@ local function CreateDashboard()
     local Line2 = CreateLine()
     Line2.LayoutOrder = 4 
 
-    -- ROW 3 (Statistik Ikan)
     local Row3 = CreateRow(5)
     local L_Caught = CreateCol(Row3, "Total Tangkapan:\n0", 0)
     CreateVLine(Row3)
@@ -141,14 +132,12 @@ local function CreateDashboard()
     local Line3 = CreateLine()
     Line3.LayoutOrder = 6 
 
-    -- ROW 4 (Sistem Utama)
     local Row4 = CreateRow(7)
     local L_AutoFish = CreateCol(Row4, "Auto Fishing:\nON", 0)
-    L_AutoFish.TextColor3 = Color3.fromRGB(0, 255, 100)
     CreateVLine(Row4)
-    local L_Target = CreateCol(Row4, "Target:\nNone", 0.5)
+    local L_Target = CreateCol(Row4, "Smart Target:\nNone", 0.5)
+    L_Target.TextColor3 = Color3.fromRGB(255, 150, 255)
 
-    -- Update Loop GUI
     task.spawn(function()
         while task.wait(0.2) do
             if dashboard.Visible then
@@ -156,10 +145,10 @@ local function CreateDashboard()
                 L_Action.Text = "Status Aksi:\n" .. _G.CurrentAction
                 
                 L_Levers.Text = "Lever Terbuka:\n" .. _G.LeverProgress
-                if _G.LeverProgress == "4/4" then L_Levers.TextColor3 = Color3.fromRGB(0, 255, 100) else L_Levers.TextColor3 = Color3.new(1,1,1) end
+                L_Levers.TextColor3 = (_G.LeverProgress == "4/4") and Color3.fromRGB(0, 255, 100) or Color3.new(1,1,1)
                 
                 L_Ruin.Text = "Ruin Door:\n" .. _G.RuinStatusStr
-                if _G.RuinStatusStr == "UNLOCKED" then L_Ruin.TextColor3 = Color3.fromRGB(0, 255, 100) else L_Ruin.TextColor3 = Color3.fromRGB(255, 50, 50) end
+                L_Ruin.TextColor3 = (_G.RuinStatusStr == "UNLOCKED") and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
                 
                 L_Caught.Text = "Total Tangkapan:\n" .. tostring(_G.TotalFishCaught)
                 L_Unsold.Text = "Ikan Belum Dijual:\n" .. tostring(_G.UnsoldFishCount)
@@ -168,6 +157,8 @@ local function CreateDashboard()
                 if _G.PauseFishing then L_AutoFish.TextColor3 = Color3.fromRGB(255, 170, 0)
                 elseif _G.IsAutoFishing then L_AutoFish.TextColor3 = Color3.fromRGB(0, 255, 100)
                 else L_AutoFish.TextColor3 = Color3.fromRGB(255, 50, 50) end
+
+                L_Target.Text = "Smart Target:\n" .. (_G.CurrentTargetFish or "Tidak Ada (Bebas)")
             end
         end
     end)
@@ -254,7 +245,7 @@ local function GetFishNameAndRarity(item)
 end
 
 -- ======================================================
--- 3. BACKGROUND TASKS (FISHING, SELL, FAVORITE)
+-- 3. BACKGROUND TASKS (FISHING, SMART FAVORITE & SELL)
 -- ======================================================
 local function StartAutoFishing()
     task.spawn(function()
@@ -291,28 +282,31 @@ local function StartAutoFishing()
     end)
 end
 
-local RuinItemsToFavorite = { ["Freshwater Piranha"] = true, ["Goliath Tiger"] = true, ["Sacred Guardian Squid"] = true, ["Crocodile"] = true }
 local AutoSellConfig = { Enabled = true, Threshold = 100 }
 
 local function StartBackgroundTasks()
+    -- SMART FAVORITE LOOP
     task.spawn(function()
         while true do
-            if PlayerData and RE_FavoriteItem then
+            -- Hanya favorite jika ada target spesifik dan Ruin belum terbuka
+            if _G.CurrentTargetFish and _G.RuinStatusStr ~= "UNLOCKED" and PlayerData and RE_FavoriteItem then
                 pcall(function()
                     local inv = PlayerData:Get("Inventory")
                     for _, items in pairs(inv) do
                         for _, item in ipairs(items) do
                             if item.UUID then
                                 local itemName = GetFishNameAndRarity(item)
-                                if RuinItemsToFavorite[itemName] and not (item.IsFavorite or item.Favorited or item.Locked) then
+                                -- Hanya favorite ikan yang SEKARANG jadi target
+                                if itemName == _G.CurrentTargetFish and not (item.IsFavorite or item.Favorited or item.Locked) then
                                     RE_FavoriteItem:FireServer(item.UUID)
+                                    print("⭐ [Smart Favorite] Mengamankan target: " .. itemName)
                                 end
                             end
                         end
                     end
                 end)
             end
-            task.wait(3)
+            task.wait(2.5)
         end
     end)
 
@@ -323,12 +317,16 @@ local function StartBackgroundTasks()
         end)
     end
 
+    -- AUTO SELL LOOP
     task.spawn(function()
         while AutoSellConfig.Enabled do
             if _G.UnsoldFishCount >= AutoSellConfig.Threshold and RF_SellAllItems then
+                local prevAction = _G.CurrentAction
                 _G.CurrentAction = "Menjual Ikan (Auto Sell)"
                 pcall(function() RF_SellAllItems:InvokeServer() end)
                 _G.UnsoldFishCount = 0
+                task.wait(1.5)
+                _G.CurrentAction = prevAction
             end
             task.wait(1)
         end
@@ -336,7 +334,7 @@ local function StartBackgroundTasks()
 end
 
 -- ======================================================
--- 4. FASE 1: AUTO LEVER (DENGAN TOLERANSI WARNA)
+-- 4. FASE 1: AUTO LEVER (CYCLIC SHIFT COLOR DETECTION)
 -- ======================================================
 local ArtifactData = {
     ["Hourglass Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)}, TargetPos = FishingAreas["Hourglass Diamond Lever"] },
@@ -458,9 +456,15 @@ local function DoAutoLever()
 end
 
 -- ======================================================
--- 5. FASE 2: AUTO RUIN DOOR LOGIC
+-- 5. FASE 2: AUTO RUIN DOOR LOGIC (Y-COORD CHECK)
 -- ======================================================
 local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
+local FishToRarity = {
+    ["Freshwater Piranha"] = "Rare",
+    ["Goliath Tiger"] = "Epic",
+    ["Sacred Guardian Squid"] = "Legendary",
+    ["Crocodile"] = "Mythic"
+}
 
 local function GetRuinDoorStatus()
     local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
@@ -492,9 +496,31 @@ local function IsItemAvailable(itemName)
     return hasItem
 end
 
+local function IsFishPlaced(itemName)
+    local ruinFolder = workspace:FindFirstChild("RUIN INTERACTIONS")
+    local platesFolder = ruinFolder and ruinFolder:FindFirstChild("PressurePlates")
+    if not platesFolder then return false end
+
+    local rarity = FishToRarity[itemName]
+    if not rarity then return false end
+
+    local plateModel = platesFolder:FindFirstChild(rarity)
+    if plateModel then
+        local movePart = plateModel:FindFirstChild("MOVE_PART")
+        local stepPlate = movePart and movePart:FindFirstChild("StepPlate")
+        
+        if stepPlate and stepPlate.Position.Y < -541.1 then
+            return true
+        end
+    end
+    return false
+end
+
 local function GetMissingItem()
     for _, name in ipairs(ITEM_FISH_NAMES) do
-        if not IsItemAvailable(name) then return name end
+        if not IsFishPlaced(name) and not IsItemAvailable(name) then 
+            return name 
+        end
     end
     return nil
 end
@@ -507,11 +533,14 @@ local function DoAutoRuin()
         while runningRuin do
             if GetRuinDoorStatus() == "LOCKED" and RE_PlacePressureItem then
                 for _, name in ipairs(ITEM_FISH_NAMES) do
-                    task.wait(2.1)
-                    FireRemote(RE_PlacePressureItem, name)
+                    if IsItemAvailable(name) and not IsFishPlaced(name) then
+                        _G.CurrentAction = "Memasang: " .. name
+                        FireRemote(RE_PlacePressureItem, name)
+                        task.wait(2.1)
+                    end
                 end
             end
-            task.wait(5)
+            task.wait(3)
         end
     end)
 
@@ -520,11 +549,12 @@ local function DoAutoRuin()
         if doorStatus == "UNLOCKED" then
             _G.CurrentAction = "Ruin Door Terbuka!"
             runningRuin = false
-            _G.IsAutoFishing = false
-            break
+            break -- Selesai fase Ruin, meluncur ke fase abadi
         end
 
         local missingItem = GetMissingItem()
+        _G.CurrentTargetFish = missingItem -- Sinkronisasi ke sistem Smart Favorite
+
         local char = lp.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
@@ -537,7 +567,7 @@ local function DoAutoRuin()
             end
             task.wait(1) 
         else
-            _G.CurrentAction = "Menuju Pintu Ruin..."
+            _G.CurrentAction = "Menunggu Pintu Ruin..."
             _G.PauseFishing = true 
             task.wait(0.5)
             if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
@@ -550,7 +580,7 @@ local function DoAutoRuin()
 end
 
 -- ======================================================
--- 6. EXECUTION (WORKFLOW)
+-- 6. EXECUTION (WORKFLOW & END-GAME)
 -- ======================================================
 pcall(function()
     local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController)
@@ -565,6 +595,18 @@ StartBackgroundTasks()
 DoAutoLever()             
 DoAutoRuin()              
 
-_G.CurrentPhase = "Selesai"
-_G.CurrentAction = "Semua Tugas Tuntas!"
-print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI!")
+-- END-GAME: Memancing Abadi di Ancient Ruin
+_G.CurrentPhase = "END-GAME"
+_G.CurrentAction = "Memancing Abadi di Ancient Ruin..."
+_G.CurrentTargetFish = nil -- Berhenti mem-favorite apapun
+
+local char = lp.Character
+local hrp = char and char:FindFirstChild("HumanoidRootPart")
+if hrp then
+    TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
+end
+
+_G.PauseFishing = false
+_G.IsAutoFishing = true
+
+print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI! Farming abadi dimulai.")
