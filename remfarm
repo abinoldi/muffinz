@@ -3,7 +3,7 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID)
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: Retry Limit (3x), Color Fix & Auto Trade Evolved Enchant Stone
+-- UPDATE: GUI Fixed, Retry Limit (3x), Color Fix & Auto Trade Evolved Enchant Stone
 -- ======================================================
 
 local Services = {
@@ -92,13 +92,9 @@ local RE_PlaceLeverItem = GetRemote("RE/PlaceLeverItem")
 local RE_PlacePressureItem = GetRemote("RE/PlacePressureItem")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
-local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
-local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
-local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
-local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -143,13 +139,32 @@ local function TeleportToLookAt(position, lookVector)
 end
 
 local FishingLocations = {
+    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
+    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
+    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
+    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
     ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
+    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
+    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
     ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
+    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
     ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
     ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
+    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
     ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
+    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
     ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
+    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
     ["Treasure Room"] = {Pos = Vector3.new(-3561.297, -279.074, -1606.289), Look = Vector3.new(-0.782, -0.000, -0.623)},
+    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
+    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
+    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
+    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
+    ["Crystal Depth"] = {Pos = Vector3.new(5748.393, -904.818, 15390.896),  Look = Vector3.new(-0.995, 0.000, -0.103)},
 }
 
 -- ======================================================
@@ -176,31 +191,127 @@ local function CreateDashboardLVCB()
     local dashboard = Instance.new("Frame", gui)
     dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    dashboard.BorderSizePixel = 0
     dashboard.Visible = true
 
-    local L_Phase = Instance.new("TextLabel", dashboard)
-    L_Phase.Size = UDim2.new(1, 0, 0.1, 0)
-    L_Phase.Position = UDim2.new(0, 0, 0.1, 0)
-    L_Phase.BackgroundTransparency = 1
-    L_Phase.TextColor3 = Color3.new(1,1,1)
-    L_Phase.Font = Enum.Font.GothamBold
-    L_Phase.TextScaled = true
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "Tutup / Buka GUI"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    toggleBtn.ZIndex = 999 
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    
+    local isGuiOpen = true
+    toggleBtn.MouseButton1Click:Connect(function() 
+        isGuiOpen = not isGuiOpen
+        dashboard.Visible = isGuiOpen 
+        toggleBtn.BackgroundTransparency = isGuiOpen and 0 or 0.5
+    end)
 
-    local L_Action = L_Phase:Clone()
-    L_Action.Parent = dashboard
-    L_Action.Position = UDim2.new(0, 0, 0.3, 0)
+    local gridContainer = Instance.new("Frame", dashboard)
+    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0)
+    gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+    gridContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+    gridContainer.BackgroundTransparency = 1
+    
+    local layout = Instance.new("UIListLayout", gridContainer)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 0)
+
+    local function CreateRow(order)
+        local row = Instance.new("Frame", gridContainer)
+        row.Size = UDim2.new(1, 0, 0.23, 0) 
+        row.BackgroundTransparency = 1
+        row.LayoutOrder = order
+        return row
+    end
+
+    local function CreateCol(parent, text, posX)
+        local lab = Instance.new("TextLabel", parent)
+        lab.Size = UDim2.new(0.5, 0, 1, 0)
+        lab.Position = UDim2.new(posX, 0, 0, 0)
+        lab.BackgroundTransparency = 1
+        lab.Text = text
+        lab.TextColor3 = Color3.new(1,1,1)
+        lab.Font = Enum.Font.GothamBold
+        lab.TextScaled = true
+        return lab
+    end
+
+    local function CreateLine()
+        local line = Instance.new("Frame", gridContainer)
+        line.Size = UDim2.new(1, 0, 0, 2)
+        line.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        line.BorderSizePixel = 0
+        line.LayoutOrder = 99 
+        return line
+    end
+
+    local function CreateVLine(parent)
+        local line = Instance.new("Frame", parent)
+        line.Size = UDim2.new(0, 2, 1, 0)
+        line.Position = UDim2.new(0.5, 0, 0, 0)
+        line.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        line.BorderSizePixel = 0
+        line.ZIndex = 2
+    end
+
+    local Row1 = CreateRow(1)
+    local L_Phase = CreateCol(Row1, "Fase:\n...", 0)
+    L_Phase.TextColor3 = Color3.fromRGB(0, 255, 255)
+    CreateVLine(Row1)
+    local L_Action = CreateCol(Row1, "Aksi:\n...", 0.5)
     L_Action.TextColor3 = Color3.fromRGB(255, 255, 100)
+    local Line1 = CreateLine()
+    Line1.LayoutOrder = 2 
 
-    local L_Ruin = L_Phase:Clone()
-    L_Ruin.Parent = dashboard
-    L_Ruin.Position = UDim2.new(0, 0, 0.5, 0)
+    local Row2 = CreateRow(3)
+    local L_Levers = CreateCol(Row2, "Lever Terbuka:\n0/4", 0)
+    CreateVLine(Row2)
+    local L_Ruin = CreateCol(Row2, "Ruin Door:\nLocked", 0.5)
+    local Line2 = CreateLine()
+    Line2.LayoutOrder = 4 
+
+    local Row3 = CreateRow(5)
+    local L_Caught = CreateCol(Row3, "Total Tangkapan:\n0", 0)
+    CreateVLine(Row3)
+    local L_Unsold = CreateCol(Row3, "Ikan Belum Dijual:\n0", 0.5)
+    local Line3 = CreateLine()
+    Line3.LayoutOrder = 6 
+
+    local Row4 = CreateRow(7)
+    local L_AutoFish = CreateCol(Row4, "Auto Fishing:\nON", 0)
+    CreateVLine(Row4)
+    local L_Target = CreateCol(Row4, "Smart Target:\nNone", 0.5)
+    L_Target.TextColor3 = Color3.fromRGB(255, 150, 255)
 
     task.spawn(function()
-        while dashboard.Parent and task.wait(0.2) do
-            L_Phase.Text = "Fase Saat Ini:\n" .. _G.CurrentPhase
-            L_Action.Text = "Status Aksi:\n" .. _G.CurrentAction
-            L_Ruin.Text = "Ruin Door:\n" .. _G.RuinStatusStr
-            L_Ruin.TextColor3 = (_G.RuinStatusStr == "UNLOCKED") and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+        while task.wait(0.2) do
+            if dashboard.Visible then
+                L_Phase.Text = "Fase Saat Ini:\n" .. _G.CurrentPhase
+                L_Action.Text = "Status Aksi:\n" .. _G.CurrentAction
+                
+                L_Levers.Text = "Lever Terbuka:\n" .. _G.LeverProgress
+                L_Levers.TextColor3 = (_G.LeverProgress == "4/4") and Color3.fromRGB(0, 255, 100) or Color3.new(1,1,1)
+                
+                L_Ruin.Text = "Ruin Door:\n" .. _G.RuinStatusStr
+                L_Ruin.TextColor3 = (_G.RuinStatusStr == "UNLOCKED") and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+                
+                L_Caught.Text = "Total Tangkapan:\n" .. tostring(_G.TotalFishCaught)
+                L_Unsold.Text = "Ikan Belum Dijual:\n" .. tostring(_G.UnsoldFishCount)
+                
+                L_AutoFish.Text = "Auto Fishing:\n" .. (_G.IsAutoFishing and (_G.PauseFishing and "PAUSED" or "ACTIVE") or "OFF")
+                if _G.PauseFishing then L_AutoFish.TextColor3 = Color3.fromRGB(255, 170, 0)
+                elseif _G.IsAutoFishing then L_AutoFish.TextColor3 = Color3.fromRGB(0, 255, 100)
+                else L_AutoFish.TextColor3 = Color3.fromRGB(255, 50, 50) end
+
+                L_Target.Text = "Target Utama:\n" .. (_G.CurrentTargetFish or "Tidak Ada (Bebas)")
+            end
         end
     end)
 end
@@ -595,6 +706,23 @@ local function CreateDashboardRemfarm()
     dashboard.Size = UDim2.fromScale(1, 1)
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     dashboard.Visible = true
+
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "Tutup / Buka GUI (Remfarm)"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    toggleBtn.ZIndex = 999 
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    
+    toggleBtn.MouseButton1Click:Connect(function() 
+        dashboard.Visible = not dashboard.Visible 
+        toggleBtn.BackgroundTransparency = dashboard.Visible and 0 or 0.5
+    end)
 
     local L_Status = Instance.new("TextLabel", dashboard)
     L_Status.Size = UDim2.new(1, 0, 0.2, 0)
