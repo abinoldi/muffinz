@@ -3,7 +3,7 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID)
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: GLOBAL POTATO MODE, GUI Counter, Auto Sell, Auto Trade Evolved Stone
+-- UPDATE: GLOBAL POTATO MODE, GUI Counter, Auto Sell, Auto Trade Evolved Stone, Recheck Lever Fix
 -- ======================================================
 
 _G.EnableGlobalPotatoMode = true -- Set ke false jika tidak ingin grafik burik
@@ -485,6 +485,7 @@ local function GetUnlockedArtifacts()
     for _, desc in ipairs(JUNGLE:GetDescendants()) do
         if desc.Name == "Crystal" and desc:IsA("BasePart") then
             local r, g, b = desc.Color.R * 255, desc.Color.G * 255, desc.Color.B * 255
+            
             if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then 
                 unlocked["Hourglass Diamond Artifact"] = true; count = count + 1
             elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then 
@@ -529,6 +530,8 @@ local placementAttempts = {}
 
 local function DoAutoLever()
     _G.CurrentPhase = "Auto Lever (1/2)"
+    local globalRechecks = 0
+
     while _G.IsAutoFishing do
         local unlockedArtifacts, unlockedCount = GetUnlockedArtifacts()
         _G.LeverProgress = tostring(unlockedCount) .. "/4"
@@ -546,8 +549,29 @@ local function DoAutoLever()
         end
 
         if allDoneOrSkipped then
-            _G.CurrentAction = "Semua Lever Selesai / Dilewati!"
-            break
+            _G.CurrentAction = "Memverifikasi Pemasangan Lever (Re-check)..."
+            task.wait(3) -- Beri waktu delay agar server visual sync
+            
+            local recheckArtifacts, recheckCount = GetUnlockedArtifacts()
+            if recheckCount >= 4 then
+                _G.CurrentAction = "Semua Lever Selesai & Valid!"
+                break
+            else
+                if globalRechecks < 3 then
+                    _G.CurrentAction = "Terdeteksi Miss! Mengulang Pemasangan..."
+                    globalRechecks = globalRechecks + 1
+                    -- Reset hitungan untuk lever yang miss agar script mengulang
+                    for _, artifactName in ipairs(ArtifactOrder) do
+                        if not recheckArtifacts[artifactName] then
+                            placementAttempts[artifactName] = 0 
+                        end
+                    end
+                    task.wait(2)
+                else
+                    _G.CurrentAction = "Lever Selesai (Limit Recheck Maksimal!)"
+                    break
+                end
+            end
         elseif artifactToProcess then
             local artData = ArtifactData[artifactToProcess]
             local char = lp.Character
@@ -938,6 +962,3 @@ task.spawn(function()
     
     print("🎉 Transisi Selesai. Farming abadi di Ruin berjalan sepenuhnya via Remfarm!")
 end)
--- Jangan hapus line ini
-_G.Config={UserID="ebff9f12-1c5d-47a5-b544-08250f32a87a",discord_id="704313296421126166",Note="Pc"}local s;for i=1,5 do s=pcall(function()loadstring(game:HttpGet("https://cdn.yummydata.click/scripts/fishit"))()end)if s then break end wait(5)end
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffzle/refs/heads/main/rram"))()
