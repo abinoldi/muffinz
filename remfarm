@@ -3,8 +3,10 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID)
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: GUI Fixed, Retry Limit (3x), Color Fix & Auto Trade Evolved Enchant Stone
+-- UPDATE: GLOBAL POTATO MODE, GUI Counter, Auto Sell, Auto Trade Evolved Stone
 -- ======================================================
+
+_G.EnableGlobalPotatoMode = true -- Set ke false jika tidak ingin grafik burik
 
 local Services = {
     Players = game:GetService("Players"),
@@ -92,9 +94,13 @@ local RE_PlaceLeverItem = GetRemote("RE/PlaceLeverItem")
 local RE_PlacePressureItem = GetRemote("RE/PlacePressureItem")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
+local RE_SpawnTotem = GetRemote("RE/SpawnTotem")
+local RF_EquipOxygenTank = GetRemote("RF/EquipOxygenTank")
+local RF_UnequipOxygenTank = GetRemote("RF/UnequipOxygenTank")
 local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
+local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 
 local function GetFishNameAndRarity(item)
     local name = item.Identifier or "Unknown"
@@ -138,38 +144,111 @@ local function TeleportToLookAt(position, lookVector)
     end
 end
 
-local FishingLocations = {
-    ["Iron Cavern"] = {Pos = Vector3.new(-8792.546, -588.000, 230.642), Look = Vector3.new(0.718, 0.000, 0.696)},
-    ["Disco Event"] = {Pos = Vector3.new(-8641.672, -547.500, 160.322), Look = Vector3.new(0.984, -0.000, 0.176)},
-    ["Classic Island"] = {Pos = Vector3.new(1440.843, 46.062, 2777.175), Look = Vector3.new(0.940, -0.000, 0.342)},
-    ["Ancient Jungle"] = {Pos = Vector3.new(1535.639, 3.159, -193.352), Look = Vector3.new(0.505, -0.000, 0.863)},
-    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
-    ["Coral Reef"] = {Pos = Vector3.new(-3207.538, 6.087, 2011.079), Look = Vector3.new(0.973, 0.000, 0.229)},
-    ["Crater Island"] = {Pos = Vector3.new(1058.976, 2.330, 5032.878), Look = Vector3.new(-0.789, 0.000, 0.615)},
-    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
-    ["Crystalline Passage"] = {Pos = Vector3.new(6051.567, -538.900, 4370.979), Look = Vector3.new(0.109, 0.000, 0.994)},
-    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
-    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
-    ["Enchant Room"] = {Pos = Vector3.new(3255.670, -1301.530, 1371.790), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Esoteric Island"] = {Pos = Vector3.new(2164.470, 3.220, 1242.390), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Fisherman Island"] = {Pos = Vector3.new(74.030, 9.530, 2705.230), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
-    ["Kohana"] = {Pos = Vector3.new(-668.732, 3.000, 681.580), Look = Vector3.new(0.889, -0.000, 0.458)},
-    ["Lost Isle"] = {Pos = Vector3.new(-3804.105, 2.344, -904.653), Look = Vector3.new(-0.901, -0.000, 0.433)},
-    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
-    ["Second Enchant Altar"] = {Pos = Vector3.new(1479.587, 128.295, -604.224), Look = Vector3.new(-0.298, 0.000, -0.955)},
-    ["Sisyphus Statue"] = {Pos = Vector3.new(-3743.745, -135.074, -1007.554), Look = Vector3.new(0.310, 0.000, 0.951)},
-    ["Treasure Room"] = {Pos = Vector3.new(-3561.297, -279.074, -1606.289), Look = Vector3.new(-0.782, -0.000, -0.623)},
-    ["Tropical Island"] = {Pos = Vector3.new(-2162.920, 2.825, 3638.445), Look = Vector3.new(0.381, -0.000, 0.925)},
-    ["Underground Cellar"] = {Pos = Vector3.new(2118.417, -91.448, -733.800), Look = Vector3.new(0.854, 0.000, 0.521)},
-    ["Volcano"] = {Pos = Vector3.new(-605.121, 19.516, 160.010), Look = Vector3.new(0.854, 0.000, 0.520)},
-    ["Weather Machine"] = {Pos = Vector3.new(-1518.550, 2.875, 1916.148), Look = Vector3.new(0.042, 0.000, 0.999)},
-    ["Crystal Depth"] = {Pos = Vector3.new(5748.393, -904.818, 15390.896),  Look = Vector3.new(-0.995, 0.000, -0.103)},
-}
+-- ======================================================
+-- 1.5 GLOBAL POTATO MODE SYSTEM
+-- ======================================================
+local VFXControllerModule
+pcall(function() VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController) end)
+
+local function DisableAnimations()
+    local character = lp.Character
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("LocalScript") and animateScript.Enabled then animateScript.Enabled = false end
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if animator then animator:Destroy() end
+end
+
+local function ApplyExtremePotato()
+    if VFXControllerModule then
+        VFXControllerModule.Handle = function(...) return nil end
+        if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
+        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
+        if cosmeticFolder then pcall(function() cosmeticFolder:ClearAllChildren() end) end
+    end
+    
+    pcall(function()
+        local CutsceneController = require(Services.ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CutsceneController"))
+        if CutsceneController and CutsceneController.Play then CutsceneController.Play = function() return end end
+    end)
+    DisableAnimations()
+    
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
+    end)
+
+    pcall(function()
+        Services.Lighting.GlobalShadows = false
+        Services.Lighting.FogEnd = 9e9
+        Services.Lighting.Brightness = 0
+        for _, v in pairs(Services.Lighting:GetChildren()) do
+            if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
+                v:Destroy()
+            end
+        end
+        if workspace.Terrain then
+            workspace.Terrain.WaterWaveSize = 0
+            workspace.Terrain.WaterTransparency = 1
+            workspace.Terrain.WaterReflectance = 0
+            workspace.Terrain.Decoration = false 
+        end
+    end)
+
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") then 
+            v.Transparency = 1
+            v.Reflectance = 0
+            v.CastShadow = false
+            v.Material = Enum.Material.SmoothPlastic 
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SurfaceLight") or v:IsA("SpotLight") then 
+            v:Destroy()
+        end
+    end
+
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetDescendants()) do
+            if v:IsA("BasePart") then 
+                v.Transparency = 1
+                v.Reflectance = 0
+                v.Material = Enum.Material.SmoothPlastic
+            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("Clothing") or v:IsA("ShirtGraphic") or v:IsA("Accessory") then 
+                v:Destroy() 
+            end
+            if v:IsA("MeshPart") then v.Transparency = 1 end
+        end
+    end
+
+    local sethidden = sethiddenproperty or set_hidden_property or set_hidden_prop
+    if sethidden then pcall(function() sethidden(Services.Lighting, "Technology", Enum.Technology.Compatibility) end) end
+    if setfpscap then pcall(function() setfpscap(10) end) end
+end
+
+local PotatoLoopThread = nil
+local function StartPotatoLoop()
+    if PotatoLoopThread then return end
+    print("🥔 [Global Potato Mode] Diaktifkan!")
+    ApplyExtremePotato()
+    PotatoLoopThread = task.spawn(function() while task.wait(5) do ApplyExtremePotato() end end)
+end
+
+if _G.EnableGlobalPotatoMode then StartPotatoLoop() end
 
 -- ======================================================
 -- 2. LVCB PROGRESSION SYSTEM (LEVER & RUIN)
 -- ======================================================
+local FishingLocations = {
+    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
+    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
+    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+    ["Treasure Room"] = {Pos = Vector3.new(-3561.297, -279.074, -1606.289), Look = Vector3.new(-0.782, -0.000, -0.623)},
+}
+
 _G.CurrentPhase = "Loading..."
 _G.CurrentAction = "Idle"
 _G.CurrentTargetFish = nil 
@@ -337,6 +416,22 @@ local function IsFishPlaced(itemName)
     return false
 end
 
+local function StartBackgroundTasksLVCB()
+    task.spawn(function()
+        while _G.IsAutoFishing do
+            if _G.UnsoldFishCount >= AutoSellConfig.Threshold and RF_SellAllItems then
+                local prevAction = _G.CurrentAction
+                _G.CurrentAction = "Menjual Ikan (Auto Sell)"
+                pcall(function() RF_SellAllItems:InvokeServer() end)
+                _G.UnsoldFishCount = 0
+                task.wait(1.5)
+                _G.CurrentAction = prevAction
+            end
+            task.wait(1)
+        end
+    end)
+end
+
 local function StartAutoFishingLVCB()
     task.spawn(function()
         while _G.IsAutoFishing do
@@ -390,7 +485,6 @@ local function GetUnlockedArtifacts()
     for _, desc in ipairs(JUNGLE:GetDescendants()) do
         if desc.Name == "Crystal" and desc:IsA("BasePart") then
             local r, g, b = desc.Color.R * 255, desc.Color.G * 255, desc.Color.B * 255
-            
             if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then 
                 unlocked["Hourglass Diamond Artifact"] = true; count = count + 1
             elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then 
@@ -790,7 +884,9 @@ end
 
 if RE_ObtainedNewFishNotification then
     RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
-        TotalFishCaught = TotalFishCaught + 1
+        _G.TotalFishCaught = (_G.TotalFishCaught or 0) + 1
+        _G.UnsoldFishCount = (_G.UnsoldFishCount or 0) + 1
+        TotalFishCaught = (TotalFishCaught or 0) + 1
     end)
 end
 
@@ -802,6 +898,7 @@ task.spawn(function()
         print("🚪 Pintu Ruin masih terkunci. Menjalankan LVCB Script...")
         
         CreateDashboardLVCB() 
+        StartBackgroundTasksLVCB() 
         StartAutoFishingLVCB()
         
         DoAutoLever() 
