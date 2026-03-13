@@ -1,1 +1,650 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/abinoldi/muffinz/refs/heads/main/lvcb"))()
+-- ======================================================
+-- STANDALONE ALL-IN-ONE: LEVER -> RUIN + SELL + FISH
+-- [ CYCLIC SHIFT + Y-COORD + HIERARCHY SMART FAVORITE + ENDGAME ]
+-- ======================================================
+
+local Services = {
+    Players = game:GetService("Players"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage"),
+    CoreGui = game:GetService("CoreGui")
+}
+
+local lp = Services.Players.LocalPlayer
+
+print("\n=============================================")
+print("🚀 [SynceHub] Script Ultimate Dimulai!")
+print("=============================================\n")
+
+-- ======================================================
+-- 0. VARIABEL TRACKING UNTUK GUI & LOGIKA
+-- ======================================================
+_G.CurrentPhase = "Loading..."
+_G.CurrentAction = "Idle"
+_G.CurrentTargetFish = nil 
+_G.TotalFishCaught = 0
+_G.UnsoldFishCount = 0
+_G.LeverProgress = "0/4"
+_G.RuinStatusStr = "LOCKED"
+_G.IsAutoFishing = true 
+_G.PauseFishing = false 
+
+-- ======================================================
+-- 1. GUI DASHBOARD (FULL SCREEN GRID LAYOUT)
+-- ======================================================
+local function CreateDashboard()
+    if Services.CoreGui:FindFirstChild("SynceHubDashboard") then Services.CoreGui.SynceHubDashboard:Destroy() end
+    local gui = Instance.new("ScreenGui", Services.CoreGui)
+    gui.Name = "SynceHubDashboard"
+    gui.IgnoreGuiInset = true
+
+    local dashboard = Instance.new("Frame", gui)
+    dashboard.Size = UDim2.fromScale(1, 1)
+    dashboard.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    dashboard.BorderSizePixel = 0
+    dashboard.Visible = true
+
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.3, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "Tutup / Buka GUI"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    
+    local isGuiOpen = true
+    toggleBtn.MouseButton1Click:Connect(function() 
+        isGuiOpen = not isGuiOpen
+        dashboard.Visible = isGuiOpen 
+        toggleBtn.BackgroundTransparency = isGuiOpen and 0 or 0.5
+    end)
+
+    local gridContainer = Instance.new("Frame", dashboard)
+    gridContainer.Size = UDim2.new(0.95, 0, 0.5, 0)
+    gridContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+    gridContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+    gridContainer.BackgroundTransparency = 1
+    
+    local layout = Instance.new("UIListLayout", gridContainer)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 0)
+
+    local function CreateRow(order)
+        local row = Instance.new("Frame", gridContainer)
+        row.Size = UDim2.new(1, 0, 0.23, 0) 
+        row.BackgroundTransparency = 1
+        row.LayoutOrder = order
+        return row
+    end
+
+    local function CreateCol(parent, text, posX)
+        local lab = Instance.new("TextLabel", parent)
+        lab.Size = UDim2.new(0.5, 0, 1, 0)
+        lab.Position = UDim2.new(posX, 0, 0, 0)
+        lab.BackgroundTransparency = 1
+        lab.Text = text
+        lab.TextColor3 = Color3.new(1,1,1)
+        lab.Font = Enum.Font.GothamBold
+        lab.TextScaled = true
+        return lab
+    end
+
+    local function CreateLine()
+        local line = Instance.new("Frame", gridContainer)
+        line.Size = UDim2.new(1, 0, 0, 2)
+        line.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        line.BorderSizePixel = 0
+        line.LayoutOrder = 99 
+        return line
+    end
+
+    local function CreateVLine(parent)
+        local line = Instance.new("Frame", parent)
+        line.Size = UDim2.new(0, 2, 1, 0)
+        line.Position = UDim2.new(0.5, 0, 0, 0)
+        line.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        line.BorderSizePixel = 0
+        line.ZIndex = 2
+    end
+
+    local Row1 = CreateRow(1)
+    local L_Phase = CreateCol(Row1, "Fase:\n...", 0)
+    L_Phase.TextColor3 = Color3.fromRGB(0, 255, 255)
+    CreateVLine(Row1)
+    local L_Action = CreateCol(Row1, "Aksi:\n...", 0.5)
+    L_Action.TextColor3 = Color3.fromRGB(255, 255, 100)
+    local Line1 = CreateLine()
+    Line1.LayoutOrder = 2 
+
+    local Row2 = CreateRow(3)
+    local L_Levers = CreateCol(Row2, "Lever Terbuka:\n0/4", 0)
+    CreateVLine(Row2)
+    local L_Ruin = CreateCol(Row2, "Ruin Door:\nLocked", 0.5)
+    local Line2 = CreateLine()
+    Line2.LayoutOrder = 4 
+
+    local Row3 = CreateRow(5)
+    local L_Caught = CreateCol(Row3, "Total Tangkapan:\n0", 0)
+    CreateVLine(Row3)
+    local L_Unsold = CreateCol(Row3, "Ikan Belum Dijual:\n0", 0.5)
+    local Line3 = CreateLine()
+    Line3.LayoutOrder = 6 
+
+    local Row4 = CreateRow(7)
+    local L_AutoFish = CreateCol(Row4, "Auto Fishing:\nON", 0)
+    CreateVLine(Row4)
+    local L_Target = CreateCol(Row4, "Smart Target:\nNone", 0.5)
+    L_Target.TextColor3 = Color3.fromRGB(255, 150, 255)
+
+    task.spawn(function()
+        while task.wait(0.2) do
+            if dashboard.Visible then
+                L_Phase.Text = "Fase Saat Ini:\n" .. _G.CurrentPhase
+                L_Action.Text = "Status Aksi:\n" .. _G.CurrentAction
+                
+                L_Levers.Text = "Lever Terbuka:\n" .. _G.LeverProgress
+                L_Levers.TextColor3 = (_G.LeverProgress == "4/4") and Color3.fromRGB(0, 255, 100) or Color3.new(1,1,1)
+                
+                L_Ruin.Text = "Ruin Door:\n" .. _G.RuinStatusStr
+                L_Ruin.TextColor3 = (_G.RuinStatusStr == "UNLOCKED") and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+                
+                L_Caught.Text = "Total Tangkapan:\n" .. tostring(_G.TotalFishCaught)
+                L_Unsold.Text = "Ikan Belum Dijual:\n" .. tostring(_G.UnsoldFishCount)
+                
+                L_AutoFish.Text = "Auto Fishing:\n" .. (_G.IsAutoFishing and (_G.PauseFishing and "PAUSED" or "ACTIVE") or "OFF")
+                if _G.PauseFishing then L_AutoFish.TextColor3 = Color3.fromRGB(255, 170, 0)
+                elseif _G.IsAutoFishing then L_AutoFish.TextColor3 = Color3.fromRGB(0, 255, 100)
+                else L_AutoFish.TextColor3 = Color3.fromRGB(255, 50, 50) end
+
+                L_Target.Text = "Target Utama:\n" .. (_G.CurrentTargetFish or "Tidak Ada (Bebas)")
+            end
+        end
+    end)
+end
+
+CreateDashboard()
+
+-- ======================================================
+-- 2. TABEL KOORDINAT & SETUP MODULE
+-- ======================================================
+local FishingAreas = {
+    ["Arrow Lever"] = {Pos = Vector3.new(898.296, 8.449, -361.856), Look = Vector3.new(0.023, -0.000, 1.000)},
+    ["Cresent Lever"] = {Pos = Vector3.new(1419.750, 31.199, 78.570), Look = Vector3.new(0.000, -0.000, -1.000)},
+    ["Ancient Ruin"] = {Pos = Vector3.new(6031.981, -585.924, 4713.157), Look = Vector3.new(0.316, -0.000, -0.949)},
+    ["Diamond Lever"] = {Pos = Vector3.new(1818.930, 8.449, -284.110), Look = Vector3.new(0.000, 0.000, -1.000)},
+    ["Hourglass Diamond Lever"] = {Pos = Vector3.new(1484.610, 8.450, -861.010), Look = Vector3.new(-0.000, -0.000, -1.000)},
+    ["Sacred Temple"] = {Pos = Vector3.new(1461.815, -22.125, -670.234), Look = Vector3.new(-0.990, -0.000, 0.143)},
+}
+
+local Replion, ItemUtility, PlayerData
+pcall(function()
+    Replion = require(Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Replion", 5)).Client
+    ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
+    if Replion then PlayerData = Replion:WaitReplion("Data", 5) end
+end)
+
+local CachedRemotes = {}
+local TargetRemotes = {"RF/ChargeFishingRod", "RF/RequestFishingMinigameStarted", "RF/CatchFishCompleted", "RE/FishingCompleted", "RF/EquipToolFromHotbar", "RE/EquipToolFromHotbar", "RE/FavoriteItem", "RE/PlaceLeverItem", "RE/PlacePressureItem", "RF/SellAllItems", "RE/ObtainedNewFishNotification"}
+
+local netFolder
+pcall(function() netFolder = Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("_Index", 5):WaitForChild("sleitnick_net@0.2.0", 5):WaitForChild("net", 5) end)
+if netFolder then
+    local children = netFolder:GetChildren()
+    local targetMap = {}
+    for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
+    for i = 1, #children do
+        if targetMap[children[i].Name] and i < #children then CachedRemotes[children[i].Name] = children[i + 1] end
+    end
+end
+
+local RF_ChargeFishingRod = CachedRemotes["RF/ChargeFishingRod"]
+local RF_RequestFishingMinigameStarted = CachedRemotes["RF/RequestFishingMinigameStarted"]
+local RE_FishingCompleted = CachedRemotes["RF/CatchFishCompleted"] or CachedRemotes["RE/FishingCompleted"]
+local Remote_EquipTool = CachedRemotes["RF/EquipToolFromHotbar"] or CachedRemotes["RE/EquipToolFromHotbar"]
+local RE_FavoriteItem = CachedRemotes["RE/FavoriteItem"]
+local RE_PlaceLeverItem = CachedRemotes["RE/PlaceLeverItem"]
+local RE_PlacePressureItem = CachedRemotes["RE/PlacePressureItem"]
+local RF_SellAllItems = CachedRemotes["RF/SellAllItems"]
+local RE_ObtainedNewFishNotification = CachedRemotes["RE/ObtainedNewFishNotification"]
+
+local function FireRemote(remote, ...)
+    if not remote then return end
+    local args = {...}
+    if #args == 0 then args = {1} end
+    task.spawn(function()
+        pcall(function()
+            if remote:IsA("RemoteFunction") then remote:InvokeServer(unpack(args)) else remote:FireServer(unpack(args)) end
+        end)
+    end)
+end
+
+local function TeleportToLookAt(position, lookVector)
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hum and hum.Sit then hum.Sit = false task.wait(0.1) end
+    if hrp then 
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
+    end
+end
+
+local function GetFishNameAndRarity(item)
+    local name = item.Identifier or "Unknown"
+    local itemID = item.Id
+    if ItemUtility and itemID then
+        pcall(function()
+            local itemData = ItemUtility:GetItemData(itemID) or ItemUtility:GetItemData(tonumber(itemID) or tonumber(name))
+            if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
+        end)
+    end
+    return name
+end
+
+-- ======================================================
+-- 3. FUNGSI CEK STATUS PINTU & IKAN (Y-COORD CHECK)
+-- ======================================================
+local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
+local FishToRarity = {
+    ["Freshwater Piranha"] = "Rare",
+    ["Goliath Tiger"] = "Epic",
+    ["Sacred Guardian Squid"] = "Legendary",
+    ["Crocodile"] = "Mythic"
+}
+
+local function IsFishPlaced(itemName)
+    local ruinFolder = workspace:FindFirstChild("RUIN INTERACTIONS")
+    local platesFolder = ruinFolder and ruinFolder:FindFirstChild("PressurePlates")
+    if not platesFolder then return false end
+
+    local rarity = FishToRarity[itemName]
+    if not rarity then return false end
+
+    local plateModel = platesFolder:FindFirstChild(rarity)
+    if plateModel then
+        local movePart = plateModel:FindFirstChild("MOVE_PART")
+        local stepPlate = movePart and movePart:FindFirstChild("StepPlate")
+        if stepPlate and stepPlate.Position.Y < -541.1 then
+            return true
+        end
+    end
+    return false
+end
+
+-- ======================================================
+-- 4. BACKGROUND TASKS (FISHING, HIERARCHY FAVORITE & SELL)
+-- ======================================================
+local function StartAutoFishing()
+    task.spawn(function()
+        while _G.IsAutoFishing do
+            local holdingArtifact = false
+            if lp.Character then
+                local currentTool = lp.Character:FindFirstChildOfClass("Tool")
+                if currentTool and (string.find(currentTool.Name, "Artifact") or string.find(currentTool.Name, "Lever")) then holdingArtifact = true end
+            end
+
+            if _G.PauseFishing or holdingArtifact then
+                task.wait(0.5) 
+            else
+                if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    if not lp.Character:FindFirstChildOfClass("Tool") and Remote_EquipTool then
+                        pcall(function() 
+                            if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(1) else Remote_EquipTool:FireServer(1) end
+                        end)
+                        task.wait(0.3)
+                    end
+                    if _G.PauseFishing or holdingArtifact then continue end 
+                    if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
+                    task.wait(0.65)
+                    if _G.PauseFishing or holdingArtifact then continue end 
+                    if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
+                    task.wait(0.35)
+                    if _G.PauseFishing or holdingArtifact then continue end 
+                    if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
+                    task.wait(0.3)
+                end
+            end
+            if not lp.Character then task.wait(1) end
+        end
+    end)
+end
+
+local AutoSellConfig = { Enabled = true, Threshold = 100 }
+
+local function StartBackgroundTasks()
+    -- HIERARCHY SMART FAVORITE LOOP
+    task.spawn(function()
+        while true do
+            if _G.RuinStatusStr ~= "UNLOCKED" and PlayerData and RE_FavoriteItem then
+                pcall(function()
+                    local inv = PlayerData:Get("Inventory")
+                    
+                    local alreadyFavorited = {
+                        ["Freshwater Piranha"] = false, 
+                        ["Goliath Tiger"] = false, 
+                        ["Sacred Guardian Squid"] = false, 
+                        ["Crocodile"] = false
+                    }
+                    
+                    -- SCAN 1: Tandai ikan mana saja yang sudah ada status Favorite di tas
+                    for _, items in pairs(inv) do
+                        for _, item in ipairs(items) do
+                            local itemName = GetFishNameAndRarity(item)
+                            if FishToRarity[itemName] and (item.IsFavorite or item.Favorited or item.Locked) then
+                                alreadyFavorited[itemName] = true
+                            end
+                        end
+                    end
+                    
+                    -- SCAN 2: Terapkan logika Hierarki (Kunci SEMUA ikan yang belum terpasang di Ruin)
+                    for _, items in pairs(inv) do
+                        for _, item in ipairs(items) do
+                            local itemName = GetFishNameAndRarity(item)
+                            
+                            -- Jika ikan ini adalah bahan Ruin DAN platnya belum tertekan (berarti masih butuh)
+                            if FishToRarity[itemName] and not IsFishPlaced(itemName) then
+                                -- Dan kalau kita belum memfavoritekan 1 copy ikan jenis ini
+                                if not alreadyFavorited[itemName] then
+                                    RE_FavoriteItem:FireServer(item.UUID)
+                                    alreadyFavorited[itemName] = true 
+                                    print("⭐ [Smart Favorite] Mengamankan (Hierarki): " .. itemName)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            task.wait(2.5)
+        end
+    end)
+
+    if RE_ObtainedNewFishNotification then
+        RE_ObtainedNewFishNotification.OnClientEvent:Connect(function() 
+            _G.UnsoldFishCount = _G.UnsoldFishCount + 1 
+            _G.TotalFishCaught = _G.TotalFishCaught + 1
+        end)
+    end
+
+    -- AUTO SELL LOOP
+    task.spawn(function()
+        while AutoSellConfig.Enabled do
+            if _G.UnsoldFishCount >= AutoSellConfig.Threshold and RF_SellAllItems then
+                local prevAction = _G.CurrentAction
+                _G.CurrentAction = "Menjual Ikan (Auto Sell)"
+                pcall(function() RF_SellAllItems:InvokeServer() end)
+                _G.UnsoldFishCount = 0
+                task.wait(1.5)
+                _G.CurrentAction = prevAction
+            end
+            task.wait(1)
+        end
+    end)
+end
+
+-- ======================================================
+-- 5. FASE 1: AUTO LEVER (CYCLIC SHIFT COLOR DETECTION + 3X RETRY)
+-- ======================================================
+local ArtifactData = {
+    ["Hourglass Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)}, TargetPos = FishingAreas["Hourglass Diamond Lever"] },
+    ["Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1844.159, 2.530, -288.755), Look = Vector3.new(0.981, 0.000, -0.193)}, TargetPos = FishingAreas["Diamond Lever"] },
+    ["Arrow Artifact"] = { FishingPos = {Pos = Vector3.new(874.365, 2.530, -358.484), Look = Vector3.new(-0.990, 0.000, 0.144)}, TargetPos = FishingAreas["Arrow Lever"] },
+    ["Crescent Artifact"] = { FishingPos = {Pos = Vector3.new(1401.070, 6.489, 116.738), Look = Vector3.new(-0.500, -0.000, 0.866)}, TargetPos = FishingAreas["Cresent Lever"] },
+}
+local ArtifactOrder = {"Hourglass Diamond Artifact", "Diamond Artifact", "Arrow Artifact", "Crescent Artifact"}
+local ARTIFACT_IDS = { ["Arrow Artifact"] = 265, ["Crescent Artifact"] = 266, ["Diamond Artifact"] = 267, ["Hourglass Diamond Artifact"] = 271 }
+
+local function GetUnlockedArtifacts()
+    local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
+    local unlocked = {}
+    local count = 0
+    if not JUNGLE then return unlocked, count end
+
+    for _, desc in ipairs(JUNGLE:GetDescendants()) do
+        if desc.Name == "Crystal" and desc:IsA("BasePart") then
+            local r, g, b = desc.Color.R * 255, desc.Color.G * 255, desc.Color.B * 255
+            
+            -- FIX: KUNING = Diamond, MERAH = Arrow
+            if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then 
+                unlocked["Hourglass Diamond Artifact"] = true; count = count + 1
+            elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then 
+                unlocked["Diamond Artifact"] = true; count = count + 1
+            elseif math.abs(r - 255) <= 4 and math.abs(g - 47) <= 4 and math.abs(b - 47) <= 4 then 
+                unlocked["Arrow Artifact"] = true; count = count + 1
+            elseif math.abs(r - 112) <= 4 and math.abs(g - 255) <= 4 and math.abs(b - 69) <= 4 then 
+                unlocked["Crescent Artifact"] = true; count = count + 1
+            end
+        end
+    end
+    return unlocked, count
+end
+
+local function HasArtifactItem(artifactName)
+    if lp.Character then
+        for _, v in ipairs(lp.Character:GetChildren()) do
+            if v:IsA("Tool") and string.find(v.Name, artifactName) then return true end
+        end
+    end
+    local backpack = lp:FindFirstChild("Backpack")
+    if backpack then
+        for _, v in ipairs(backpack:GetChildren()) do
+            if v:IsA("Tool") and string.find(v.Name, artifactName) then return true end
+        end
+    end
+    if not PlayerData then return false end
+    local hasItem = false
+    pcall(function()
+        local inv = PlayerData:Get("Inventory")
+        local targetId = ARTIFACT_IDS[artifactName]
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if tonumber(item.Id) == targetId then hasItem = true return end
+            end
+        end
+    end)
+    return hasItem
+end
+
+local placementAttempts = {} -- Tracker untuk batasan 3x percobaan
+
+local function DoAutoLever()
+    _G.CurrentPhase = "Auto Lever (1/2)"
+    while true do
+        local unlockedArtifacts, unlockedCount = GetUnlockedArtifacts()
+        _G.LeverProgress = tostring(unlockedCount) .. "/4"
+        
+        local allDoneOrSkipped = true
+        local artifactToProcess = nil
+        
+        -- Cari artifact yang belum terbuka dan belum melebihi limit 3x percobaan
+        for _, artifactName in ipairs(ArtifactOrder) do
+            if not unlockedArtifacts[artifactName] then
+                if (placementAttempts[artifactName] or 0) < 3 then
+                    allDoneOrSkipped = false
+                    if not artifactToProcess then artifactToProcess = artifactName end
+                end
+            end
+        end
+
+        if allDoneOrSkipped then
+            _G.CurrentAction = "Semua Lever Selesai / Dilewati!"
+            break
+        elseif artifactToProcess then
+            local artData = ArtifactData[artifactToProcess]
+            local char = lp.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+
+            if HasArtifactItem(artifactToProcess) then
+                local currentAttempts = (placementAttempts[artifactToProcess] or 0) + 1
+                _G.CurrentAction = "Memasang: " .. artifactToProcess .. " (" .. currentAttempts .. "/3)"
+                _G.PauseFishing = true 
+                task.wait(0.5)
+                
+                if hrp and (hrp.Position - artData.TargetPos.Pos).Magnitude > 5 then
+                    TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look)
+                    task.wait(1.5) 
+                end
+
+                if hrp then hrp.Anchored = true end
+                
+                local backpack = lp:FindFirstChild("Backpack")
+                if hum and backpack then
+                    for _, tool in ipairs(backpack:GetChildren()) do
+                        if tool:IsA("Tool") and string.find(tool.Name, artifactToProcess) then
+                            hum:EquipTool(tool)
+                            break
+                        end
+                    end
+                end
+                
+                task.wait(1.5) 
+                if RE_PlaceLeverItem then 
+                    FireRemote(RE_PlaceLeverItem, artifactToProcess) 
+                    placementAttempts[artifactToProcess] = currentAttempts -- Tambah hitungan percobaan
+                end
+                task.wait(2.5) 
+                if hrp then hrp.Anchored = false end
+            else
+                _G.CurrentAction = "Mencari: " .. artifactToProcess
+                _G.PauseFishing = false 
+                if hrp and (hrp.Position - artData.FishingPos.Pos).Magnitude > 5 then
+                    TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look)
+                    task.wait(1.5)
+                end
+                task.wait(1) 
+            end
+        end
+        task.wait(0.1)
+    end
+end
+
+-- ======================================================
+-- 6. FASE 2: AUTO RUIN DOOR LOGIC
+-- ======================================================
+local function GetRuinDoorStatus()
+    local ruinDoor = workspace:FindFirstChild("RUIN INTERACTIONS") and workspace["RUIN INTERACTIONS"]:FindFirstChild("Door")
+    local status = "LOCKED"
+    if ruinDoor and ruinDoor:FindFirstChild("RuinDoor") then
+        local LDoor = ruinDoor.RuinDoor:FindFirstChild("LDoor")
+        if LDoor then
+            local currentX = nil
+            if LDoor:IsA("BasePart") then currentX = LDoor.Position.X
+            elseif LDoor:IsA("Model") then local s, p = pcall(function() return LDoor:GetPivot() end) if s and p then currentX = p.Position.X end end
+            if currentX ~= nil and currentX > 6075 then status = "UNLOCKED" end
+        end
+    end
+    _G.RuinStatusStr = status
+    return status
+end
+
+local function IsItemAvailable(itemName)
+    if not PlayerData then return false end
+    local hasItem = false
+    pcall(function()
+        local inv = PlayerData:Get("Inventory")
+        for _, items in pairs(inv) do
+            for _, item in ipairs(items) do
+                if GetFishNameAndRarity(item) == itemName then hasItem = true return end
+            end
+        end
+    end)
+    return hasItem
+end
+
+local function GetMissingItem()
+    for _, name in ipairs(ITEM_FISH_NAMES) do
+        if not IsFishPlaced(name) and not IsItemAvailable(name) then 
+            return name 
+        end
+    end
+    return nil
+end
+
+local function DoAutoRuin()
+    _G.CurrentPhase = "Auto Ruin Door (2/2)"
+    
+    local runningRuin = true
+    task.spawn(function()
+        while runningRuin do
+            if GetRuinDoorStatus() == "LOCKED" and RE_PlacePressureItem then
+                for _, name in ipairs(ITEM_FISH_NAMES) do
+                    if IsItemAvailable(name) and not IsFishPlaced(name) then
+                        _G.CurrentAction = "Memasang: " .. name
+                        FireRemote(RE_PlacePressureItem, name)
+                        task.wait(2.1)
+                    end
+                end
+            end
+            task.wait(3)
+        end
+    end)
+
+    while true do
+        local doorStatus = GetRuinDoorStatus()
+        if doorStatus == "UNLOCKED" then
+            _G.CurrentAction = "Ruin Door Terbuka!"
+            runningRuin = false
+            break -- Lanjut ke END-GAME
+        end
+
+        local missingItem = GetMissingItem()
+        _G.CurrentTargetFish = missingItem -- Update Target di GUI
+
+        local char = lp.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+        if missingItem then
+            _G.CurrentAction = "Farming: " .. missingItem
+            _G.PauseFishing = false 
+            if hrp and (hrp.Position - FishingAreas["Sacred Temple"].Pos).Magnitude > 5 then
+                TeleportToLookAt(FishingAreas["Sacred Temple"].Pos, FishingAreas["Sacred Temple"].Look)
+                task.wait(1.5)
+            end
+            task.wait(1) 
+        else
+            _G.CurrentAction = "Menunggu Pintu Ruin..."
+            _G.PauseFishing = true 
+            task.wait(0.5)
+            if hrp and (hrp.Position - FishingAreas["Ancient Ruin"].Pos).Magnitude > 50 then
+                 TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
+                 task.wait(1.5)
+            end
+            task.wait(1)
+        end
+    end
+end
+
+-- ======================================================
+-- 7. EXECUTION (WORKFLOW & END-GAME)
+-- ======================================================
+pcall(function()
+    local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController)
+    if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+    if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+    AutoFishCtrl.Start = function() return end 
+end)
+
+StartAutoFishing()        
+StartBackgroundTasks()    
+
+DoAutoLever()             
+DoAutoRuin()              
+
+-- END-GAME: Memancing Abadi di Ancient Ruin
+_G.CurrentPhase = "END-GAME"
+_G.CurrentAction = "Memancing Abadi di Ancient Ruin..."
+_G.CurrentTargetFish = nil -- Berhenti mem-favorite apapun
+
+local char = lp.Character
+local hrp = char and char:FindFirstChild("HumanoidRootPart")
+if hrp then
+    TeleportToLookAt(FishingAreas["Ancient Ruin"].Pos, FishingAreas["Ancient Ruin"].Look)
+end
+
+_G.PauseFishing = false
+_G.IsAutoFishing = true
+
+print("🎉 [SynceHub] SEMUA TUGAS TELAH SELESAI! Farming abadi dimulai.")
