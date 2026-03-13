@@ -3,7 +3,7 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID)
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: GLOBAL POTATO MODE, GUI Counter, Auto Sell, Auto Trade Evolved Stone, Recheck Lever Fix
+-- UPDATE: GLOBAL POTATO MODE, GUI Counter, Auto Sell, Auto Trade Evolved Stone, Recheck Lever Fix, Color Swap Fix
 -- ======================================================
 
 _G.EnableGlobalPotatoMode = true -- Set ke false jika tidak ingin grafik burik
@@ -486,10 +486,11 @@ local function GetUnlockedArtifacts()
         if desc.Name == "Crystal" and desc:IsA("BasePart") then
             local r, g, b = desc.Color.R * 255, desc.Color.G * 255, desc.Color.B * 255
             
+            -- FIX: SWAPPED HOURGLASS DAN DIAMOND WARNA DETEKSI
             if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then 
-                unlocked["Hourglass Diamond Artifact"] = true; count = count + 1
-            elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then 
                 unlocked["Diamond Artifact"] = true; count = count + 1
+            elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then 
+                unlocked["Hourglass Diamond Artifact"] = true; count = count + 1
             elseif math.abs(r - 255) <= 4 and math.abs(g - 47) <= 4 and math.abs(b - 47) <= 4 then 
                 unlocked["Arrow Artifact"] = true; count = count + 1
             elseif math.abs(r - 112) <= 4 and math.abs(g - 255) <= 4 and math.abs(b - 69) <= 4 then 
@@ -550,7 +551,7 @@ local function DoAutoLever()
 
         if allDoneOrSkipped then
             _G.CurrentAction = "Memverifikasi Pemasangan Lever (Re-check)..."
-            task.wait(3) -- Beri waktu delay agar server visual sync
+            task.wait(3) 
             
             local recheckArtifacts, recheckCount = GetUnlockedArtifacts()
             if recheckCount >= 4 then
@@ -560,7 +561,6 @@ local function DoAutoLever()
                 if globalRechecks < 3 then
                     _G.CurrentAction = "Terdeteksi Miss! Mengulang Pemasangan..."
                     globalRechecks = globalRechecks + 1
-                    -- Reset hitungan untuk lever yang miss agar script mengulang
                     for _, artifactName in ipairs(ArtifactOrder) do
                         if not recheckArtifacts[artifactName] then
                             placementAttempts[artifactName] = 0 
