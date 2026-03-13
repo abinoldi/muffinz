@@ -385,7 +385,7 @@ local function StartBackgroundTasks()
 end
 
 -- ======================================================
--- 5. FASE 1: AUTO LEVER (CYCLIC SHIFT COLOR DETECTION)
+-- 5. FASE 1: AUTO LEVER (CYCLIC SHIFT COLOR DETECTION + 3X RETRY)
 -- ======================================================
 local ArtifactData = {
     ["Hourglass Diamond Artifact"] = { FishingPos = {Pos = Vector3.new(1490.144, 3.312, -843.171), Look = Vector3.new(0.115, 0.000, 0.993)}, TargetPos = FishingAreas["Hourglass Diamond Lever"] },
@@ -441,24 +441,29 @@ local function HasArtifactItem(artifactName)
     return hasItem
 end
 
+local placementAttempts = {} -- Tracker untuk batasan 3x percobaan
+
 local function DoAutoLever()
     _G.CurrentPhase = "Auto Lever (1/2)"
     while true do
         local unlockedArtifacts, unlockedCount = GetUnlockedArtifacts()
         _G.LeverProgress = tostring(unlockedCount) .. "/4"
         
-        local allUnlocked = true
+        local allDoneOrSkipped = true
         local artifactToProcess = nil
         
+        -- Cari artifact yang belum terbuka dan belum melebihi limit 3x percobaan
         for _, artifactName in ipairs(ArtifactOrder) do
             if not unlockedArtifacts[artifactName] then
-                allUnlocked = false
-                if not artifactToProcess then artifactToProcess = artifactName end
+                if (placementAttempts[artifactName] or 0) < 3 then
+                    allDoneOrSkipped = false
+                    if not artifactToProcess then artifactToProcess = artifactName end
+                end
             end
         end
 
-        if allUnlocked then
-            _G.CurrentAction = "Semua Lever Terbuka!"
+        if allDoneOrSkipped then
+            _G.CurrentAction = "Semua Lever Selesai / Dilewati!"
             break
         elseif artifactToProcess then
             local artData = ArtifactData[artifactToProcess]
@@ -467,7 +472,8 @@ local function DoAutoLever()
             local hum = char and char:FindFirstChild("Humanoid")
 
             if HasArtifactItem(artifactToProcess) then
-                _G.CurrentAction = "Memasang: " .. artifactToProcess
+                local currentAttempts = (placementAttempts[artifactToProcess] or 0) + 1
+                _G.CurrentAction = "Memasang: " .. artifactToProcess .. " (" .. currentAttempts .. "/3)"
                 _G.PauseFishing = true 
                 task.wait(0.5)
                 
@@ -489,7 +495,10 @@ local function DoAutoLever()
                 end
                 
                 task.wait(1.5) 
-                if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess) end
+                if RE_PlaceLeverItem then 
+                    FireRemote(RE_PlaceLeverItem, artifactToProcess) 
+                    placementAttempts[artifactToProcess] = currentAttempts -- Tambah hitungan percobaan
+                end
                 task.wait(2.5) 
                 if hrp then hrp.Anchored = false end
             else
