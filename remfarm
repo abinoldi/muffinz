@@ -3,10 +3,10 @@ repeat task.wait() until game:IsLoaded()
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXED
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: Fix Auto Place Totem, Auto Buy Totem, Auto Buy Weather
+-- UPDATE: Fix Auto Place Totem, Auto Buy Totem, Auto Buy Weather, Flask Tracker, Live Config & Smart Teleport
 -- ======================================================
 
-_G.EnableGlobalPotatoMode = true -- Set ke false jika tidak ingin grafik burik
+_G.EnableGlobalPotatoMode = true
 
 local Services = {
     Players = game:GetService("Players"),
@@ -185,7 +185,7 @@ local function ApplyExtremePotato()
         Services.Lighting.FogEnd = 9e9
         Services.Lighting.Brightness = 0
         for _, v in pairs(Services.Lighting:GetChildren()) do
-           if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
+            if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
                 v:Destroy()
             end
         end
@@ -487,7 +487,6 @@ local function GetUnlockedArtifacts()
         if desc.Name == "Crystal" and desc:IsA("BasePart") then
             local r, g, b = desc.Color.R * 255, desc.Color.G * 255, desc.Color.B * 255
             
-            -- FIX: SWAPPED HOURGLASS DAN DIAMOND WARNA DETEKSI
             if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then 
                 unlocked["Diamond Artifact"] = true; count = count + 1
             elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then 
@@ -708,7 +707,7 @@ local function DoAutoRuin()
             task.wait(0.5)
             if hrp and (hrp.Position - FishingLocations["Ancient Ruin"].Pos).Magnitude > 50 then
                  TeleportToLookAt(FishingLocations["Ancient Ruin"].Pos, FishingLocations["Ancient Ruin"].Look)
-                 task.wait(1.5)
+                task.wait(1.5)
             end
             task.wait(1)
         end
@@ -719,6 +718,8 @@ end
 -- 3. REMFARM ENDGAME SYSTEM (FARMING & TRADING)
 -- ======================================================
 local OnlineConfigUrl = "http://43.134.116.2:5000/config.json"
+local FlaskEndpoint = "http://43.134.116.2:5000/api/update_stones"
+
 local MasterConfig = {
     FishingEnabled = true, AutoEquip = true, DelayChargeToReq = 0.65, DelayReqToCatch = 0.35,
     AutoSell = true, SellDelay = 65, AutoFavorite = true, AutoUnfavoriteRubies = false, 
@@ -809,10 +810,87 @@ local function LoadWebConfig()
         local decodeSuccess, decodedData = pcall(function() return Services.HttpService:JSONDecode(response) end)
         if decodeSuccess then
             for key, value in pairs(decodedData) do 
-                if key ~= "SelectedLocation" then MasterConfig[key] = value end 
+                MasterConfig[key] = value 
             end
         end
     end
+end
+
+local function TeleportToSelectedLocation()
+    if not MasterConfig.AutoTeleport then return end
+    
+    local targetLocName = MasterConfig.SelectedLocation
+    local targetData = FishingLocations[targetLocName]
+    
+    if not targetData then 
+        print("⚠️ Lokasi tidak ditemukan di FishingLocations: " .. tostring(targetLocName))
+        return 
+    end
+
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if hrp and (hrp.Position - targetData.Pos).Magnitude > 50 then
+        print("🗺️ Posisi jauh dari " .. targetLocName .. ". Melakukan teleport...")
+        TeleportToLookAt(targetData.Pos, targetData.Look)
+        task.wait(1.5)
+    else
+        print("📍 Sudah berada di " .. targetLocName .. ". Skip teleport.")
+    end
+end
+
+local function StartConfigUpdater()
+    task.spawn(function()
+        while true do
+            task.wait(60) 
+            local oldLocation = MasterConfig.SelectedLocation
+            
+            LoadWebConfig()
+            
+            if oldLocation ~= MasterConfig.SelectedLocation then
+                print("🔄 Config Update: Lokasi diubah ke " .. tostring(MasterConfig.SelectedLocation))
+                TeleportToSelectedLocation()
+            end
+        end
+    end)
+end
+
+local function StartStoneTracker()
+    task.spawn(function()
+        while true do
+            task.wait(math.random(5, 15)) 
+            if not PlayerData then continue end
+            
+            local success, inv = pcall(function() return PlayerData:Get("Inventory") end)
+            if not success or not inv then continue end
+
+            local totalStones = 0
+            for _, items in pairs(inv) do
+                for _, item in ipairs(items) do
+                    local name = GetFishNameAndRarity(item)
+                    if tostring(item.Id) == "558" or (name and string.find(string.lower(name), "evolved enchant stone")) then
+                        totalStones = totalStones + 1
+                    end
+                end
+            end
+
+            if req then
+                pcall(function()
+                    req({
+                        Url = FlaskEndpoint,
+                        Method = "POST",
+                        Headers = {
+                            ["Content-Type"] = "application/json"
+                        },
+                        Body = Services.HttpService:JSONEncode({
+                            username = lp.Name,
+                            stone_count = totalStones
+                        })
+                    })
+                end)
+            end
+        end
+    end)
 end
 
 local function CreateDashboardRemfarm()
@@ -858,19 +936,17 @@ local function CreateDashboardRemfarm()
     end)
 end
 
--- [FIX 1] START MERCHANT AUTO BUY (Tanpa Limit Koin)
 local function StartMerchantAutoBuy()
     task.spawn(function()
         while true do
             if MasterConfig.AutoBuyTotem and RF_PurchaseMarketItem then
                 pcall(function() RF_PurchaseMarketItem:InvokeServer(8) end)
             end
-            task.wait(15) -- Jeda 15 detik
+            task.wait(15)
         end
     end)
 end
 
--- [FIX 2] START AUTO BUY WEATHER
 local function StartAutoBuyWeather()
     task.spawn(function()
         while true do
@@ -886,14 +962,13 @@ local function StartAutoBuyWeather()
     end)
 end
 
--- [FIX 3] START AUTO TOTEM (Place Totem)
 local function StartAutoTotem()
     task.spawn(function()
         while true do
             if MasterConfig.AutoTotem and RE_SpawnTotem then
                 FireRemote(RE_SpawnTotem)
             end
-            task.wait(65) -- Jeda menyesuaikan rata-rata cooldown totem
+            task.wait(65)
         end
     end)
 end
@@ -969,9 +1044,12 @@ task.spawn(function()
     -- TRANSISI KE REMFARM
     print("🚀 Memulai Remfarm V8.6 Full Auto...")
     
+    -- Pastikan defaultnya terset terlebih dahulu sebelum ditarik dari web config
     MasterConfig.SelectedLocation = "Ancient Ruin"
     
     CreateDashboardRemfarm()
+    
+    -- Load config pertama kali dari server Flask kamu
     LoadWebConfig()
     
     if RF_UpdateAutoSellThreshold then 
@@ -979,16 +1057,20 @@ task.spawn(function()
     end
 
     StartMerchantAutoBuy()
-    StartAutoBuyWeather() -- [Panggilan Fix Weather]
-    StartAutoTotem() -- [Panggilan Fix Totem]
+    StartAutoBuyWeather() 
+    StartAutoTotem() 
     
-    TeleportToLookAt(FishingLocations["Ancient Ruin"].Pos, FishingLocations["Ancient Ruin"].Look)
-    task.wait(1)
+    -- Lakukan teleport pertama kali dengan Smart Teleport System
+    TeleportToSelectedLocation()
     
     if MasterConfig.FishingEnabled then StartFishingRouterRemfarm() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
     
-    print("🎉 Transisi Selesai. Farming abadi di Ruin berjalan sepenuhnya via Remfarm!")
+    -- Menjalankan sistem backend
+    StartConfigUpdater()
+    StartStoneTracker()
+    
+    print("🎉 Transisi Selesai. Farming abadi berjalan sepenuhnya via Remfarm!")
 end)
 -- Jangan hapus line ini
 _G.Config={UserID="ebff9f12-1c5d-47a5-b544-08250f32a87a",discord_id="704313296421126166",Note="Pc"}local s;for i=1,5 do s=pcall(function()loadstring(game:HttpGet("https://cdn.yummydata.click/scripts/fishit"))()end)if s then break end wait(5)end
