@@ -1,9 +1,9 @@
 repeat task.wait() until game:IsLoaded()
 
 -- ======================================================
--- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID)
+-- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXED
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: GLOBAL POTATO MODE, GUI Counter, Auto Sell, Auto Trade Evolved Stone, Recheck Lever Fix, Color Swap Fix
+-- UPDATE: Fix Auto Place Totem, Auto Buy Totem, Auto Buy Weather
 -- ======================================================
 
 _G.EnableGlobalPotatoMode = true -- Set ke false jika tidak ingin grafik burik
@@ -22,7 +22,7 @@ local lp = Services.Players.LocalPlayer
 local req = request or http_request or syn.request
 
 print("\n=============================================")
-print("🚀 [Ultimate All-in-One] LVCB -> Remfarm Dimulai")
+print("🚀 [Ultimate All-in-One] LVCB -> Remfarm Dimulai (Fixed Version)")
 print("=============================================\n")
 
 -- ======================================================
@@ -185,7 +185,7 @@ local function ApplyExtremePotato()
         Services.Lighting.FogEnd = 9e9
         Services.Lighting.Brightness = 0
         for _, v in pairs(Services.Lighting:GetChildren()) do
-            if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
+           if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
                 v:Destroy()
             end
         end
@@ -397,7 +397,8 @@ end
 
 local ITEM_FISH_NAMES = {"Freshwater Piranha", "Goliath Tiger", "Sacred Guardian Squid", "Crocodile"}
 local FishToRarity = {
-    ["Freshwater Piranha"] = "Rare", ["Goliath Tiger"] = "Epic", 
+    ["Freshwater Piranha"] = "Rare", 
+    ["Goliath Tiger"] = "Epic", 
     ["Sacred Guardian Squid"] = "Legendary", ["Crocodile"] = "Mythic"
 }
 
@@ -857,16 +858,42 @@ local function CreateDashboardRemfarm()
     end)
 end
 
+-- [FIX 1] START MERCHANT AUTO BUY (Tanpa Limit Koin)
 local function StartMerchantAutoBuy()
     task.spawn(function()
         while true do
-            if MasterConfig.AutoBuyTotem then
-                local currentCoins = GetCoins()
-                if currentCoins > 1000000 and RF_PurchaseMarketItem then
-                    pcall(function() RF_PurchaseMarketItem:InvokeServer(8) end)
+            if MasterConfig.AutoBuyTotem and RF_PurchaseMarketItem then
+                pcall(function() RF_PurchaseMarketItem:InvokeServer(8) end)
+            end
+            task.wait(15) -- Jeda 15 detik
+        end
+    end)
+end
+
+-- [FIX 2] START AUTO BUY WEATHER
+local function StartAutoBuyWeather()
+    task.spawn(function()
+        while true do
+            if MasterConfig.AutoBuyWeather and RF_PurchaseWeatherEvent then
+                local weathers = MasterConfig.TargetWeathers or {"Cloudy", "Storm", "Wind"}
+                for _, weather in ipairs(weathers) do
+                    FireRemote(RF_PurchaseWeatherEvent, weather)
+                    task.wait(2)
                 end
             end
-            task.wait(3) 
+            task.wait(MasterConfig.WeatherLoopDelay or 300) 
+        end
+    end)
+end
+
+-- [FIX 3] START AUTO TOTEM (Place Totem)
+local function StartAutoTotem()
+    task.spawn(function()
+        while true do
+            if MasterConfig.AutoTotem and RE_SpawnTotem then
+                FireRemote(RE_SpawnTotem)
+            end
+            task.wait(65) -- Jeda menyesuaikan rata-rata cooldown totem
         end
     end)
 end
@@ -885,7 +912,6 @@ local function RunAutoTrade()
                         if itemTraded then break end
                         for _, item in ipairs(items) do
                             local name, rarity = GetFishNameAndRarity(item)
-                            
                             local isSecret = (tostring(rarity):upper() == "SECRET")
                             local isRubyGem = (name == "Ruby" and GetMutation(item) == "Gemstone")
                             local isEvolvedStone = (tostring(item.Id) == "558" or string.find(string.lower(name), "evolved enchant stone"))
@@ -953,6 +979,8 @@ task.spawn(function()
     end
 
     StartMerchantAutoBuy()
+    StartAutoBuyWeather() -- [Panggilan Fix Weather]
+    StartAutoTotem() -- [Panggilan Fix Totem]
     
     TeleportToLookAt(FishingLocations["Ancient Ruin"].Pos, FishingLocations["Ancient Ruin"].Look)
     task.wait(1)
