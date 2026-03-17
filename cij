@@ -1,14 +1,13 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX INJECTOR v11.0 (AUTO REFRESH + OVERWRITE)
+# ROBLOX INJECTOR v11.1 (AUTO DIRECT REFRESH + RANDOM UA)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
 TMP_SQLITE="/data/local/tmp/sqlite3_exec"
 TEMP_DB_DIR="/data/local/tmp/rbx_temp_cookies"
 COOKIE_QUEUE="/data/local/tmp/rbx_queue.txt"
-USER_AGENT="Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.196 Mobile Safari/537.36"
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -57,16 +56,30 @@ check_existing_cookie() {
     fi
 }
 
-# --- FUNGSI BARU: REFRESH COOKIE LANGSUNG DI DEVICE ---
+# --- FUNGSI BARU: RANDOM USER AGENT ---
+get_random_ua() {
+    local android_versions=("10" "11" "12" "13" "14")
+    local models=("SM-G991B" "SM-S901B" "SM-A536B" "Pixel 6" "Pixel 7a" "CPH2023" "M2101K6G")
+    local chromes=("114.0.5735.196" "115.0.5790.166" "116.0.5845.163" "119.0.6045.163" "120.0.6099.144")
+
+    local rand_os=${android_versions[$RANDOM % ${#android_versions[@]}]}
+    local rand_model=${models[$RANDOM % ${#models[@]}]}
+    local rand_chrome=${chromes[$RANDOM % ${#chromes[@]}]}
+
+    echo "Mozilla/5.0 (Linux; Android $rand_os; $rand_model) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$rand_chrome Mobile Safari/537.36"
+}
+
+# --- FUNGSI REFRESH COOKIE ---
 refresh_cookie_direct() {
     local old_cookie="$1"
+    local current_ua=$(get_random_ua)
     
     echo -n "   ⏳ Refreshing cookie via Direct IP... "
 
     # 1. Dapatkan CSRF Token
     local csrf=$(curl -s -i -X POST "https://auth.roblox.com/v2/logout" \
         -H "Cookie: .ROBLOSECURITY=$old_cookie" \
-        -H "User-Agent: $USER_AGENT" \
+        -H "User-Agent: $current_ua" \
         -H "Content-Length: 0" \
         | grep -i "x-csrf-token:" | awk '{print $2}' | tr -d '\r')
 
@@ -82,7 +95,7 @@ refresh_cookie_direct() {
         -H "Referer: https://www.roblox.com/" \
         -H "Origin: https://www.roblox.com" \
         -H "Content-Type: application/json" \
-        -H "User-Agent: $USER_AGENT" \
+        -H "User-Agent: $current_ua" \
         -d "{}" \
         | grep -i "rbx-authentication-ticket:" | awk '{print $2}' | tr -d '\r')
 
@@ -95,29 +108,28 @@ refresh_cookie_direct() {
     local raw_headers=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket/redeem" \
         -H "rbxauthenticationnegotiation: 1" \
         -H "Content-Type: application/json" \
-        -H "User-Agent: $USER_AGENT" \
+        -H "User-Agent: $current_ua" \
         -d "{\"authenticationTicket\": \"$ticket\"}")
     
-    local new_cookie=$(echo "$raw_headers" | grep -i "set-cookie: .ROBLOSECURITY=" | sed -n 's/.*.ROBLOSECURITY=\([^;]*\).*/\1/p' | tr -d '\r')
+    local new_cookie=$(echo "$raw_headers" | grep -i "^set-cookie:" | grep -i ".ROBLOSECURITY=" | sed -n 's/.*.ROBLOSECURITY=\([^;]*\).*/\1/p' | head -n 1 | tr -d '\r')
 
     if [ -n "$new_cookie" ]; then
         # Cek validitas cookie baru & ambil username
         local user_data=$(curl -s -w "\n%{http_code}" -X GET "https://users.roblox.com/v1/users/authenticated" \
             -H "Cookie: .ROBLOSECURITY=$new_cookie" \
-            -H "User-Agent: $USER_AGENT")
+            -H "User-Agent: $current_ua")
             
         local http_code=$(echo "$user_data" | tail -n1)
         
         if [ "$http_code" -eq 200 ]; then
             local username=$(echo "$user_data" | grep -o '"name":"[^"]*' | cut -d'"' -f4)
             echo "✅ SUCCESS! (User: $username)"
-            # Simpan cookie baru di variabel global untuk dipakai selanjutnya
             FRESH_COOKIE="$new_cookie"
             return 0
         fi
     fi
 
-    echo "❌ Gagal (Redeem berhasil tapi cookie tidak valid)."
+    echo "❌ Gagal (Redeem berhasil tapi cookie tidak valid/diblokir oleh Rate Limit)."
     return 1
 }
 
@@ -161,7 +173,7 @@ restore_db() {
 
 do_main_process() {
     echo "=========================================="
-    echo " ROBLOX INJECTOR v11.0 (AUTO DIRECT REFRESH)"
+    echo " ROBLOX INJECTOR v11.1 (ANTI RATE-LIMIT)"
     echo "=========================================="
     prepare_env
     
@@ -220,11 +232,16 @@ do_main_process() {
                 continue
             fi
 
-            # --- PROSES REFRESH ONLINE ---
             FRESH_COOKIE=""
             if refresh_cookie_direct "$input_cookie"; then
-                # Simpan cookie BARU yang sudah direfresh ke dalam queue
                 echo "$FRESH_COOKIE" >> "$COOKIE_QUEUE"
+                
+                # Tambahkan Delay Jika Bukan Target Terakhir
+                if [ $((i + 1)) -lt $total_targets ]; then
+                    echo "   ⏳ Jeda 7 detik menghindari API Rate Limit..."
+                    sleep 7
+                fi
+                
                 i=$((i + 1))
                 break 
             else
@@ -248,7 +265,6 @@ do_main_process() {
     while read -r fresh_cookie; do
         if [ $idx -ge ${#target_pkgs[@]} ]; then break; fi
         
-        # Buat database pakai FRESH COOKIE
         generate_db_file "$((idx+1))" "$fresh_cookie"
         
         target_app="${target_pkgs[$idx]}"
