@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX INJECTOR v11.1 (AUTO DIRECT REFRESH + RANDOM UA)
+# ROBLOX INJECTOR v11.2 (ANTI RATE-LIMIT + FIX SYNTAX)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
@@ -56,17 +56,32 @@ check_existing_cookie() {
     fi
 }
 
-# --- FUNGSI BARU: RANDOM USER AGENT ---
+# --- FUNGSI BARU: RANDOM USER AGENT (SH COMPATIBLE) ---
 get_random_ua() {
-    local android_versions=("10" "11" "12" "13" "14")
-    local models=("SM-G991B" "SM-S901B" "SM-A536B" "Pixel 6" "Pixel 7a" "CPH2023" "M2101K6G")
-    local chromes=("114.0.5735.196" "115.0.5790.166" "116.0.5845.163" "119.0.6045.163" "120.0.6099.144")
+    # Generate random OS (10 to 14)
+    local os_rand=$((RANDOM % 5))
+    local os="13"
+    case $os_rand in
+        0) os="10" ;; 1) os="11" ;; 2) os="12" ;; 3) os="13" ;; 4) os="14" ;;
+    esac
 
-    local rand_os=${android_versions[$RANDOM % ${#android_versions[@]}]}
-    local rand_model=${models[$RANDOM % ${#models[@]}]}
-    local rand_chrome=${chromes[$RANDOM % ${#chromes[@]}]}
+    # Generate random Device Model
+    local model_rand=$((RANDOM % 7))
+    local model="SM-S908B"
+    case $model_rand in
+        0) model="SM-G991B" ;; 1) model="SM-S901B" ;; 2) model="SM-A536B" ;; 
+        3) model="Pixel 6" ;; 4) model="Pixel 7a" ;; 5) model="CPH2023" ;; 6) model="M2101K6G" ;;
+    esac
 
-    echo "Mozilla/5.0 (Linux; Android $rand_os; $rand_model) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$rand_chrome Mobile Safari/537.36"
+    # Generate random Chrome Version
+    local chrome_rand=$((RANDOM % 5))
+    local chrome="114.0.5735.196"
+    case $chrome_rand in
+        0) chrome="114.0.5735.196" ;; 1) chrome="115.0.5790.166" ;; 2) chrome="116.0.5845.163" ;; 
+        3) chrome="119.0.6045.163" ;; 4) chrome="120.0.6099.144" ;;
+    esac
+
+    echo "Mozilla/5.0 (Linux; Android $os; $model) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$chrome Mobile Safari/537.36"
 }
 
 # --- FUNGSI REFRESH COOKIE ---
@@ -173,7 +188,7 @@ restore_db() {
 
 do_main_process() {
     echo "=========================================="
-    echo " ROBLOX INJECTOR v11.1 (ANTI RATE-LIMIT)"
+    echo " ROBLOX INJECTOR v11.2 (ANTI RATE-LIMIT)"
     echo "=========================================="
     prepare_env
     
