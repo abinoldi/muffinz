@@ -875,47 +875,44 @@ local function StartConfigUpdater()
 end
 
 -- ======================================================
--- [BARU] TRACKER EVOLVED ENCHANT STONE (DENGAN QUANTITY)
+-- [UPDATE] TRACKER EVOLVED ENCHANT STONE (TRIGGER BY CATCH)
 -- ======================================================
-local function StartStoneTracker()
-    task.spawn(function()
-        while true do
-            task.wait(math.random(5, 15)) 
-            if not PlayerData then continue end
+local function UpdateStoneData()
+    if not PlayerData then return end
+    
+    local success, inv = pcall(function() return PlayerData:Get("Inventory") end)
+    if not success or not inv then return end
+
+    local totalStones = 0
+    for _, items in pairs(inv) do
+        for _, item in ipairs(items) do
+            local name = GetFishNameAndRarity(item)
             
-            local success, inv = pcall(function() return PlayerData:Get("Inventory") end)
-            if not success or not inv then continue end
-
-            local totalStones = 0
-            for _, items in pairs(inv) do
-                for _, item in ipairs(items) do
-                    local name = GetFishNameAndRarity(item)
-                    
-                    if tostring(item.Id) == "558" or (name and string.find(string.lower(name), "evolved enchant stone")) then
-                        -- PERBAIKAN: Menghitung dari quantity item, bukan jumlah slot
-                        local qty = tonumber(item.Quantity) or tonumber(item.Count) or tonumber(item.Amount) or 1
-                        totalStones = totalStones + qty
-                    end
-                end
-            end
-
-            if req then
-                pcall(function()
-                    req({
-                        Url = FlaskEndpoint,
-                        Method = "POST",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = Services.HttpService:JSONEncode({
-                            username = lp.Name,
-                            stone_count = totalStones
-                        })
-                    })
-                end)
+            if tostring(item.Id) == "558" or (name and string.find(string.lower(name), "evolved enchant stone")) then
+                local qty = tonumber(item.Quantity) or tonumber(item.Count) or tonumber(item.Amount) or 1
+                totalStones = totalStones + qty
             end
         end
-    end)
+    end
+
+    if req then
+        -- Gunakan task.spawn agar request HTTP tidak membuat event game menjadi lag/delay
+        task.spawn(function()
+            pcall(function()
+                req({
+                    Url = FlaskEndpoint,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = Services.HttpService:JSONEncode({
+                        username = lp.Name,
+                        stone_count = totalStones
+                    })
+                })
+            end)
+        end)
+    end
 end
 
 local function CreateDashboardRemfarm()
@@ -1115,6 +1112,9 @@ if RE_ObtainedNewFishNotification then
         _G.TotalFishCaught = (_G.TotalFishCaught or 0) + 1
         _G.UnsoldFishCount = (_G.UnsoldFishCount or 0) + 1
         TotalFishCaught = (TotalFishCaught or 0) + 1
+        
+        -- [BARU] Kirim data ke Flask setiap kali ikan berhasil ditangkap
+        UpdateStoneData()
     end)
 end
 
@@ -1170,8 +1170,9 @@ task.spawn(function()
     if MasterConfig.AutoTrade then RunAutoTrade() end
     
     -- Mulai sistem update dan pelacak farming belakang layar
+    -- Mulai sistem update dan pelacak farming belakang layar
     StartConfigUpdater()
-    StartStoneTracker()
+    UpdateStoneData() -- Memanggil sekali saat inisialisasi awal
     
     print("🎉 Transisi Selesai. Farming abadi berjalan sepenuhnya via Remfarm!")
 end)
