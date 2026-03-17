@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 # ==========================================================
-# ROBLOX INJECTOR v11.2 (ANTI RATE-LIMIT + FIX SYNTAX)
+# ROBLOX INJECTOR v10.1 (OVERWRITE + VALIDATOR)
 # ==========================================================
 
 TERMUX_SQLITE="/data/data/com.termux/files/usr/bin/sqlite3"
@@ -17,6 +17,7 @@ check_root() {
 }
 
 prepare_env() {
+    # Cek Curl untuk validasi
     if ! command -v curl >/dev/null 2>&1; then
         echo "❌ Curl tidak ditemukan. Install dulu: pkg install curl"
         exit 1
@@ -41,6 +42,7 @@ prepare_env() {
     chmod 777 "$TEMP_DB_DIR"
 }
 
+# --- FUNGSI 1: CEK APAKAH APK SUDAH LOGIN ---
 check_existing_cookie() {
     local pkg="$1"
     local db_path="/data/data/$pkg/app_webview/Default/Cookies"
@@ -50,102 +52,31 @@ check_existing_cookie() {
     local cookie_value=$("$SQLITE_BIN" "$db_path" "SELECT value FROM cookies WHERE name='.ROBLOSECURITY' LIMIT 1;" 2>/dev/null)
     
     if [ -n "$cookie_value" ]; then
-        return 0 
+        return 0 # Ada isinya (Sudah login)
     else
-        return 1 
+        return 1 # Kosong
     fi
 }
 
-# --- FUNGSI BARU: RANDOM USER AGENT (SH COMPATIBLE) ---
-get_random_ua() {
-    # Generate random OS (10 to 14)
-    local os_rand=$((RANDOM % 5))
-    local os="13"
-    case $os_rand in
-        0) os="10" ;; 1) os="11" ;; 2) os="12" ;; 3) os="13" ;; 4) os="14" ;;
-    esac
-
-    # Generate random Device Model
-    local model_rand=$((RANDOM % 7))
-    local model="SM-S908B"
-    case $model_rand in
-        0) model="SM-G991B" ;; 1) model="SM-S901B" ;; 2) model="SM-A536B" ;; 
-        3) model="Pixel 6" ;; 4) model="Pixel 7a" ;; 5) model="CPH2023" ;; 6) model="M2101K6G" ;;
-    esac
-
-    # Generate random Chrome Version
-    local chrome_rand=$((RANDOM % 5))
-    local chrome="114.0.5735.196"
-    case $chrome_rand in
-        0) chrome="114.0.5735.196" ;; 1) chrome="115.0.5790.166" ;; 2) chrome="116.0.5845.163" ;; 
-        3) chrome="119.0.6045.163" ;; 4) chrome="120.0.6099.144" ;;
-    esac
-
-    echo "Mozilla/5.0 (Linux; Android $os; $model) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$chrome Mobile Safari/537.36"
-}
-
-# --- FUNGSI REFRESH COOKIE ---
-refresh_cookie_direct() {
-    local old_cookie="$1"
-    local current_ua=$(get_random_ua)
+# --- FUNGSI 2: CEK VALIDITAS COOKIE VIA INTERNET ---
+validate_cookie_online() {
+    local cookie_val="$1"
     
-    echo -n "   ⏳ Refreshing cookie via Direct IP... "
+    echo -n "   ⏳ Mengecek validitas... "
+    
+    # Hit API Roblox untuk cek user login
+    # Timeout 10 detik agar tidak hang jika sinyal jelek
+    response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+        -H "Cookie: .ROBLOSECURITY=$cookie_val" \
+        "https://users.roblox.com/v1/users/authenticated")
 
-    # 1. Dapatkan CSRF Token
-    local csrf=$(curl -s -i -X POST "https://auth.roblox.com/v2/logout" \
-        -H "Cookie: .ROBLOSECURITY=$old_cookie" \
-        -H "User-Agent: $current_ua" \
-        -H "Content-Length: 0" \
-        | grep -i "x-csrf-token:" | awk '{print $2}' | tr -d '\r')
-
-    if [ -z "$csrf" ]; then
-        echo "❌ Gagal (Token CSRF tidak didapat. Cookie mungkin sudah mati)."
+    if [ "$response" -eq 200 ]; then
+        echo "✅ VALID (Live)"
+        return 0
+    else
+        echo "❌ MATI/INVALID ($response)"
         return 1
     fi
-
-    # 2. Dapatkan Auth Ticket
-    local ticket=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket" \
-        -H "Cookie: .ROBLOSECURITY=$old_cookie" \
-        -H "x-csrf-token: $csrf" \
-        -H "Referer: https://www.roblox.com/" \
-        -H "Origin: https://www.roblox.com" \
-        -H "Content-Type: application/json" \
-        -H "User-Agent: $current_ua" \
-        -d "{}" \
-        | grep -i "rbx-authentication-ticket:" | awk '{print $2}' | tr -d '\r')
-
-    if [ -z "$ticket" ]; then
-        echo "❌ Gagal (Auth Ticket ditolak API)."
-        return 1
-    fi
-
-    # 3. Redeem Ticket untuk New Cookie
-    local raw_headers=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket/redeem" \
-        -H "rbxauthenticationnegotiation: 1" \
-        -H "Content-Type: application/json" \
-        -H "User-Agent: $current_ua" \
-        -d "{\"authenticationTicket\": \"$ticket\"}")
-    
-    local new_cookie=$(echo "$raw_headers" | grep -i "^set-cookie:" | grep -i ".ROBLOSECURITY=" | sed -n 's/.*.ROBLOSECURITY=\([^;]*\).*/\1/p' | head -n 1 | tr -d '\r')
-
-    if [ -n "$new_cookie" ]; then
-        # Cek validitas cookie baru & ambil username
-        local user_data=$(curl -s -w "\n%{http_code}" -X GET "https://users.roblox.com/v1/users/authenticated" \
-            -H "Cookie: .ROBLOSECURITY=$new_cookie" \
-            -H "User-Agent: $current_ua")
-            
-        local http_code=$(echo "$user_data" | tail -n1)
-        
-        if [ "$http_code" -eq 200 ]; then
-            local username=$(echo "$user_data" | grep -o '"name":"[^"]*' | cut -d'"' -f4)
-            echo "✅ SUCCESS! (User: $username)"
-            FRESH_COOKIE="$new_cookie"
-            return 0
-        fi
-    fi
-
-    echo "❌ Gagal (Redeem berhasil tapi cookie tidak valid/diblokir oleh Rate Limit)."
-    return 1
 }
 
 generate_db_file() {
@@ -168,9 +99,10 @@ restore_db() {
     local target_folder="$target_root/app_webview/Default"
     local target_file="$target_folder/Cookies"
 
-    echo "   🔄 Injecting Fresh Cookie to: $pkg_name"
+    echo "   🔄 Injecting: $pkg_name"
     am force-stop "$pkg_name" > /dev/null 2>&1
 
+    # Hapus cookie lama sebelum menimpa dengan yang baru
     if [ -e "$target_file" ]; then rm -f "$target_file"; fi
     if [ -d "$target_file" ]; then rm -rf "$target_file"; fi
 
@@ -188,7 +120,7 @@ restore_db() {
 
 do_main_process() {
     echo "=========================================="
-    echo " ROBLOX INJECTOR v11.2 (ANTI RATE-LIMIT)"
+    echo " ROBLOX INJECTOR v10.1 (OVERWRITE EDITION)"
     echo "=========================================="
     prepare_env
     
@@ -202,6 +134,7 @@ do_main_process() {
     echo "🔍 Memeriksa status login & menyiapkan target..."
     target_pkgs=()
 
+    # MODIFIKASI: Semua aplikasi sekarang masuk ke target_pkgs
     for pkg in "${raw_pkgs[@]}"; do
         if check_existing_cookie "$pkg"; then
             echo "   ⚠️ TARGET: $pkg (Sudah Login -> AKAN DITIMPA)"
@@ -234,7 +167,7 @@ do_main_process() {
         while true; do
             echo ""
             echo "👉 [$display_num/$total_targets] Target: ...${current_target_pkg: -15}"
-            echo -n "   Paste Old Cookie: "
+            echo -n "   Paste Cookie: "
             read -r input_cookie
 
             if [ "$input_cookie" = "done" ]; then 
@@ -247,20 +180,13 @@ do_main_process() {
                 continue
             fi
 
-            FRESH_COOKIE=""
-            if refresh_cookie_direct "$input_cookie"; then
-                echo "$FRESH_COOKIE" >> "$COOKIE_QUEUE"
-                
-                # Tambahkan Delay Jika Bukan Target Terakhir
-                if [ $((i + 1)) -lt $total_targets ]; then
-                    echo "   ⏳ Jeda 7 detik menghindari API Rate Limit..."
-                    sleep 7
-                fi
-                
+            # --- VALIDASI ONLINE ---
+            if validate_cookie_online "$input_cookie"; then
+                echo "$input_cookie" >> "$COOKIE_QUEUE"
                 i=$((i + 1))
                 break 
             else
-                echo "   ⚠️  Cookie lama mati atau gagal direfresh. Coba cookie lain."
+                echo "   ⚠️  Silakan ambil cookie baru dan paste ulang."
             fi
         done
     done
@@ -277,10 +203,10 @@ do_main_process() {
     echo "🚀 Memproses & Mengirim ke Aplikasi..."
     
     idx=0
-    while read -r fresh_cookie; do
+    while read -r valid_cookie; do
         if [ $idx -ge ${#target_pkgs[@]} ]; then break; fi
         
-        generate_db_file "$((idx+1))" "$fresh_cookie"
+        generate_db_file "$((idx+1))" "$valid_cookie"
         
         target_app="${target_pkgs[$idx]}"
         source_db="$TEMP_DB_DIR/cookie_$((idx+1)).db"
@@ -292,9 +218,8 @@ do_main_process() {
 
     rm -rf "$TEMP_DB_DIR"
     rm -f "$COOKIE_QUEUE"
-    
     echo "------------------------------------------"
-    echo "✨ SELESAI! Cookie baru dengan IP Local berhasil di-inject."
+    echo "✨ SELESAI! Semua cookie berhasil di-inject/ditimpa."
 }
 
 check_root
