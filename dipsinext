@@ -151,7 +151,7 @@ end
 local CachedRemotes = {}
 local TargetRemotes = {
     "RE/EquipItem", "RF/EquipToolFromHotbar", "RE/UnequipItem", "RF/UpdateAutoFishingState", "RF/SellAllItems",
-    "RF/PurchaseBait", "RF/PurchaseFishingRod", "RE/ObtainedNewFishNotification", "RF/CatchFishCompleted",
+    "RF/PurchaseBait", "RF/PurchaseFishingRod", "RE/ObtainedNewFishNotification", "RE/CatchFishCompleted",
     "RF/CancelFishingInputs", "RF/UpdateAutoSellThreshold", "RF/ChargeFishingRod", "RF/RequestFishingMinigameStarted", "RE/FishingCompleted"
 }
 
