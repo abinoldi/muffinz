@@ -4,6 +4,7 @@ repeat task.wait() until game:IsLoaded()
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXED
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
 -- UPDATE: Fix Item Quantity Tracker, Smart Auto Totem, Flask Tracker, Live Config & Smart Teleport
+-- FIX: Standalone Auto Fishing Anti-Detection Bypass Terintegrasi
 -- ======================================================
 
 _G.EnableGlobalPotatoMode = true
@@ -39,7 +40,7 @@ end)
 
 local CachedRemotes = {}
 local TargetRemotes = {
-    "RF/ChargeFishingRod", "RF/RequestFishingMinigameStarted", "RF/CatchFishCompleted", "RE/FishingCompleted", 
+    "RF/ChargeFishingRod", "RF/RequestFishingMinigameStarted", "RE/CatchFishCompleted", "RE/FishingCompleted", 
     "RF/EquipToolFromHotbar", "RE/EquipToolFromHotbar", "RF/SellAllItems", "RE/FavoriteItem", 
     "RE/PlaceLeverItem", "RE/PlacePressureItem", "RE/SpawnTotem", "RF/EquipOxygenTank", 
     "RF/UnequipOxygenTank", "RF/InitiateTrade", "RF/PurchaseMarketItem", "RF/UpdateAutoSellThreshold", 
@@ -76,7 +77,8 @@ local function GetRemote(name) return CachedRemotes[name] end
 local function FireRemote(remote, ...)
     if not remote then return false end
     local args = {...}
-    if #args == 0 then args = {1} end
+    -- Dimatikan agar tidak mengganggu remote yang butuh argumen kosong
+    -- if #args == 0 then args = {1} end 
     task.spawn(function()
         pcall(function()
             if remote:IsA("RemoteFunction") then remote:InvokeServer(unpack(args)) else remote:FireServer(unpack(args)) end
@@ -87,7 +89,7 @@ end
 
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
+local RE_FishingCompleted = GetRemote("RE/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
 local Remote_EquipTool = GetRemote("RF/EquipToolFromHotbar") or GetRemote("RE/EquipToolFromHotbar")
 local RE_FavoriteItem = GetRemote("RE/FavoriteItem")
 local RE_PlaceLeverItem = GetRemote("RE/PlaceLeverItem")
@@ -452,7 +454,23 @@ local function StartBackgroundTasksLVCB()
     end)
 end
 
+-- ======================================================
+-- [UPDATED] MATIKAN SISTEM AUTO-FISH BAWAAN GAME
+-- ======================================================
+local function DisableNativeAutoFish()
+    pcall(function() 
+        local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
+        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
+        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+        AutoFishCtrl.Start = function() return end 
+    end)
+end
+
+-- ======================================================
+-- [UPDATED] LVCB AUTO FISHING (Anti-Detection Bypass)
+-- ======================================================
 local function StartAutoFishingLVCB()
+    DisableNativeAutoFish()
     task.spawn(function()
         while _G.IsAutoFishing do
             local holdingArtifact = false
@@ -465,19 +483,37 @@ local function StartAutoFishingLVCB()
                 task.wait(0.5) 
             else
                 if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    -- A. Auto Equip Pancingan
                     if not lp.Character:FindFirstChildOfClass("Tool") and Remote_EquipTool then
                         pcall(function() 
                             if Remote_EquipTool:IsA("RemoteFunction") then Remote_EquipTool:InvokeServer(1) else Remote_EquipTool:FireServer(1) end
                         end)
                         task.wait(0.3)
                     end
+                    
                     if _G.PauseFishing or holdingArtifact then continue end 
+                    
+                    -- B. Tarik Pancingan (Charge)
                     if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                     task.wait(0.65)
+                    
                     if _G.PauseFishing or holdingArtifact then continue end 
-                    if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
+                    
+                    -- [CRITICAL FIX] D. Mulai Minigame dengan ARGUMEN
+                    if RF_RequestFishingMinigameStarted then 
+                        pcall(function()
+                            RF_RequestFishingMinigameStarted:InvokeServer(
+                                -1.233184814453125, 
+                                0.015609057263545223, 
+                                tick() 
+                            )
+                        end)
+                    end
                     task.wait(0.35)
+                    
                     if _G.PauseFishing or holdingArtifact then continue end 
+                    
+                    -- E. Selesaikan Tangkapan
                     if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
                     task.wait(0.3)
                 end
@@ -726,7 +762,7 @@ local function DoAutoRuin()
             task.wait(0.5)
             if hrp and (hrp.Position - FishingLocations["Ancient Ruin"].Pos).Magnitude > 50 then
                  TeleportToLookAt(FishingLocations["Ancient Ruin"].Pos, FishingLocations["Ancient Ruin"].Look)
-                task.wait(1.5)
+                 task.wait(1.5)
             end
             task.wait(1)
         end
@@ -755,15 +791,9 @@ local TotalFishCaught = 0
 
 local function GetCoins() return PlayerData and (PlayerData:Get("Coins") or 0) or 0 end
 
-local function DisableNativeAutoFish()
-    pcall(function() 
-        local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
-        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
-        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
-        AutoFishCtrl.Start = function() return end 
-    end)
-end
-
+-- ======================================================
+-- [UPDATED] REMFARM AUTO FISHING (Anti-Detection Bypass)
+-- ======================================================
 local function StartFishingRouterRemfarm()
     if FishingState.IsFishing then return end
     FishingState.IsFishing = true
@@ -772,16 +802,33 @@ local function StartFishingRouterRemfarm()
     table.insert(FishingThreads, task.spawn(function()
         while FishingState.IsFishing do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                -- A. Auto Equip Pancingan
                 if MasterConfig.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
                     if Remote_EquipTool then pcall(function() Remote_EquipTool:InvokeServer(1) end) end
                     task.wait(0.3)
                 end
+                
+                -- B. Tarik Pancingan (Charge)
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                 task.wait(MasterConfig.DelayChargeToReq)
+                
                 if not FishingState.IsFishing then break end
-                if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
+                
+                -- [CRITICAL FIX] D. Mulai Minigame dengan ARGUMEN
+                if RF_RequestFishingMinigameStarted then 
+                    pcall(function()
+                        RF_RequestFishingMinigameStarted:InvokeServer(
+                            -1.233184814453125, 
+                            0.015609057263545223, 
+                            tick() 
+                        )
+                    end)
+                end
                 task.wait(MasterConfig.DelayReqToCatch)
+                
                 if not FishingState.IsFishing then break end
+                
+                -- E. Selesaikan Tangkapan
                 if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
             end
             if not lp.Character then task.wait(1) end
@@ -887,7 +934,6 @@ local function UpdateStoneData()
     for _, items in pairs(inv) do
         for _, item in ipairs(items) do
             local name = GetFishNameAndRarity(item)
-            
             if tostring(item.Id) == "558" or (name and string.find(string.lower(name), "evolved enchant stone")) then
                 local qty = tonumber(item.Quantity) or tonumber(item.Count) or tonumber(item.Amount) or 1
                 totalStones = totalStones + qty
@@ -991,7 +1037,7 @@ local function GetTotemUUID(targetId)
     local success, inventoryData = pcall(function() return PlayerData:GetExpect("Inventory").Totems end)
     if success and inventoryData then 
         for _, item in ipairs(inventoryData) do 
-            if tonumber(item.Id) == targetId and (item.Count or 1) >= 1 then return item.UUID end
+             if tonumber(item.Id) == targetId and (item.Count or 1) >= 1 then return item.UUID end
         end 
     end
     return nil
@@ -1169,7 +1215,6 @@ task.spawn(function()
     if MasterConfig.FishingEnabled then StartFishingRouterRemfarm() end
     if MasterConfig.AutoTrade then RunAutoTrade() end
     
-    -- Mulai sistem update dan pelacak farming belakang layar
     -- Mulai sistem update dan pelacak farming belakang layar
     StartConfigUpdater()
     UpdateStoneData() -- Memanggil sekali saat inisialisasi awal
