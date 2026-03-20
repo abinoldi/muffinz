@@ -187,7 +187,7 @@ local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification
 local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
 local RF_ChargeFishingRod = GetRemote("RF/ChargeFishingRod")
 local RF_RequestFishingMinigameStarted = GetRemote("RF/RequestFishingMinigameStarted")
-local RE_FishingCompleted = GetRemote("RF/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
+local RE_FishingCompleted = GetRemote("RE/CatchFishCompleted") or GetRemote("RE/FishingCompleted")
 
 local ReplionClient = require(Services.ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
