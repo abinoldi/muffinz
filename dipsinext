@@ -1,7 +1,7 @@
 -- ======================================================
 -- ENOCHHUB x STANDALONE HUB (MERGED - UNDETECTED OPTIMIZED)
 -- FULL AUTO: GHOSTFIN -> ENCHANT ROOM + INSTANT FISH
--- SOUND ENABLED | ROD-BASED DELAY | SMART AUTO SELL | AUTO QUEST
+-- SOUND ENABLED | ROD-BASED DELAY | SMART AUTO SELL | AUTO QUESTz
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
@@ -48,6 +48,7 @@ local STATE = {
 local AutoActive = true
 _G.FishBotActive = true
 
+-- DYNAMIC DELAY BERDASARKAN ROD ID
 local function GetRodDelay(rodID)
     local rodDelays = {
         [5] = 0.65, [169] = 0.65, [80] = 1.8, [4] = 2, [78] = 2, 
@@ -97,13 +98,16 @@ local function ApplyExtremePotato()
             end
         end
         if workspace.Terrain then
-            workspace.Terrain.WaterWaveSize = 0; workspace.Terrain.WaterTransparency = 1
-            workspace.Terrain.WaterReflectance = 0; workspace.Terrain.Decoration = false 
+            workspace.Terrain.WaterWaveSize = 0;
+            workspace.Terrain.WaterTransparency = 1
+            workspace.Terrain.WaterReflectance = 0;
+            workspace.Terrain.Decoration = false 
         end
     end)
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then 
-            v.Transparency = 1; v.Reflectance = 0; v.CastShadow = false; v.Material = Enum.Material.SmoothPlastic 
+            v.Transparency = 1;
+            v.Reflectance = 0; v.CastShadow = false; v.Material = Enum.Material.SmoothPlastic 
         elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SurfaceLight") or v:IsA("SpotLight") then 
             v:Destroy()
         end
@@ -192,9 +196,11 @@ local RE_FishingCompleted = GetRemote("RE/CatchFishCompleted") or GetRemote("RE/
 local ReplionClient = require(Services.ReplicatedStorage.Packages.Replion).Client
 local PlayerDataReplion = ReplionClient:WaitReplion("Data", 5)
 
+-- LOGIKA FIRE REMOTE DIUBAH AGAR TIDAK MEMAKSA ARGUMEN {1} KETIKA KOSONG
 local function FireRemote(remote, ...)
     if not remote then return false end
-    local args = {...}; if #args == 0 then args = {1} end
+    local args = {...}
+    -- if #args == 0 then args = {1} end  <-- Baris ini dihapus agar tidak bentrok dengan bypass argumen
     task.spawn(function()
         pcall(function()
             if remote:IsA("RemoteFunction") then remote:InvokeServer(unpack(args)) else remote:FireServer(unpack(args)) end
@@ -209,23 +215,43 @@ end
 if RF_UpdateAutoSellThreshold then pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) end
 
 -- ==============================================================================
--- [4] EKSEKUSI MAIN LOOP 
+-- [4] EKSEKUSI MAIN LOOP (WITH BYPASS & DYNAMIC DELAY)
 -- ==============================================================================
-print("⚡ Standalone Fishing Engine Injected into EnochHub")
+print("⚡ Standalone Fishing Engine (Bypass Mode) Injected into EnochHub")
 
 task.spawn(function()
     while _G.FishBotActive and Config.AutoFishing do
         if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            -- A. Auto Equip
             if Config.AutoEquip and not lp.Character:FindFirstChildOfClass("Tool") then
                 if RF_EquipToolFromHotbar then pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end) end
                 task.wait(0.3) 
             end
+            
+            -- B. Charge Rod & Wait (Dynamic Delay)
             local rodDelay = GetRodDelay(STATE.CurrentRodID)
             if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
             task.wait(rodDelay) 
-            if RF_RequestFishingMinigameStarted then FireRemote(RF_RequestFishingMinigameStarted) end
+            
+            if not (_G.FishBotActive and Config.AutoFishing) then break end
+            
+            -- C. Request Minigame Start (Bypass Mode)
+            if RF_RequestFishingMinigameStarted then 
+                pcall(function()
+                    RF_RequestFishingMinigameStarted:InvokeServer(
+                        -1.233184814453125, 
+                        0.015609057263545223, 
+                        tick() 
+                    )
+                end)
+            end
             task.wait(Config.DelayReqToCatch) 
+            
+            if not (_G.FishBotActive and Config.AutoFishing) then break end
+            
+            -- D. Fishing Completed
             if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
+            task.wait(0.3)
         end
         if not lp.Character then task.wait(1) end 
     end
@@ -494,7 +520,7 @@ task.spawn(function()
                 UpdateGameMode()   
                 AutoBuyBestBait()     
                 EquipBestBait()        
-                
+     
                 if STATE.Mode == "Farm Enchant" then
                     EquipRod(169)
                     if STATE.CurrentArea ~= STATE.NextLocation then Teleport(STATE.NextLocation) end
@@ -561,4 +587,4 @@ task.spawn(DisableNativeAutoFish)
 task.spawn(CreateDashboard)
 task.wait(2) 
 if RF_UpdateAutoFishingState then RF_UpdateAutoFishingState:InvokeServer(true) end
-print("🚀 EnochHub Merged Edition (Smart Sell Mode) STARTED!")
+print("🚀 EnochHub Merged Edition (Bypass & Smart Sell) STARTED!")
