@@ -147,6 +147,51 @@ local function TeleportToLookAt(position, lookVector)
 end
 
 -- ======================================================
+-- [BARU] WALK ON WATER (TELEPORT FAILSAFE)
+-- ======================================================
+local function StartWalkOnWater()
+    local platform = Instance.new("Part")
+    platform.Name = "SynceWaterPlatform"
+    platform.Size = Vector3.new(15, 1, 15)
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Transparency = 1 -- Tetap tidak terlihat
+    platform.Parent = workspace
+
+    Services.RunService.Heartbeat:Connect(function()
+        local char = lp.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local hrp = char.HumanoidRootPart
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            
+            local rayOrigin = hrp.Position
+            local rayDirection = Vector3.new(0, -10, 0)
+            
+            -- Konfigurasi Raycast untuk membaca Terrain Water
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterDescendantsInstances = {char, platform}
+            raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+            raycastParams.IgnoreWater = false -- PENTING: Wajib false agar air terdeteksi
+            
+            local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+            
+            -- Kondisi 1: Jika di atas air, letakkan platform pas di atas permukaan air
+            if result and result.Material == Enum.Material.Water then
+                platform.Position = Vector3.new(hrp.Position.X, result.Position.Y + 0.4, hrp.Position.Z)
+            -- Kondisi 2: Failsafe jika terlanjur tercebur (error masuk ke dalam air)
+            elseif hum and hum:GetState() == Enum.HumanoidStateType.Swimming then
+                hrp.CFrame = hrp.CFrame + Vector3.new(0, 3, 0) -- Angkat paksa ke atas
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                platform.Position = Vector3.new(hrp.Position.X, hrp.Position.Y - 3.2, hrp.Position.Z)
+            else
+                -- Jika di darat/aman, sembunyikan platform jauh di bawah
+                platform.Position = Vector3.new(0, -9999, 0)
+            end
+        end
+    end)
+end
+
+-- ======================================================
 -- 1.5 GLOBAL POTATO MODE SYSTEM
 -- ======================================================
 local VFXControllerModule
@@ -1195,6 +1240,8 @@ task.spawn(function()
     
     -- Set lokasi default sebelum menimpa dari web
     MasterConfig.SelectedLocation = "Ancient Ruin"
+
+    StartWalkOnWater()
     
     CreateDashboardRemfarm()
     
