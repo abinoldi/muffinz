@@ -74,65 +74,79 @@ validate_cookie_online() {
     fi
 }
 
-# --- FUNGSI BARU: REFRESH COOKIE KE IP LOKAL (DIPERBAIKI) ---
+# --- FUNGSI BARU: REFRESH COOKIE DENGAN COOKIE JAR & DEBUGGING ---
 refresh_cookie() {
     local old_cookie="$1"
-    # Tambahkan User-Agent agar tidak dicurigai sebagai Bot/cURL biasa
     local UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     
-    # 1. Dapatkan X-CSRF-TOKEN
-    local csrf_token=$(curl -s -i -X POST "https://auth.roblox.com/v2/logout" \
+    # Buat file penyimpanan cookie sementara untuk mensimulasikan sesi browser
+    local COOKIE_JAR="$TEMP_DB_DIR/curl_cookies_$RANDOM.txt"
+
+    # 1. Dapatkan X-CSRF-TOKEN & Simpan cookie pelacakan awal ke JAR
+    local csrf_response=$(curl -s -i -X POST "https://auth.roblox.com/v2/logout" \
         -H "Cookie: .ROBLOSECURITY=$old_cookie" \
         -H "User-Agent: $UA" \
         -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
-        -H "Content-Length: 0" | grep -i 'x-csrf-token:' | awk '{print $2}' | tr -d '\r')
+        -H "Content-Length: 0" \
+        -c "$COOKIE_JAR") # '-c' menyimpan cookie dari server
+
+    local csrf_token=$(echo "$csrf_response" | grep -i 'x-csrf-token:' | awk '{print $2}' | tr -d '\r')
 
     if [ -z "$csrf_token" ]; then
         echo "FAIL_CSRF"
+        rm -f "$COOKIE_JAR"
         return 1
     fi
 
-    # 2. Dapatkan Authentication Ticket menggunakan cookie lama & CSRF Token
-    local ticket_header=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket" \
+    # 2. Dapatkan Authentication Ticket (Bawa cookie dari JAR)
+    local ticket_response=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket" \
         -H "Cookie: .ROBLOSECURITY=$old_cookie" \
         -H "x-csrf-token: $csrf_token" \
         -H "User-Agent: $UA" \
         -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
-        -H "Content-Type: application/json")
+        -H "Content-Type: application/json" \
+        -b "$COOKIE_JAR" -c "$COOKIE_JAR") # '-b' baca JAR, '-c' update JAR
         
-    local auth_ticket=$(echo "$ticket_header" | grep -i 'rbx-authentication-ticket:' | awk '{print $2}' | tr -d '\r')
+    local auth_ticket=$(echo "$ticket_response" | grep -i 'rbx-authentication-ticket:' | awk '{print $2}' | tr -d '\r')
 
     if [ -z "$auth_ticket" ]; then
-        echo "FAIL_TICKET"
+        # Ambil baris pertama (HTTP Status) untuk melihat alasan ditolak
+        local http_status=$(echo "$ticket_response" | head -n 1 | tr -d '\r')
+        echo "FAIL_TICKET ($http_status)"
+        rm -f "$COOKIE_JAR"
         return 1
     fi
 
-    # Jeda 2 detik di dalam API untuk memberi waktu backend Roblox mendaftarkan tiket
+    # Jeda untuk backend
     sleep 2
 
-    # 3. Redeem Ticket untuk mendapatkan Cookie baru
+    # 3. Redeem Ticket (Bawa seluruh sesi dari JAR)
     local redeem_response=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket/redeem" \
         -H "RBXAuthenticationNegotiation: 1" \
         -H "User-Agent: $UA" \
         -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
         -H "Content-Type: application/json" \
+        -b "$COOKIE_JAR" \
         -d "{\"authenticationTicket\": \"$auth_ticket\"}")
 
-    # Ekstrak value .ROBLOSECURITY dari header Set-Cookie
     local new_cookie=$(echo "$redeem_response" | grep -i 'set-cookie: .ROBLOSECURITY=' | sed -n 's/.*.ROBLOSECURITY=\([^;]*\).*/\1/p' | tr -d '\r')
+
+    # Bersihkan file JAR agar tidak bocor ke akun berikutnya
+    rm -f "$COOKIE_JAR"
 
     if [ -n "$new_cookie" ]; then
         echo "$new_cookie"
         return 0
     else
-        echo "FAIL_REDEEM"
+        # Jika masih gagal, tampilkan status HTTP-nya
+        local http_status2=$(echo "$redeem_response" | head -n 1 | tr -d '\r')
+        echo "FAIL_REDEEM ($http_status2)"
         return 1
     fi
 }
-
 generate_db_file() {
     local index="$1"
     local raw_cookie="$2"
