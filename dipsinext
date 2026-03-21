@@ -26,7 +26,7 @@ local Config = {
     AutoFishing = true,
     AutoSell = true,
     DelayReqToCatch = 0.35,  
-    SellThreshold = 100 
+    SellThreshold = 25 
 }
 
 pcall(function()
@@ -51,7 +51,7 @@ _G.FishBotActive = true
 -- DYNAMIC DELAY BERDASARKAN ROD ID
 local function GetRodDelay(rodID)
     local rodDelays = {
-        [5] = 0.65, [169] = 0.65, [80] = 1.35, [4] = 1.8, [78] = 1.8, 
+        [5] = 0.65, [169] = 0.65, [80] = 1.5, [4] = 1.8, [78] = 1.8, 
         [77] = 1.8, [85] = 1.8, [76] = 1.8, [79] = 1.8,
     }
     return rodDelays[rodID] or 2
