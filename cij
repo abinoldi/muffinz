@@ -306,8 +306,8 @@ do_main_process() {
         
         # Berikan delay detik jika bukan cookie terakhir
         if [ $idx -lt $total_cookies_input ]; then
-            echo "   ⏳ Menunggu 5 detik (Anti Rate-Limit)..."
-            sleep 5
+            echo "   ⏳ Menunggu 15 detik (Anti Rate-Limit)..."
+            sleep 15
         fi
     done < "$COOKIE_QUEUE"
 
