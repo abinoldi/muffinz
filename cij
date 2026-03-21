@@ -74,13 +74,19 @@ validate_cookie_online() {
     fi
 }
 
-# --- FUNGSI BARU: REFRESH COOKIE KE IP LOKAL ---
+# --- FUNGSI BARU: REFRESH COOKIE KE IP LOKAL (DIPERBAIKI) ---
 refresh_cookie() {
     local old_cookie="$1"
+    # Tambahkan User-Agent agar tidak dicurigai sebagai Bot/cURL biasa
+    local UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     
     # 1. Dapatkan X-CSRF-TOKEN
     local csrf_token=$(curl -s -i -X POST "https://auth.roblox.com/v2/logout" \
-        -H "Cookie: .ROBLOSECURITY=$old_cookie" | grep -i 'x-csrf-token:' | awk '{print $2}' | tr -d '\r')
+        -H "Cookie: .ROBLOSECURITY=$old_cookie" \
+        -H "User-Agent: $UA" \
+        -H "Origin: https://www.roblox.com" \
+        -H "Referer: https://www.roblox.com/" \
+        -H "Content-Length: 0" | grep -i 'x-csrf-token:' | awk '{print $2}' | tr -d '\r')
 
     if [ -z "$csrf_token" ]; then
         echo "FAIL_CSRF"
@@ -91,6 +97,8 @@ refresh_cookie() {
     local ticket_header=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket" \
         -H "Cookie: .ROBLOSECURITY=$old_cookie" \
         -H "x-csrf-token: $csrf_token" \
+        -H "User-Agent: $UA" \
+        -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
         -H "Content-Type: application/json")
         
@@ -101,9 +109,14 @@ refresh_cookie() {
         return 1
     fi
 
-    # 3. Redeem Ticket untuk mendapatkan Cookie baru (Terikat dengan IP HP ini)
+    # Jeda 2 detik di dalam API untuk memberi waktu backend Roblox mendaftarkan tiket
+    sleep 2
+
+    # 3. Redeem Ticket untuk mendapatkan Cookie baru
     local redeem_response=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket/redeem" \
         -H "RBXAuthenticationNegotiation: 1" \
+        -H "User-Agent: $UA" \
+        -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
         -H "Content-Type: application/json" \
         -d "{\"authenticationTicket\": \"$auth_ticket\"}")
@@ -270,10 +283,10 @@ do_main_process() {
         
         idx=$((idx + 1))
         
-        # Berikan delay 5 detik jika bukan cookie terakhir
+        # Berikan delay detik jika bukan cookie terakhir
         if [ $idx -lt $total_cookies_input ]; then
-            echo "   ⏳ Menunggu 5 detik (Anti Rate-Limit)..."
-            sleep 5
+            echo "   ⏳ Menunggu 15 detik (Anti Rate-Limit)..."
+            sleep 15
         fi
     done < "$COOKIE_QUEUE"
 
