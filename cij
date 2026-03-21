@@ -74,79 +74,86 @@ validate_cookie_online() {
     fi
 }
 
-# --- FUNGSI BARU: REFRESH COOKIE DENGAN COOKIE JAR & DEBUGGING ---
+# --- FUNGSI BARU: REFRESH COOKIE (EKSTRAKSI JAR 100% AKURAT) ---
 refresh_cookie() {
     local old_cookie="$1"
     local UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     
-    # Buat file penyimpanan cookie sementara untuk mensimulasikan sesi browser
-    local COOKIE_JAR="$TEMP_DB_DIR/curl_cookies_$RANDOM.txt"
+    # Membuat ID unik untuk file sementara agar tidak tabrakan antar akun
+    local unique_id="$$_${RANDOM}_$(date +%s)"
+    local COOKIE_JAR="$TEMP_DB_DIR/jar_${unique_id}.txt"
+    local HEADER_DUMP="$TEMP_DB_DIR/headers_${unique_id}.txt"
 
-    # 1. Dapatkan X-CSRF-TOKEN & Simpan cookie pelacakan awal ke JAR
-    local csrf_response=$(curl -s -i -X POST "https://auth.roblox.com/v2/logout" \
+    # 1. Dapatkan X-CSRF-TOKEN (Simpan header ke file)
+    curl -s -D "$HEADER_DUMP" -X POST "https://auth.roblox.com/v2/logout" \
         -H "Cookie: .ROBLOSECURITY=$old_cookie" \
         -H "User-Agent: $UA" \
         -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
         -H "Content-Length: 0" \
-        -c "$COOKIE_JAR") # '-c' menyimpan cookie dari server
+        -c "$COOKIE_JAR" -o /dev/null
 
-    local csrf_token=$(echo "$csrf_response" | grep -i 'x-csrf-token:' | awk '{print $2}' | tr -d '\r')
+    local csrf_token=$(grep -i 'x-csrf-token:' "$HEADER_DUMP" | awk '{print $2}' | tr -d '\r\n')
 
     if [ -z "$csrf_token" ]; then
         echo "FAIL_CSRF"
-        rm -f "$COOKIE_JAR"
+        rm -f "$COOKIE_JAR" "$HEADER_DUMP"
         return 1
     fi
 
-    # 2. Dapatkan Authentication Ticket (Bawa cookie dari JAR)
-    local ticket_response=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket" \
+    # 2. Dapatkan Authentication Ticket
+    curl -s -D "$HEADER_DUMP" -X POST "https://auth.roblox.com/v1/authentication-ticket" \
         -H "Cookie: .ROBLOSECURITY=$old_cookie" \
         -H "x-csrf-token: $csrf_token" \
         -H "User-Agent: $UA" \
         -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
         -H "Content-Type: application/json" \
-        -b "$COOKIE_JAR" -c "$COOKIE_JAR") # '-b' baca JAR, '-c' update JAR
+        -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o /dev/null
         
-    local auth_ticket=$(echo "$ticket_response" | grep -i 'rbx-authentication-ticket:' | awk '{print $2}' | tr -d '\r')
+    local auth_ticket=$(grep -i 'rbx-authentication-ticket:' "$HEADER_DUMP" | awk '{print $2}' | tr -d '\r\n')
 
     if [ -z "$auth_ticket" ]; then
-        # Ambil baris pertama (HTTP Status) untuk melihat alasan ditolak
-        local http_status=$(echo "$ticket_response" | head -n 1 | tr -d '\r')
+        local http_status=$(head -n 1 "$HEADER_DUMP" | tr -d '\r\n')
         echo "FAIL_TICKET ($http_status)"
-        rm -f "$COOKIE_JAR"
+        rm -f "$COOKIE_JAR" "$HEADER_DUMP"
         return 1
     fi
 
-    # Jeda untuk backend
+    # Beri nafas untuk backend Roblox memproses tiket
     sleep 2
 
-    # 3. Redeem Ticket (Bawa seluruh sesi dari JAR)
-    local redeem_response=$(curl -s -i -X POST "https://auth.roblox.com/v1/authentication-ticket/redeem" \
+    # 3. Redeem Ticket
+    curl -s -D "$HEADER_DUMP" -X POST "https://auth.roblox.com/v1/authentication-ticket/redeem" \
         -H "RBXAuthenticationNegotiation: 1" \
         -H "User-Agent: $UA" \
         -H "Origin: https://www.roblox.com" \
         -H "Referer: https://www.roblox.com/" \
         -H "Content-Type: application/json" \
-        -b "$COOKIE_JAR" \
-        -d "{\"authenticationTicket\": \"$auth_ticket\"}")
+        -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+        -d "{\"authenticationTicket\": \"$auth_ticket\"}" -o /dev/null
 
-    local new_cookie=$(echo "$redeem_response" | grep -i 'set-cookie: .ROBLOSECURITY=' | sed -n 's/.*.ROBLOSECURITY=\([^;]*\).*/\1/p' | tr -d '\r')
+    # EKSTRAKSI BARU: Ambil cookie dari file Cookie Jar yang disusun rapi oleh cURL
+    local new_cookie=""
+    if [ -f "$COOKIE_JAR" ]; then
+        # cut -f7 mengambil kolom ke-7 (kolom value) dari format standar Netscape Cookie
+        new_cookie=$(grep '.ROBLOSECURITY' "$COOKIE_JAR" | cut -f7 | tr -d '\r\n')
+    fi
 
-    # Bersihkan file JAR agar tidak bocor ke akun berikutnya
-    rm -f "$COOKIE_JAR"
-
+    # Jika berhasil ditemukan cookie-nya
     if [ -n "$new_cookie" ]; then
         echo "$new_cookie"
+        rm -f "$COOKIE_JAR" "$HEADER_DUMP"
         return 0
     else
-        # Jika masih gagal, tampilkan status HTTP-nya
-        local http_status2=$(echo "$redeem_response" | head -n 1 | tr -d '\r')
-        echo "FAIL_REDEEM ($http_status2)"
+        # Jika gagal, tampilkan status HTTP terakhir
+        local http_status2=$(head -n 1 "$HEADER_DUMP" | tr -d '\r\n')
+        echo "FAIL_EKSTRAK ($http_status2)"
+        rm -f "$COOKIE_JAR" "$HEADER_DUMP"
         return 1
     fi
 }
+
 generate_db_file() {
     local index="$1"
     local raw_cookie="$2"
@@ -299,8 +306,8 @@ do_main_process() {
         
         # Berikan delay detik jika bukan cookie terakhir
         if [ $idx -lt $total_cookies_input ]; then
-            echo "   ⏳ Menunggu 120 detik (Anti Rate-Limit)..."
-            sleep 120
+            echo "   ⏳ Menunggu 5 detik (Anti Rate-Limit)..."
+            sleep 5
         fi
     done < "$COOKIE_QUEUE"
 
