@@ -1346,6 +1346,9 @@ local function FindAndTeleportToKetupatEvent()
     return false
 end
 
+-- ==========================================================
+-- 3. LOOP UTAMA KETUPAT WHALE
+-- ==========================================================
 local function StartKetupatWhaleLoop()
     task.spawn(function()
         print("🐳 Memulai Sistem Auto-Teleport Ketupat Whale...")
