@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 task.wait(15)
 -- ======================================================
--- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXEDX
+-- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXEDZ
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
 -- UPDATE: Add Ketupat Whale Event V2
 -- FIX: Standalone Auto Fishing Anti-Detection Bypass Terintegrasi
