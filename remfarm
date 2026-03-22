@@ -1221,73 +1221,154 @@ if RE_ObtainedNewFishNotification then
         UpdateStoneData()
     end)
 end
+
 -- ==========================================================
--- [BARU] AUTO KETUPAT WHALE (EID MUBARAK EVENT) - FIXED V3
+-- [UPGRADED] AUTO KETUPAT WHALE (Hybrid Pijakan & Render Fix)
 -- ==========================================================
-local function FindAndTeleportToKetupatWhale()
-    local char = lp.Character or lp.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart", 5)
-    
+
+local waterPlatform = nil
+
+-- Fungsi untuk mendapatkan HumanoidRootPart dengan aman
+local function GetHRP()
+    local character = lp.Character or lp.CharacterAdded:Wait()
+    return character:WaitForChild("HumanoidRootPart", 5)
+end
+
+-- ==========================================================
+-- 1. SISTEM WALK ON WATER (KHUSUS KETUPAT EVENT)
+-- ==========================================================
+local function StartKetupatWalkOnWater()
+    task.spawn(function()
+        while true do
+            if MasterConfig.AutoKetupatWhale then
+                local hrp = GetHRP()
+                if hrp then
+                    -- Raycast untuk cek air
+                    local rayParams = RaycastParams.new()
+                    rayParams.FilterDescendantsInstances = {workspace.Terrain}
+                    rayParams.FilterType = Enum.RaycastFilterType.Include
+                    rayParams.IgnoreWater = false
+                    
+                    local result = workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), Vector3.new(0, -20, 0), rayParams)
+                    
+                    if result and result.Material == Enum.Material.Water then
+                        if not waterPlatform or not waterPlatform.Parent then
+                            waterPlatform = Instance.new("Part")
+                            waterPlatform.Name = "KetupatWaterPlatform"
+                            waterPlatform.Anchored = true
+                            waterPlatform.Size = Vector3.new(15, 1, 15)
+                            waterPlatform.Transparency = 1
+                            waterPlatform.CanCollide = true
+                            waterPlatform.Parent = workspace
+                            print("[🌊] Platform Air Ketupat Aktif")
+                        end
+                        waterPlatform.Position = Vector3.new(hrp.Position.X, result.Position.Y, hrp.Position.Z)
+                    elseif waterPlatform then
+                        waterPlatform.Position = Vector3.new(0, -500, 0)
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+-- ==========================================================
+-- 2. LOGIKA TELEPORT (TARGET: FISHING BOAT / TOP)
+-- ==========================================================
+local function FindAndTeleportToKetupatEvent()
+    local hrp = GetHRP()
     if not hrp then return false end
 
-    -- 1. Teleport ke Fisherman Island dulu sebagai titik "Standby / Loading Map"
-    local fishIslandPos = Vector3.new(74.030, 9.530, 2705.230)
-    local fishIslandLook = Vector3.new(-0.000, -0.000, -1.000)
-    
-    -- Cek jarak biar tidak spam teleport kalau karakter sudah ada di Fisherman Island
-    if (hrp.Position - fishIslandPos).Magnitude > 50 then
-        print("🏝️ Pindah ke Fisherman Island untuk memuat/menunggu Event Ketupat...")
-        TeleportToLookAt(fishIslandPos, fishIslandLook)
-        task.wait(1.5) -- Beri waktu sedikit agar objek "Eid Mubarak" sempat ter-render di server
-    end
-
-    -- 2. Mulai scan event Ketupat Whale
+    -- Cari event Eid Mubarak
     local locationsFolder = workspace:FindFirstChild("Locations")
     if not locationsFolder then return false end
-
-    local eventModel = locationsFolder:FindFirstChild("Eid Mubarak")
     
-    -- Jika event tidak ada, kita return false (Karakter akan tetap standby di Fisherman Island)
-    if not eventModel then return false end 
+    local eventModel = locationsFolder:FindFirstChild("Eid Mubarak")
+    if not eventModel then 
+        -- Jika event tidak ditemukan, coba force render dengan teleport ke koordinat estimasi
+        print("[⚠️] Event Ketupat belum terdeteksi, mencoba force render...")
+        local estimatedPos = Vector3.new(240, 20, 2852) -- Koordinat estimasi
+        hrp.CFrame = CFrame.new(estimatedPos)
+        task.wait(2)
+        return false
+    end
 
-    -- 3. Jika event Ketupat ditemukan, bersiap teleport ke paus-nya
-    local targetPart = eventModel:FindFirstChild("Top") or eventModel
-    local positionOffset = Vector3.new(0, 3, 0) 
+    -- Cari target pijakan (prioritas: Fishing Boat > Top)
+    local targetPart = eventModel:FindFirstChild("Fishing Boat") or eventModel:FindFirstChild("Top") or eventModel
+    
+    -- Offset untuk menghindari terjebak
+    local positionOffset = Vector3.new(0, 3, 0)
 
     local targetCFrame = nil
-    local success = pcall(function()
+    pcall(function()
         if targetPart:IsA("Model") then
-             targetCFrame = targetPart:GetPivot()
+            targetCFrame = targetPart:GetPivot()
         elseif targetPart:IsA("BasePart") then
-             targetCFrame = targetPart.CFrame
+            targetCFrame = targetPart.CFrame
         end
     end)
 
-    if success and targetCFrame then
-        local position = targetCFrame.Position + positionOffset
-        local lookVector = targetCFrame.LookVector
+    if targetCFrame then
+        -- Angkat sedikit sebelum teleport
+        hrp.CFrame = hrp.CFrame + Vector3.new(0, 5, 0)
+        task.wait(0.1)
         
-        -- Angkat sedikit ke udara sebelum teleport agar aman dari nyangkut
-        hrp.CFrame = hrp.CFrame + Vector3.new(0, 10, 0)
-        task.wait(0.2)
+        -- Teleport ke target
+        hrp.CFrame = targetCFrame * CFrame.new(0, positionOffset.Y, 0)
         
-        TeleportToLookAt(position, lookVector)
-        print("[🐳] Teleport Sukses ke atas Ketupat Whale!")
+        -- Reset velocity
+        if hrp:FindFirstChild("Humanoid") then
+            hrp.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+        end
+        
+        print("[🐳] Teleport Berhasil ke Pijakan Event Ketupat!")
         return true
     end
     
     return false
 end
 
+-- ==========================================================
+-- 3. MAIN LOOP KETUPAT WHALE (DENGAN RENDER FIX)
+-- ==========================================================
 local function StartKetupatWhaleLoop()
+    -- Aktifkan walk on water khusus untuk event
+    StartKetupatWalkOnWater()
+    
     task.spawn(function()
-        print("🐳 Memulai Sistem Auto-Teleport Ketupat Whale...")
+        print("🐳 Auto Ketupat Whale Aktif dengan Hybrid Pijakan & Render Fix...")
+        
+        -- Counter untuk retry jika gagal
+        local failCount = 0
+        
         while true do
             if MasterConfig.AutoKetupatWhale then
-                if FindAndTeleportToKetupatWhale() then
-                    task.wait(300) -- Jeda 15 menit jika sukses
+                local success = FindAndTeleportToKetupatEvent()
+                
+                if success then
+                    failCount = 0
+                    -- Berdiri sebentar di atas paus sebelum jeda
+                    task.wait(5)
+                    print("[✅] Berhasil mendarat di Ketupat Whale, cooldown 15 menit...")
+                    task.wait(900) -- 15 menit cooldown
                 else
-                    task.wait(5) -- Scan terus setiap 5 detik jika event belum muncul
+                    failCount = failCount + 1
+                    print("[⚠️] Gagal teleport ke event (" .. failCount .. "x), mencoba lagi...")
+                    
+                    if failCount >= 5 then
+                        -- Jika gagal 5 kali, coba teleport ke Fisherman Island untuk reset render
+                        local fishermanPos = Vector3.new(74.030, 9.530, 2705.230)
+                        local hrp = GetHRP()
+                        if hrp then
+                            hrp.CFrame = CFrame.new(fishermanPos)
+                            print("[🔄] Reset posisi ke Fisherman Island untuk force render...")
+                            task.wait(3)
+                        end
+                        failCount = 0
+                    end
+                    
+                    task.wait(10) -- Coba lagi lebih cepat jika gagal
                 end
             else
                 task.wait(5)
