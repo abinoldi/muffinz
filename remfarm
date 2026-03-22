@@ -973,18 +973,22 @@ local function StartConfigUpdater()
             
             LoadWebConfig()
             
-            -- Jika lokasi berubah, ATAU jika Event Ketupat baru saja dimatikan (true -> false)
-            if oldLocation ~= MasterConfig.SelectedLocation or (oldKetupatState == true and MasterConfig.AutoKetupatWhale == false) then
-                print("🔄 Config Update: Terjadi perubahan lokasi atau Event Ketupat dimatikan!")
+            -- Cek apakah lokasi berubah ATAU status Ketupat berubah (baik ON->OFF maupun OFF->ON)
+            if oldLocation ~= MasterConfig.SelectedLocation or oldKetupatState ~= MasterConfig.AutoKetupatWhale then
+                print("🔄 Config Update: Terjadi perubahan lokasi atau status Event Ketupat!")
                 
-                -- Hancurkan pijakan backup jika ada (agar tidak tertinggal di map)
-                local eventFloor = workspace:FindFirstChild("EventBackupFloor")
-                if eventFloor then 
-                    eventFloor.Position = Vector3.new(0, -9999, 0) 
+                if MasterConfig.AutoKetupatWhale == false then
+                    -- JIKA DIMATIKAN: Bersihkan pijakan dan balik ke lokasi farming config
+                    local eventFloor = workspace:FindFirstChild("EventBackupFloor")
+                    if eventFloor then 
+                        eventFloor.Position = Vector3.new(0, -9999, 0) 
+                    end
+                    TeleportToSelectedLocation()
+                else
+                    -- JIKA DINYALAKAN KEMBALI: Langsung paksa teleport ke event saat itu juga
+                    print("🐳 Event Ketupat diaktifkan kembali! Meluncur ke lokasi...")
+                    FindAndTeleportToKetupatWhale()
                 end
-                
-                -- Paksa teleport kembali ke lokasi config
-                TeleportToSelectedLocation()
             end
         end
     end)
@@ -1344,42 +1348,21 @@ end
 -- 3. MAIN LOOP KETUPAT WHALE (DENGAN RENDER FIX)
 -- ==========================================================
 local function StartKetupatWhaleLoop()
-    -- Aktifkan walk on water khusus untuk event
-    StartKetupatWalkOnWater()
-    
     task.spawn(function()
-        print("🐳 Auto Ketupat Whale Aktif dengan Hybrid Pijakan & Render Fix...")
-        
-        -- Counter untuk retry jika gagal
-        local failCount = 0
-        
+        print("🐳 Memulai Sistem Auto-Teleport Ketupat Whale...")
         while true do
             if MasterConfig.AutoKetupatWhale then
-                local success = FindAndTeleportToKetupatEvent()
-                
-                if success then
-                    failCount = 0
-                    -- Berdiri sebentar di atas paus sebelum jeda
-                    task.wait(5)
-                    print("[✅] Berhasil mendarat di Ketupat Whale, cooldown 15 menit...")
-                    task.wait(900) -- 15 menit cooldown
-                else
-                    failCount = failCount + 1
-                    print("[⚠️] Gagal teleport ke event (" .. failCount .. "x), mencoba lagi...")
+                if FindAndTeleportToKetupatWhale() then
+                    print("🎣 Sedang farming di Event Ketupat...")
                     
-                    if failCount >= 5 then
-                        -- Jika gagal 5 kali, coba teleport ke Fisherman Island untuk reset render
-                        local fishermanPos = Vector3.new(74.030, 9.530, 2705.230)
-                        local hrp = GetHRP()
-                        if hrp then
-                            hrp.CFrame = CFrame.new(fishermanPos)
-                            print("[🔄] Reset posisi ke Fisherman Island untuk force render...")
-                            task.wait(3)
-                        end
-                        failCount = 0
+                    -- SMART COOLDOWN: Jeda 15 menit, tapi dicek per detik
+                    -- Kalau tiba-tiba Ketupat dimatikan via web, loop ini langsung batal (break)
+                    for i = 1, 900 do
+                        if not MasterConfig.AutoKetupatWhale then break end
+                        task.wait(1)
                     end
-                    
-                    task.wait(10) -- Coba lagi lebih cepat jika gagal
+                else
+                    task.wait(5)
                 end
             else
                 task.wait(5)
