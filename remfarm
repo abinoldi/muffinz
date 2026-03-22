@@ -1293,7 +1293,7 @@ local function StartKetupatWalkOnWater()
 end
 
 -- ==========================================================
--- 2. LOGIKA TELEPORT (TARGET: FISHING BOAT / TOP)
+-- 2. LOGIKA TELEPORT (TARGET: FISHING BOAT / TOP) - FIXED
 -- ==========================================================
 local function FindAndTeleportToKetupatEvent()
     local hrp = GetHRP()
@@ -1336,10 +1336,8 @@ local function FindAndTeleportToKetupatEvent()
         -- Teleport ke target
         hrp.CFrame = targetCFrame * CFrame.new(0, positionOffset.Y, 0)
         
-        -- Reset velocity
-        if hrp:FindFirstChild("Humanoid") then
-            hrp.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
-        end
+        -- [FIXED] Reset velocity agar tidak terlempar
+        hrp.Velocity = Vector3.new(0, 0, 0)
         
         print("[🐳] Teleport Berhasil ke Pijakan Event Ketupat!")
         return true
@@ -1354,8 +1352,8 @@ local function StartKetupatWhaleLoop()
         while true do
             if MasterConfig.AutoKetupatWhale then
                 
-                -- Coba cari dan teleport ke event
-                local success = FindAndTeleportToKetupatWhale()
+                -- [FIXED] Panggil nama fungsi yang BENAR
+                local success = FindAndTeleportToKetupatEvent()
                 
                 if success then
                     print("🎣 Berhasil mendarat! Menunggu di Event Ketupat...")
