@@ -1,9 +1,9 @@
 repeat task.wait() until game:IsLoaded()
-
+task.wait(15)
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXED
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: Fix Item Quantity Tracker, Smart Auto Totem, Flask Tracker, Live Config & Smart Teleport
+-- UPDATE: Add Ketupat Whale Event
 -- FIX: Standalone Auto Fishing Anti-Detection Bypass Terintegrasi
 -- ======================================================
 
