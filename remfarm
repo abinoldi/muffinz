@@ -966,13 +966,24 @@ end
 local function StartConfigUpdater()
     task.spawn(function()
         while true do
-            task.wait(60) 
+            task.wait(60) -- Menarik data dari web setiap 60 detik
+            
             local oldLocation = MasterConfig.SelectedLocation
+            local oldKetupatState = MasterConfig.AutoKetupatWhale
             
             LoadWebConfig()
             
-            if oldLocation ~= MasterConfig.SelectedLocation then
-                print("🔄 Config Update: Lokasi diubah ke " .. tostring(MasterConfig.SelectedLocation))
+            -- Jika lokasi berubah, ATAU jika Event Ketupat baru saja dimatikan (true -> false)
+            if oldLocation ~= MasterConfig.SelectedLocation or (oldKetupatState == true and MasterConfig.AutoKetupatWhale == false) then
+                print("🔄 Config Update: Terjadi perubahan lokasi atau Event Ketupat dimatikan!")
+                
+                -- Hancurkan pijakan backup jika ada (agar tidak tertinggal di map)
+                local eventFloor = workspace:FindFirstChild("EventBackupFloor")
+                if eventFloor then 
+                    eventFloor.Position = Vector3.new(0, -9999, 0) 
+                end
+                
+                -- Paksa teleport kembali ke lokasi config
                 TeleportToSelectedLocation()
             end
         end
