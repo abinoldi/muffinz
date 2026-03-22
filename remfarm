@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 task.wait(15)
 -- ======================================================
--- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXED
+-- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXEDX
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
 -- UPDATE: Add Ketupat Whale Event V2
 -- FIX: Standalone Auto Fishing Anti-Detection Bypass Terintegrasi
@@ -973,23 +973,27 @@ local function StartConfigUpdater()
             
             LoadWebConfig()
             
-            -- Cek apakah lokasi berubah ATAU status Ketupat berubah (baik ON->OFF maupun OFF->ON)
-            if oldLocation ~= MasterConfig.SelectedLocation or oldKetupatState ~= MasterConfig.AutoKetupatWhale then
-                print("🔄 Config Update: Terjadi perubahan lokasi atau status Event Ketupat!")
+            -- JIKA DIMATIKAN (True -> False)
+            if oldKetupatState == true and MasterConfig.AutoKetupatWhale == false then
+                print("🔄 Event Ketupat DIMATIKAN! Kembali ke lokasi config...")
                 
-                if MasterConfig.AutoKetupatWhale == false then
-                    -- JIKA DIMATIKAN: Bersihkan pijakan dan balik ke lokasi farming config
-                    local eventFloor = workspace:FindFirstChild("EventBackupFloor")
-                    if eventFloor then 
-                        eventFloor.Position = Vector3.new(0, -9999, 0) 
-                    end
-                    TeleportToSelectedLocation()
-                else
-                    -- JIKA DINYALAKAN KEMBALI: Langsung paksa teleport ke event saat itu juga
-                    print("🐳 Event Ketupat diaktifkan kembali! Meluncur ke lokasi...")
-                    FindAndTeleportToKetupatWhale()
+                -- Hancurkan pijakan backup jika ada
+                local eventFloor = workspace:FindFirstChild("EventBackupFloor")
+                if eventFloor then 
+                    eventFloor.Position = Vector3.new(0, -9999, 0) 
                 end
+                
+                -- Paksa teleport kembali ke lokasi config
+                TeleportToSelectedLocation()
+                
+            -- JIKA LOKASI BERUBAH (Dan Ketupat sedang mati)
+            elseif oldLocation ~= MasterConfig.SelectedLocation and not MasterConfig.AutoKetupatWhale then
+                print("🔄 Lokasi Config berubah!")
+                TeleportToSelectedLocation()
             end
+            
+            -- Note: Jika dinyalakan (False -> True), updater DIAM SAJA.
+            -- Biarkan StartKetupatWhaleLoop yang otomatis bereaksi.
         end
     end)
 end
@@ -1344,27 +1348,33 @@ local function FindAndTeleportToKetupatEvent()
     return false
 end
 
--- ==========================================================
--- 3. MAIN LOOP KETUPAT WHALE (DENGAN RENDER FIX)
--- ==========================================================
 local function StartKetupatWhaleLoop()
     task.spawn(function()
         print("🐳 Memulai Sistem Auto-Teleport Ketupat Whale...")
         while true do
             if MasterConfig.AutoKetupatWhale then
-                if FindAndTeleportToKetupatWhale() then
-                    print("🎣 Sedang farming di Event Ketupat...")
+                
+                -- Coba cari dan teleport ke event
+                local success = FindAndTeleportToKetupatWhale()
+                
+                if success then
+                    print("🎣 Berhasil mendarat! Menunggu di Event Ketupat...")
                     
-                    -- SMART COOLDOWN: Jeda 15 menit, tapi dicek per detik
-                    -- Kalau tiba-tiba Ketupat dimatikan via web, loop ini langsung batal (break)
+                    -- SMART COOLDOWN: Jeda 15 menit, TAPI dicek setiap 1 detik!
                     for i = 1, 900 do
-                        if not MasterConfig.AutoKetupatWhale then break end
+                        -- Kalau di tengah jalan toggle dimatikan via web, langsung BERHENTI nunggu
+                        if not MasterConfig.AutoKetupatWhale then 
+                            print("🛑 Ketupat Whale dibatalkan. Menghentikan cooldown...")
+                            break 
+                        end
                         task.wait(1)
                     end
                 else
+                    -- Kalau gagal (event belum spawn), tunggu 5 detik lalu coba lagi
                     task.wait(5)
                 end
             else
+                -- Kalau toggle mati, tidur 5 detik lalu cek lagi
                 task.wait(5)
             end
         end
