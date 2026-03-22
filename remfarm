@@ -3,7 +3,7 @@ task.wait(15)
 -- ======================================================
 -- # SYNCEHUB x RE-FARM ULTIMATE V8.6 (MERGED HYBRID) - FIXED
 -- LVCB (Progression) -> Remfarm (Endgame Farming)
--- UPDATE: Add Ketupat Whale Event
+-- UPDATE: Add Ketupat Whale Event V2
 -- FIX: Standalone Auto Fishing Anti-Detection Bypass Terintegrasi
 -- ======================================================
 
@@ -1261,7 +1261,7 @@ local function StartKetupatWhaleLoop()
         while true do
             if MasterConfig.AutoKetupatWhale then
                 if FindAndTeleportToKetupatWhale() then
-                    task.wait(900) -- Jeda 15 menit jika sukses
+                    task.wait(300) -- Jeda 15 menit jika sukses
                 else
                     task.wait(5) -- Scan terus setiap 5 detik jika event belum muncul
                 end
