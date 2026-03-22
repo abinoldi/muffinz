@@ -1218,19 +1218,35 @@ if RE_ObtainedNewFishNotification then
     end)
 end
 -- ==========================================================
--- [BARU] AUTO KETUPAT WHALE (EID MUBARAK EVENT)
+-- [BARU] AUTO KETUPAT WHALE (EID MUBARAK EVENT) - FIXED V3
 -- ==========================================================
 local function FindAndTeleportToKetupatWhale()
-    local char = lp.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    
     if not hrp then return false end
 
+    -- 1. Teleport ke Fisherman Island dulu sebagai titik "Standby / Loading Map"
+    local fishIslandPos = Vector3.new(74.030, 9.530, 2705.230)
+    local fishIslandLook = Vector3.new(-0.000, -0.000, -1.000)
+    
+    -- Cek jarak biar tidak spam teleport kalau karakter sudah ada di Fisherman Island
+    if (hrp.Position - fishIslandPos).Magnitude > 50 then
+        print("🏝️ Pindah ke Fisherman Island untuk memuat/menunggu Event Ketupat...")
+        TeleportToLookAt(fishIslandPos, fishIslandLook)
+        task.wait(1.5) -- Beri waktu sedikit agar objek "Eid Mubarak" sempat ter-render di server
+    end
+
+    -- 2. Mulai scan event Ketupat Whale
     local locationsFolder = workspace:FindFirstChild("Locations")
     if not locationsFolder then return false end
 
     local eventModel = locationsFolder:FindFirstChild("Eid Mubarak")
+    
+    -- Jika event tidak ada, kita return false (Karakter akan tetap standby di Fisherman Island)
     if not eventModel then return false end 
 
+    -- 3. Jika event Ketupat ditemukan, bersiap teleport ke paus-nya
     local targetPart = eventModel:FindFirstChild("Top") or eventModel
     local positionOffset = Vector3.new(0, 3, 0) 
 
@@ -1244,11 +1260,15 @@ local function FindAndTeleportToKetupatWhale()
     end)
 
     if success and targetCFrame then
-        local position = targetCFrame.p + positionOffset
+        local position = targetCFrame.Position + positionOffset
         local lookVector = targetCFrame.LookVector
         
+        -- Angkat sedikit ke udara sebelum teleport agar aman dari nyangkut
+        hrp.CFrame = hrp.CFrame + Vector3.new(0, 10, 0)
+        task.wait(0.2)
+        
         TeleportToLookAt(position, lookVector)
-        print("[✅] Teleport Sukses ke Event Ketupat Whale!")
+        print("[🐳] Teleport Sukses ke atas Ketupat Whale!")
         return true
     end
     
