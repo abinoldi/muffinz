@@ -827,6 +827,9 @@ local MasterConfig = {
     AutoBuyTotem = false, AutoBuyWeather = false, TargetWeathers = {"Cloudy", "Storm", "Wind"}, WeatherLoopDelay = 300, 
     PotatoMode = true, AutoTrade = false, TargetUsername = "mm3kenak", TradeMode = "SECRETS_FIRST", TradeDelay = 6.5,
     WebhookEnabled = false, WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
+    
+    -- [BARU] Konfigurasi Event
+    AutoKetupatWhale = true, 
 }
 
 local FishingState = { IsFishing = false, CurrentMode = "INSTANT_RECHARGE", Teleporting = false, TotalCoins = 0, SessionEarnings = 0 }
@@ -929,6 +932,12 @@ end
 
 local function TeleportToSelectedLocation()
     if not MasterConfig.AutoTeleport then return end
+    
+    -- [BARU] Cegah teleport biasa jika Event Ketupat sedang aktif
+    if MasterConfig.AutoKetupatWhale then
+        print("🐳 Auto Ketupat Whale Aktif! Mengabaikan lokasi config utama.")
+        return 
+    end
     
     local targetLocName = MasterConfig.SelectedLocation
     local targetData = FishingLocations[targetLocName]
@@ -1208,7 +1217,60 @@ if RE_ObtainedNewFishNotification then
         UpdateStoneData()
     end)
 end
+-- ==========================================================
+-- [BARU] AUTO KETUPAT WHALE (EID MUBARAK EVENT)
+-- ==========================================================
+local function FindAndTeleportToKetupatWhale()
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
 
+    local locationsFolder = workspace:FindFirstChild("Locations")
+    if not locationsFolder then return false end
+
+    local eventModel = locationsFolder:FindFirstChild("Eid Mubarak")
+    if not eventModel then return false end 
+
+    local targetPart = eventModel:FindFirstChild("Top") or eventModel
+    local positionOffset = Vector3.new(0, 3, 0) 
+
+    local targetCFrame = nil
+    local success = pcall(function()
+        if targetPart:IsA("Model") then
+             targetCFrame = targetPart:GetPivot()
+        elseif targetPart:IsA("BasePart") then
+             targetCFrame = targetPart.CFrame
+        end
+    end)
+
+    if success and targetCFrame then
+        local position = targetCFrame.p + positionOffset
+        local lookVector = targetCFrame.LookVector
+        
+        TeleportToLookAt(position, lookVector)
+        print("[✅] Teleport Sukses ke Event Ketupat Whale!")
+        return true
+    end
+    
+    return false
+end
+
+local function StartKetupatWhaleLoop()
+    task.spawn(function()
+        print("🐳 Memulai Sistem Auto-Teleport Ketupat Whale...")
+        while true do
+            if MasterConfig.AutoKetupatWhale then
+                if FindAndTeleportToKetupatWhale() then
+                    task.wait(900) -- Jeda 15 menit jika sukses
+                else
+                    task.wait(5) -- Scan terus setiap 5 detik jika event belum muncul
+                end
+            else
+                task.wait(5)
+            end
+        end
+    end)
+end
 -- ======================================================
 -- 4. THE BRIDGE: LVCB -> REMFARM CONTROLLER
 -- ======================================================
@@ -1242,10 +1304,7 @@ task.spawn(function()
     MasterConfig.SelectedLocation = "Ancient Ruin"
 
     StartWalkOnWater()
-    
     CreateDashboardRemfarm()
-    
-    -- Tarik config pertama kali dari Flask
     LoadWebConfig()
     
     if RF_UpdateAutoSellThreshold then 
@@ -1256,7 +1315,10 @@ task.spawn(function()
     StartAutoBuyWeather() 
     StartAutoTotem() 
     
-    -- Cek & Teleport berdasarkan config web
+    -- [BARU] Panggil fungsi Loop Ketupat Whale
+    StartKetupatWhaleLoop()
+    
+    -- Cek & Teleport berdasarkan config web / Event
     TeleportToSelectedLocation()
     
     if MasterConfig.FishingEnabled then StartFishingRouterRemfarm() end
