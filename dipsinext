@@ -1,5 +1,5 @@
 -- ======================================================
--- # ULTIMATE ALL-IN-ONE HUB: DIPSINEXT -> LVCB -> REMFARMz
+-- # ULTIMATE ALL-IN-ONE HUB: DIPSINEXT -> LVCB -> REMFARM
 -- FULL AUTO PROGRESSION TO ENDGAME / KETUPAT WHALE (FIXED)
 -- ======================================================
 
@@ -153,14 +153,14 @@ local function CreateDashboard()
     if Services.CoreGui:FindFirstChild("MergeDashboard") then Services.CoreGui.MergeDashboard:Destroy() end
     local gui = Instance.new("ScreenGui", Services.CoreGui); gui.Name = "MergeDashboard"; gui.IgnoreGuiInset = true
     
-    -- DIKEMBALIKAN: Size full screen (1, 1) dan warna hitam pekat (0, 0, 0)
+    -- Background Hitam Full
     local dashboard = Instance.new("Frame", gui)
     dashboard.Size = UDim2.fromScale(1, 1) 
     dashboard.Position = UDim2.new(0,0,0,0)
     dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0) 
     dashboard.Visible = true
     
-    -- Teks ditaruh di tengah layar
+    -- Teks Status di Tengah
     local L_Status = Instance.new("TextLabel", dashboard)
     L_Status.Size = UDim2.new(1, 0, 0.2, 0) 
     L_Status.Position = UDim2.new(0, 0, 0.4, 0) 
@@ -169,6 +169,26 @@ local function CreateDashboard()
     L_Status.Font = Enum.Font.GothamBold
     L_Status.TextScaled = true
 
+    -- Tombol Toggle Hide/Show
+    local toggleBtn = Instance.new("TextButton", gui)
+    toggleBtn.Size = UDim2.new(0.2, 0, 0.05, 0)
+    toggleBtn.Position = UDim2.new(0.5, 0, 0.95, 0)
+    toggleBtn.AnchorPoint = Vector2.new(0.5, 1)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    toggleBtn.Text = "Tutup / Buka Layar"
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    toggleBtn.ZIndex = 999 
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1,0)
+    
+    -- Logika Klik Tombol
+    toggleBtn.MouseButton1Click:Connect(function() 
+        dashboard.Visible = not dashboard.Visible 
+        toggleBtn.BackgroundTransparency = dashboard.Visible and 0 or 0.5
+    end)
+
+    -- Loop Update Teks
     task.spawn(function()
         while gui.Parent and task.wait(0.5) do
             if _G.CurrentScriptPhase == 1 then L_Status.Text = "FASE 1: DIPSINEXT | MODE: " .. STATE.Mode .. "\nINFO: " .. STATE.TargetInfo .. " | COIN: " .. STATE.TotalCoins
