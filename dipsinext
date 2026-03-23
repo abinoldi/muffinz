@@ -202,11 +202,20 @@ local function UpdateGameMode()
     if not PlayerData then STATE.TargetInfo = "Loading Data..."; return end
     local data = PlayerData:Get(); if not data then return end
     STATE.TotalCoins = data.Coins or 0
+    
     local ownedRods = GetOwnedRods(data.Inventory or {})
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     local hasGhostfin = table.find(ownedRods, 169) ~= nil
 
-    if hasGhostfin then STATE.Mode = "Farm Enchant"; STATE.TargetInfo = "Farming Ghostfin"; STATE.NextLocation = "Enchant Room"; return end
+    -- [UPDATE PENTING] 
+    -- Jika sudah punya Ghostfin, langsung matikan Fase 1 dan loncat ke Fase 2 (LVCB)
+    if hasGhostfin then 
+        STATE.Mode = "Finished"
+        STATE.TargetInfo = "Ghostfin didapat! Loncat ke LVCB..."
+        _G.CurrentScriptPhase = 2
+        return 
+    end
+
     local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data, STATE.HasAstralRod)
     if dsMode == "DeepSea" then
         STATE.Mode = "DeepSea"; STATE.TargetInfo = dsProg; STATE.NextLocation = dsLoc
@@ -232,7 +241,13 @@ local function UpdateGameMode()
         end
     end
 
-    if STATE.HasAstralRod and not hasGhostfin then STATE.Mode = "Farm Ghostfin"; STATE.TargetInfo = "Farming Ghostfin"; STATE.NextLocation = "Treasure Room"; return end
+    -- Jika punya Astral tapi belum punya Ghostfin, farm Ghostfin di Treasure Room
+    if STATE.HasAstralRod and not hasGhostfin then 
+        STATE.Mode = "Farm Ghostfin"; STATE.TargetInfo = "Farming Ghostfin"; STATE.NextLocation = "Treasure Room"; 
+        return 
+    end
+    
+    -- Fallback aman jika semua syarat sudah terpenuhi
     STATE.Mode = "Finished"; STATE.TargetInfo = "Semua Syarat Fase 1 Terpenuhi!"; _G.CurrentScriptPhase = 2
 end
 
