@@ -152,8 +152,23 @@ local ShopRods = { {Name="Luck Rod", ID=79, Price=325}, {Name="Carbon Rod", ID=7
 local function CreateDashboard()
     if Services.CoreGui:FindFirstChild("MergeDashboard") then Services.CoreGui.MergeDashboard:Destroy() end
     local gui = Instance.new("ScreenGui", Services.CoreGui); gui.Name = "MergeDashboard"; gui.IgnoreGuiInset = true
-    local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 0.15); dashboard.Position = UDim2.new(0,0,0,0); dashboard.BackgroundColor3 = Color3.fromRGB(15, 15, 20); dashboard.Visible = true
-    local L_Status = Instance.new("TextLabel", dashboard); L_Status.Size = UDim2.new(1,0,1,0); L_Status.BackgroundTransparency = 1; L_Status.TextColor3 = Color3.fromRGB(0, 255, 255); L_Status.Font = Enum.Font.GothamBold; L_Status.TextScaled = true
+    
+    -- DIKEMBALIKAN: Size full screen (1, 1) dan warna hitam pekat (0, 0, 0)
+    local dashboard = Instance.new("Frame", gui)
+    dashboard.Size = UDim2.fromScale(1, 1) 
+    dashboard.Position = UDim2.new(0,0,0,0)
+    dashboard.BackgroundColor3 = Color3.fromRGB(0, 0, 0) 
+    dashboard.Visible = true
+    
+    -- Teks ditaruh di tengah layar
+    local L_Status = Instance.new("TextLabel", dashboard)
+    L_Status.Size = UDim2.new(1, 0, 0.2, 0) 
+    L_Status.Position = UDim2.new(0, 0, 0.4, 0) 
+    L_Status.BackgroundTransparency = 1
+    L_Status.TextColor3 = Color3.fromRGB(0, 255, 255)
+    L_Status.Font = Enum.Font.GothamBold
+    L_Status.TextScaled = true
+
     task.spawn(function()
         while gui.Parent and task.wait(0.5) do
             if _G.CurrentScriptPhase == 1 then L_Status.Text = "FASE 1: DIPSINEXT | MODE: " .. STATE.Mode .. "\nINFO: " .. STATE.TargetInfo .. " | COIN: " .. STATE.TotalCoins
