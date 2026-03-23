@@ -1,13 +1,13 @@
 -- ======================================================
--- # ULTIMATE ALL-IN-ONE HUB: DIPSINEXT -> LVCB -> REMFARM
--- FULL AUTO PROGRESSION TO ENDGAME / KETUPAT WHALE
--- Merged & Optimized 
+-- # ULTIMATE ALL-IN-ONE HUB: DIPSINEXT -> LVCB -> REMFARMz
+-- FULL AUTO PROGRESSION TO ENDGAME / KETUPAT WHALE (FIXED)
 -- ======================================================
 
 repeat task.wait() until game:IsLoaded()
 
 _G.CurrentScriptPhase = 1 -- 1 = Dipsinext, 2 = LVCB, 3 = Remfarm
 _G.EnableGlobalPotatoMode = true
+_G.FishBotActive = true
 
 local Services = {
     Players = game:GetService("Players"),
@@ -26,15 +26,14 @@ print("🚀 [Ultimate All-in-One] Dimulai (Phase 1: Dipsinext)")
 print("=============================================\n")
 
 -- ======================================================
--- [0] SHARED SERVICES & UNIFIED REMOTE CACHING
+-- [0] SAFE MODULE & REMOTE LOADING (PERBAIKAN CRITICAL)
 -- ======================================================
-local Replion, ItemUtility, TierUtility, PlayerData, MerchantReplion
+local ReplionClient, ItemUtility, TierUtility, PlayerData
 pcall(function()
-    Replion = require(Services.ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Replion", 5)).Client
-    ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
-    TierUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("TierUtility", 5))
-    PlayerData = Replion:WaitReplion("Data", 10)
-    MerchantReplion = Replion:WaitReplion("Merchant", 10)
+    ReplionClient = require(Services.ReplicatedStorage:WaitForChild("Packages", 10):WaitForChild("Replion", 10)).Client
+    ItemUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 10):WaitForChild("ItemUtility", 10))
+    TierUtility = require(Services.ReplicatedStorage:WaitForChild("Shared", 10):WaitForChild("TierUtility", 10))
+    PlayerData = ReplionClient:WaitReplion("Data", 10)
 end)
 
 local CachedRemotes = {}
@@ -47,25 +46,20 @@ local TargetRemotes = {
 }
 
 local function InitializeRemotes()
-    local netFolder = Services.ReplicatedStorage:FindFirstChild("Packages")
-    if netFolder then
-        netFolder = netFolder:FindFirstChild("_Index")
-        if netFolder then
-            netFolder = netFolder:FindFirstChild("sleitnick_net@0.2.0")
-            if netFolder then
-                netFolder = netFolder:FindFirstChild("net")
-                if netFolder then
-                    local children = netFolder:GetChildren()
-                    local targetMap = {}
-                    for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
-                    for i = 1, #children do
-                        if targetMap[children[i].Name] and i < #children then
-                            CachedRemotes[children[i].Name] = children[i + 1]
-                        end
-                    end
-                end
-            end
-        end
+    local packages = Services.ReplicatedStorage:WaitForChild("Packages", 10)
+    if not packages then return end
+    local index = packages:WaitForChild("_Index", 10)
+    if not index then return end
+    local sleit = index:WaitForChild("sleitnick_net@0.2.0", 10)
+    if not sleit then return end
+    local netFolder = sleit:WaitForChild("net", 10)
+    if not netFolder then return end
+
+    local children = netFolder:GetChildren()
+    local targetMap = {}
+    for _, name in ipairs(TargetRemotes) do targetMap[name] = true end
+    for i = 1, #children do
+        if targetMap[children[i].Name] and i < #children then CachedRemotes[children[i].Name] = children[i + 1] end
     end
 end
 InitializeRemotes()
@@ -82,12 +76,9 @@ local function FireRemote(remote, ...)
     return true
 end
 
--- Remote Mapping
 local RE_EquipItem = GetRemote("RE/EquipItem")
 local RF_EquipToolFromHotbar = GetRemote("RF/EquipToolFromHotbar") or GetRemote("RE/EquipToolFromHotbar")
-local RF_UpdateAutoFishingState = GetRemote("RF/UpdateAutoFishingState")
 local RF_SellAllItems = GetRemote("RF/SellAllItems")
-local RF_PurchaseBait = GetRemote("RF/PurchaseBait")
 local RF_PurchaseFishingRod = GetRemote("RF/PurchaseFishingRod")
 local RE_ObtainedNewFishNotification = GetRemote("RE/ObtainedNewFishNotification")
 local RF_UpdateAutoSellThreshold = GetRemote("RF/UpdateAutoSellThreshold")
@@ -104,49 +95,32 @@ local RF_InitiateTrade = GetRemote("RF/InitiateTrade")
 local RF_PurchaseMarketItem = GetRemote("RF/PurchaseMarketItem")
 local RF_PurchaseWeatherEvent = GetRemote("RF/PurchaseWeatherEvent")
 
--- Set Sell Threshold
 if RF_UpdateAutoSellThreshold then pcall(function() RF_UpdateAutoSellThreshold:InvokeServer(6) end) end
 
 -- ======================================================
--- [0.1] GLOBAL POTATO MODE & NATIVE DISABLE
+-- [0.1] POTATO MODE & BASIC FUNCTIONS
 -- ======================================================
 local function ApplyExtremePotato()
     pcall(function()
         local VFXControllerModule = require(Services.ReplicatedStorage:WaitForChild("Controllers").VFXController)
-        if VFXControllerModule then
-            VFXControllerModule.Handle = function(...) return nil end
-            if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
-        end
-        local cosmeticFolder = workspace:FindFirstChild("CosmeticFolder")
-        if cosmeticFolder then cosmeticFolder:ClearAllChildren() end
+        if VFXControllerModule then VFXControllerModule.Handle = function(...) return nil end end
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         Services.Lighting.GlobalShadows = false
         Services.Lighting.FogEnd = 9e9
         Services.Lighting.Brightness = 0
-        if workspace.Terrain then
-            workspace.Terrain.WaterWaveSize = 0; workspace.Terrain.WaterTransparency = 1; workspace.Terrain.Decoration = false 
-        end
+        if workspace.Terrain then workspace.Terrain.WaterWaveSize = 0; workspace.Terrain.WaterTransparency = 1; workspace.Terrain.Decoration = false end
     end)
     for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then v.Transparency = 1; v.Material = Enum.Material.SmoothPlastic 
-        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
+        if v:IsA("BasePart") then v.Transparency = 1; v.Material = Enum.Material.SmoothPlastic elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
     end
 end
+if _G.EnableGlobalPotatoMode then task.spawn(function() while task.wait(5) do ApplyExtremePotato() end end) end
 
-if _G.EnableGlobalPotatoMode then 
-    ApplyExtremePotato()
-    task.spawn(function() while task.wait(5) do ApplyExtremePotato() end end)
-end
-
-local function DisableNativeAutoFish()
-    pcall(function() 
-        local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
-        if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end
-        if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
-        AutoFishCtrl.Start = function() return end 
-    end)
-end
-DisableNativeAutoFish()
+pcall(function() 
+    local AutoFishCtrl = require(Services.ReplicatedStorage.Controllers.AutoFishingController) 
+    if AutoFishCtrl.Stop then AutoFishCtrl:Stop() end; if AutoFishCtrl.Disable then AutoFishCtrl:Disable() end
+    AutoFishCtrl.Start = function() return end 
+end)
 
 local function GetHRP()
     local character = lp.Character or lp.CharacterAdded:Wait()
@@ -158,18 +132,13 @@ local function TeleportToLookAt(position, lookVector)
     local char = lp.Character
     local hum = char and char:FindFirstChild("Humanoid")
     if hum and hum.Sit then hum.Sit = false task.wait(0.1) end
-    if hrp then 
-        hrp.Velocity = Vector3.new(0, 0, 0)
-        hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0)
-    end
+    if hrp then hrp.Velocity = Vector3.new(0, 0, 0); hrp.CFrame = CFrame.new(position, position + lookVector) * CFrame.new(0, 0.5, 0) end
 end
 
 -- ======================================================
 -- [1] PHASE 1: DIPSINEXT PROGRESSION
 -- ======================================================
-local DipConfig = { DelayReqToCatch = 0.35, SellThreshold = 25 }
-local STATE = { HasAstralRod = false, CurrentRod = "Checking...", CurrentRodID = 0, TotalCoins = 0, Mode = "Starting...", FishCount = 0, UnsoldFish = 0, TargetInfo = "None", CurrentArea = "None", NextLocation = "None" }
-
+local STATE = { TotalCoins = 0, Mode = "Starting...", FishCount = 0, UnsoldFish = 0, HasAstralRod = false, CurrentRodID = 0, TargetInfo = "Checking Data...", CurrentArea = "None", NextLocation = "None" }
 local DipFishingAreas = {
     ["Enchant Room"]={Pos=Vector3.new(3255,-1301,1371),Look=Vector3.new(0,0,-1)},
     ["Treasure Room"]={Pos=Vector3.new(-3598,-281,-1645),Look=Vector3.new(-0.06,0,-1)},
@@ -178,72 +147,58 @@ local DipFishingAreas = {
     ["Volcano"] = {Pos=Vector3.new(-605.1, 19.5, 160.0),Look=Vector3.new(0.85, 0.0, 0.52)},
     ["Esoteric Island"]={Pos=Vector3.new(2164,3,1242),Look=Vector3.new(0,0,-1)}
 }
+local ShopRods = { {Name="Luck Rod", ID=79, Price=325}, {Name="Carbon Rod", ID=76, Price=750}, {Name="Grass Rod", ID=85, Price=1500}, {Name="Demascus Rod", ID=77, Price=3000}, {Name="Ice Rod", ID=78, Price=5000}, {Name="Lucky Rod", ID=4, Price=15000}, {Name="Midnight Rod", ID=80, Price=50000}, {Name="Astral Rod", ID=5, Price=1000000} }
 
-local ShopRods = {
-    {Name="Luck Rod", ID=79, Price=325}, {Name="Carbon Rod", ID=76, Price=750}, {Name="Grass Rod", ID=85, Price=1500}, 
-    {Name="Demascus Rod", ID=77, Price=3000}, {Name="Ice Rod", ID=78, Price=5000}, {Name="Lucky Rod", ID=4, Price=15000}, 
-    {Name="Midnight Rod", ID=80, Price=50000}, {Name="Astral Rod", ID=5, Price=1000000},
-}
-
-local function GetRodDelay(rodID)
-    local rodDelays = {[5] = 0.65, [169] = 0.65, [80] = 1.5, [4] = 1.8, [78] = 1.8, [77] = 1.8, [85] = 1.8, [76] = 1.8, [79] = 1.8}
-    return rodDelays[rodID] or 2
+local function CreateDashboard()
+    if Services.CoreGui:FindFirstChild("MergeDashboard") then Services.CoreGui.MergeDashboard:Destroy() end
+    local gui = Instance.new("ScreenGui", Services.CoreGui); gui.Name = "MergeDashboard"; gui.IgnoreGuiInset = true
+    local dashboard = Instance.new("Frame", gui); dashboard.Size = UDim2.fromScale(1, 0.15); dashboard.Position = UDim2.new(0,0,0,0); dashboard.BackgroundColor3 = Color3.fromRGB(15, 15, 20); dashboard.Visible = true
+    local L_Status = Instance.new("TextLabel", dashboard); L_Status.Size = UDim2.new(1,0,1,0); L_Status.BackgroundTransparency = 1; L_Status.TextColor3 = Color3.fromRGB(0, 255, 255); L_Status.Font = Enum.Font.GothamBold; L_Status.TextScaled = true
+    task.spawn(function()
+        while gui.Parent and task.wait(0.5) do
+            if _G.CurrentScriptPhase == 1 then L_Status.Text = "FASE 1: DIPSINEXT | MODE: " .. STATE.Mode .. "\nINFO: " .. STATE.TargetInfo .. " | COIN: " .. STATE.TotalCoins
+            elseif _G.CurrentScriptPhase == 2 then L_Status.Text = "FASE 2: LVCB | PUZZLE RUIN DOOR\nSTATUS PINTU: " .. _G.RuinStatusStr
+            elseif _G.CurrentScriptPhase == 3 then L_Status.Text = "FASE 3: REMFARM ENDGAME\nIKAN DITANGKAP: " .. STATE.FishCount
+            end
+        end
+    end)
 end
+task.spawn(CreateDashboard)
 
-local function GetOwnedRods(inv)
-    local owned = {}
-    for _, r in ipairs(inv["Fishing Rods"] or {}) do table.insert(owned, tonumber(r.Id)) end
-    return owned
-end
+local function GetRodDelay(rodID) local rodDelays = {[5]=0.65, [169]=0.65, [80]=1.5, [4]=1.8, [78]=1.8, [77]=1.8, [85]=1.8, [76]=1.8, [79]=1.8}; return rodDelays[rodID] or 2 end
+local function GetOwnedRods(inv) local owned = {}; for _, r in ipairs(inv["Fishing Rods"] or {}) do table.insert(owned, tonumber(r.Id)) end; return owned end
 
 local function CheckDeepSeaQuest(data, hasAstral)
     local quest = data.Quests and data.Quests.Mainline and data.Quests.Mainline["Deep Sea Quest"]
     local completed = data.Quests and data.Quests.Completed and data.Quests.Completed["Deep Sea Quest"]
     if completed then return "Done" end
-    if not quest then return hasAstral and ("DeepSea", "Sisyphus Statue", "Activating Quest...") or "Done" end
-    
-    local sObj = quest.CurrentObj or 1
-    local progMap = {}
-    for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
+    if not quest then return hasAstral and "DeepSea" or "Done", "Sisyphus Statue", "Activating Quest..." end
+    local sObj = quest.CurrentObj or 1; local progMap = {}; for _,o in pairs(quest.Objectives or {}) do progMap[o.Id] = o.Progress or 0 end
     local actObj = sObj
-    if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end
-    if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end
-    if actObj==3 and (progMap[3] or 0)>=1 then actObj=4 end
-    if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end 
-    
+    if actObj==1 and (progMap[1] or 0)>=300 then actObj=2 end; if actObj==2 and (progMap[2] or 0)>=3 then actObj=3 end; if actObj==3 and (progMap[3] or 0)>=1 then actObj=4 end; if actObj==4 and (progMap[4] or 0)>=1000000 then return "Done" end 
     if actObj==1 then return "DeepSea", "Treasure Room", (progMap[1] or 0).."/300 Fish"
     elseif actObj==2 then return "DeepSea", "Sisyphus Statue", (progMap[2] or 0).."/3 Mythic"
     elseif actObj==3 then return "DeepSea", "Sisyphus Statue", (progMap[3] or 0).."/1 Secret"
-    elseif actObj==4 then return "DeepSea", (table.find(GetOwnedRods(data.Inventory),5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins"
-    end
+    elseif actObj==4 then return "DeepSea", (table.find(GetOwnedRods(data.Inventory),5) and "Sacred Temple" or "Esoteric Island"), (progMap[4] or 0).."/1M Coins" end
     return "Done"
 end
 
 local function UpdateGameMode()
-    if not PlayerData then return end
-    local data = PlayerData:Get()
-    if not data then return end
-    
+    if not PlayerData then STATE.TargetInfo = "Loading Data..."; return end
+    local data = PlayerData:Get(); if not data then return end
     STATE.TotalCoins = data.Coins or 0
     local ownedRods = GetOwnedRods(data.Inventory or {})
     STATE.HasAstralRod = table.find(ownedRods, 5) ~= nil
     local hasGhostfin = table.find(ownedRods, 169) ~= nil
 
-    if hasGhostfin then
-        STATE.Mode = "Farm Enchant"
-        STATE.NextLocation = "Enchant Room"
-        return
-    end
-
+    if hasGhostfin then STATE.Mode = "Farm Enchant"; STATE.TargetInfo = "Farming Ghostfin"; STATE.NextLocation = "Enchant Room"; return end
     local dsMode, dsLoc, dsProg = CheckDeepSeaQuest(data, STATE.HasAstralRod)
     if dsMode == "DeepSea" then
-        STATE.Mode = "DeepSea"
-        STATE.NextLocation = dsLoc
+        STATE.Mode = "DeepSea"; STATE.TargetInfo = dsProg; STATE.NextLocation = dsLoc
         if not STATE.HasAstralRod then
             for _, rod in ipairs(ShopRods) do
                 if not table.find(ownedRods, rod.ID) and STATE.TotalCoins >= rod.Price then
-                    if RF_PurchaseFishingRod then pcall(function() RF_PurchaseFishingRod:InvokeServer(rod.ID) end) end
-                    break
+                    if RF_PurchaseFishingRod then pcall(function() RF_PurchaseFishingRod:InvokeServer(rod.ID) end) end; break
                 end
             end
         end
@@ -252,55 +207,34 @@ local function UpdateGameMode()
 
     if not STATE.HasAstralRod then
         local nextRod = nil
-        for _, rod in ipairs(ShopRods) do
-            if not table.find(ownedRods, rod.ID) then nextRod = rod; break end
-        end
+        for _, rod in ipairs(ShopRods) do if not table.find(ownedRods, rod.ID) then nextRod = rod; break end end
         if nextRod then
-            STATE.Mode = "FarmNextRod"
+            STATE.Mode = "FarmNextRod"; STATE.TargetInfo = "Farming untuk: " .. nextRod.Name
             if STATE.TotalCoins >= nextRod.Price and RF_PurchaseFishingRod then pcall(function() RF_PurchaseFishingRod:InvokeServer(nextRod.ID) end) end
-            local bestVal = 0
-            for _, oid in ipairs(ownedRods) do
-                for _, sRod in ipairs(ShopRods) do if sRod.ID == oid and sRod.Price > bestVal then bestVal = sRod.Price end end
-            end
+            local bestVal = 0; for _, oid in ipairs(ownedRods) do for _, sRod in ipairs(ShopRods) do if sRod.ID == oid and sRod.Price > bestVal then bestVal = sRod.Price end end end
             STATE.NextLocation = bestVal >= 50000 and "Treasure Room" or "Volcano"
             return
         end
     end
 
-    if STATE.HasAstralRod and not hasGhostfin then
-        STATE.Mode = "Farm Ghostfin"
-        STATE.NextLocation = "Treasure Room" 
-        return
-    end
-
-    -- TRIGGER PINDAH FASE KE LVCB
-    STATE.Mode = "Finished"
-    _G.CurrentScriptPhase = 2
+    if STATE.HasAstralRod and not hasGhostfin then STATE.Mode = "Farm Ghostfin"; STATE.TargetInfo = "Farming Ghostfin"; STATE.NextLocation = "Treasure Room"; return end
+    STATE.Mode = "Finished"; STATE.TargetInfo = "Semua Syarat Fase 1 Terpenuhi!"; _G.CurrentScriptPhase = 2
 end
 
 local function EquipRod(nameID)
     if not PlayerData then return end
     local inv = PlayerData:GetExpect("Inventory")
-    local rods = inv["Fishing Rods"] or {}
-    local targetRod = nil
+    local rods = inv["Fishing Rods"] or {}; local targetRod = nil
     for _, r in pairs(rods) do
         if nameID == "Best" then
             local bestPrice = -1
-            for _, s in ipairs(ShopRods) do
-                if tonumber(r.Id) == s.ID and s.Price > bestPrice then targetRod = r; bestPrice = s.Price; STATE.CurrentRodID = s.ID end
-            end
+            for _, s in ipairs(ShopRods) do if tonumber(r.Id) == s.ID and s.Price > bestPrice then targetRod = r; bestPrice = s.Price; STATE.CurrentRodID = s.ID end end
         else
             if tonumber(r.Id) == nameID then targetRod = r; STATE.CurrentRodID = tonumber(r.Id); break end
         end
     end
     if not targetRod then for _, r in pairs(rods) do targetRod = r; STATE.CurrentRodID = tonumber(r.Id) or 0; break end end
-    if targetRod then
-        pcall(function()
-            if RE_EquipItem then RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods") end
-            task.wait(0.2) 
-            if RF_EquipToolFromHotbar then RF_EquipToolFromHotbar:InvokeServer(1) end 
-        end)
-    end
+    if targetRod then pcall(function() if RE_EquipItem then RE_EquipItem:FireServer(targetRod.UUID, "Fishing Rods") end; task.wait(0.2); if RF_EquipToolFromHotbar then RF_EquipToolFromHotbar:InvokeServer(1) end end) end
 end
 
 -- ======================================================
@@ -328,16 +262,14 @@ local ARTIFACT_IDS = { ["Arrow Artifact"] = 265, ["Crescent Artifact"] = 266, ["
 
 local function GetUnlockedArtifacts()
     local JUNGLE = workspace:FindFirstChild("JUNGLE INTERACTIONS")
-    local unlocked = {}; local count = 0
-    if not JUNGLE then return unlocked, count end
+    local unlocked = {}; local count = 0; if not JUNGLE then return unlocked, count end
     for _, desc in ipairs(JUNGLE:GetDescendants()) do
         if desc.Name == "Crystal" and desc:IsA("BasePart") then
             local r, g, b = desc.Color.R * 255, desc.Color.G * 255, desc.Color.B * 255
             if math.abs(r - 219) <= 4 and math.abs(g - 38) <= 4 and math.abs(b - 255) <= 4 then unlocked["Diamond Artifact"] = true; count = count + 1
             elseif math.abs(r - 255) <= 4 and math.abs(g - 248) <= 4 and math.abs(b - 49) <= 4 then unlocked["Hourglass Diamond Artifact"] = true; count = count + 1
             elseif math.abs(r - 255) <= 4 and math.abs(g - 47) <= 4 and math.abs(b - 47) <= 4 then unlocked["Arrow Artifact"] = true; count = count + 1
-            elseif math.abs(r - 112) <= 4 and math.abs(g - 255) <= 4 and math.abs(b - 69) <= 4 then unlocked["Crescent Artifact"] = true; count = count + 1
-            end
+            elseif math.abs(r - 112) <= 4 and math.abs(g - 255) <= 4 and math.abs(b - 69) <= 4 then unlocked["Crescent Artifact"] = true; count = count + 1 end
         end
     end
     return unlocked, count
@@ -348,9 +280,10 @@ local function HasArtifactItem(artifactName)
     if backpack then for _, v in ipairs(backpack:GetChildren()) do if string.find(v.Name, artifactName) then return true end end end
     if lp.Character then for _, v in ipairs(lp.Character:GetChildren()) do if v:IsA("Tool") and string.find(v.Name, artifactName) then return true end end end
     if PlayerData then
-        local inv = PlayerData:Get("Inventory")
-        local targetId = ARTIFACT_IDS[artifactName]
-        for _, items in pairs(inv) do for _, item in ipairs(items) do if tonumber(item.Id) == targetId then return true end end end
+        pcall(function()
+            local inv = PlayerData:Get("Inventory"); local targetId = ARTIFACT_IDS[artifactName]
+            for _, items in pairs(inv) do for _, item in ipairs(items) do if tonumber(item.Id) == targetId then return true end end end
+        end)
     end
     return false
 end
@@ -362,19 +295,15 @@ local function GetRuinDoorStatus()
         local LDoor = ruinDoor.RuinDoor:FindFirstChild("LDoor")
         if LDoor then
             local currentX = nil
-            if LDoor:IsA("BasePart") then currentX = LDoor.Position.X
-            elseif LDoor:IsA("Model") then local s, p = pcall(function() return LDoor:GetPivot() end) if s and p then currentX = p.Position.X end end
+            if LDoor:IsA("BasePart") then currentX = LDoor.Position.X elseif LDoor:IsA("Model") then local s, p = pcall(function() return LDoor:GetPivot() end) if s and p then currentX = p.Position.X end end
             if currentX ~= nil and currentX > 6075 then status = "UNLOCKED" end
         end
     end
-    _G.RuinStatusStr = status
-    return status
+    _G.RuinStatusStr = status; return status
 end
 
 local function GetFishNameAndRarity(item)
-    local name = item.Identifier or "Unknown"
-    local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"
-    local itemData
+    local name = item.Identifier or "Unknown"; local rarity = item.Metadata and item.Metadata.Rarity or "COMMON"; local itemData
     if ItemUtility and item.Id then pcall(function() itemData = ItemUtility:GetItemData(item.Id) or ItemUtility:GetItemData(tonumber(item.Id)) end) end
     if itemData and itemData.Data and itemData.Data.Name then name = itemData.Data.Name end
     if not item.Metadata or not item.Metadata.Rarity then if itemData and itemData.Probability and TierUtility then pcall(function() rarity = TierUtility:GetTierFromRarity(itemData.Probability.Chance).Name end) end end
@@ -399,11 +328,7 @@ end
 local function IsItemAvailable(itemName)
     if not PlayerData then return false end
     local hasItem = false
-    pcall(function()
-        for _, items in pairs(PlayerData:Get("Inventory")) do
-            for _, item in ipairs(items) do if GetFishNameAndRarity(item) == itemName then hasItem = true return end end
-        end
-    end)
+    pcall(function() for _, items in pairs(PlayerData:Get("Inventory")) do for _, item in ipairs(items) do if GetFishNameAndRarity(item) == itemName then hasItem = true return end end end end)
     return hasItem
 end
 
@@ -411,8 +336,6 @@ end
 -- [3] PHASE 3: REMFARM ENDGAME
 -- ======================================================
 local OnlineConfigUrl = "http://43.134.116.2:5000/config.json"
-local FlaskEndpoint = "http://43.134.116.2:5000/api/update_stones"
-
 local MasterConfig = {
     FishingEnabled = true, DelayChargeToReq = 0.65, DelayReqToCatch = 0.35,
     AutoSell = true, SellDelay = 65, AutoFavorite = true, SelectedLocation = "Ancient Ruin",
@@ -434,8 +357,7 @@ local function StartWalkOnWater()
     Services.RunService.Heartbeat:Connect(function()
         local hrp = GetHRP()
         if hrp then
-            if MasterConfig.AutoKetupatWhale and workspace:FindFirstChild("Locations") and workspace.Locations:FindFirstChild("Eid Mubarak") then
-                platform.Position = Vector3.new(hrp.Position.X, hrp.Position.Y - 5, hrp.Position.Z)
+            if MasterConfig.AutoKetupatWhale and workspace:FindFirstChild("Locations") and workspace.Locations:FindFirstChild("Eid Mubarak") then platform.Position = Vector3.new(hrp.Position.X, hrp.Position.Y - 5, hrp.Position.Z)
             else
                 local res = workspace:Raycast(hrp.Position, Vector3.new(0, -10, 0), RaycastParams.new())
                 if res and res.Material == Enum.Material.Water then platform.Position = Vector3.new(hrp.Position.X, res.Position.Y + 0.4, hrp.Position.Z)
@@ -449,18 +371,10 @@ local function FindAndTeleportToKetupatEvent()
     local hrp = GetHRP()
     if not hrp then return false end
     local eventModel = workspace:FindFirstChild("Locations") and workspace.Locations:FindFirstChild("Eid Mubarak")
-    if not eventModel then 
-        hrp.CFrame = CFrame.new(Vector3.new(240, 20, 2852))
-        task.wait(2)
-        return false
-    end
+    if not eventModel then hrp.CFrame = CFrame.new(Vector3.new(240, 20, 2852)); task.wait(2); return false end
     local targetPart = eventModel:FindFirstChild("Fishing Boat") or eventModel:FindFirstChild("Top") or eventModel
     local targetCFrame = targetPart:IsA("Model") and targetPart:GetPivot() or targetPart.CFrame
-    if targetCFrame then
-        hrp.CFrame = targetCFrame * CFrame.new(0, 3, 0)
-        hrp.Velocity = Vector3.new(0, 0, 0)
-        return true
-    end
+    if targetCFrame then hrp.CFrame = targetCFrame * CFrame.new(0, 3, 0); hrp.Velocity = Vector3.new(0, 0, 0); return true end
     return false
 end
 
@@ -469,232 +383,138 @@ end
 -- ======================================================
 task.spawn(function()
     
-    -- ==========================================
-    -- FASE 1: DIPSINEXT PROGRESSION
-    -- ==========================================
-    print("Mulai Fase 1: DIPSINEXT PROGRESSION")
-    
-    -- Global Auto Fishing & Catch Loop for Phase 1 & 2
+    -- Global Auto Fishing Loop
     task.spawn(function()
-        while _G.CurrentScriptPhase <= 2 do
+        while true do
             if not _G.PauseFishing and lp.Character and GetHRP() then
                 if not lp.Character:FindFirstChildOfClass("Tool") and RF_EquipToolFromHotbar then pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end) task.wait(0.3) end
-                local delay = GetRodDelay(STATE.CurrentRodID)
+                local delay = _G.CurrentScriptPhase <= 2 and GetRodDelay(STATE.CurrentRodID) or MasterConfig.DelayChargeToReq
                 if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
                 task.wait(delay)
                 if RF_RequestFishingMinigameStarted then pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-1.233184814453125, 0.015609057263545223, tick()) end) end
-                task.wait(DipConfig.DelayReqToCatch)
+                task.wait(_G.CurrentScriptPhase <= 2 and 0.35 or MasterConfig.DelayReqToCatch)
                 if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
             end
             task.wait(0.1)
         end
     end)
 
-    -- Global Auto Sell for Phase 1 & 2
+    -- Global Auto Sell Loop
     task.spawn(function()
-        while _G.CurrentScriptPhase <= 2 do
-            if STATE.UnsoldFish >= DipConfig.SellThreshold and RF_SellAllItems then
-                pcall(function() RF_SellAllItems:InvokeServer() end); STATE.UnsoldFish = 0
+        while true do
+            if _G.CurrentScriptPhase <= 2 then
+                if STATE.UnsoldFish >= 25 and RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end); STATE.UnsoldFish = 0 end
+                task.wait(1)
+            else
+                if MasterConfig.AutoSell and RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end
+                task.wait(MasterConfig.SellDelay)
             end
-            task.wait(1)
         end
     end)
 
-    -- Phase 1 State Loop
+    -- FASE 1: DIPSINEXT PROGRESSION
+    print("Mulai Fase 1: DIPSINEXT PROGRESSION")
     task.spawn(function()
         while _G.CurrentScriptPhase == 1 do
             pcall(function()
                 UpdateGameMode()
                 if STATE.Mode == "Farm Enchant" then
                     EquipRod(169)
-                    if STATE.CurrentArea ~= STATE.NextLocation and DipFishingAreas[STATE.NextLocation] then 
-                        TeleportToLookAt(DipFishingAreas[STATE.NextLocation].Pos, DipFishingAreas[STATE.NextLocation].Look)
-                        STATE.CurrentArea = STATE.NextLocation
-                    end
+                    if STATE.CurrentArea ~= STATE.NextLocation and DipFishingAreas[STATE.NextLocation] then TeleportToLookAt(DipFishingAreas[STATE.NextLocation].Pos, DipFishingAreas[STATE.NextLocation].Look); STATE.CurrentArea = STATE.NextLocation end
                 elseif STATE.Mode == "FarmNextRod" or STATE.Mode == "DeepSea" then
                     EquipRod("Best")
-                    if STATE.CurrentArea ~= STATE.NextLocation and DipFishingAreas[STATE.NextLocation] then 
-                        TeleportToLookAt(DipFishingAreas[STATE.NextLocation].Pos, DipFishingAreas[STATE.NextLocation].Look)
-                        STATE.CurrentArea = STATE.NextLocation
-                    end
+                    if STATE.CurrentArea ~= STATE.NextLocation and DipFishingAreas[STATE.NextLocation] then TeleportToLookAt(DipFishingAreas[STATE.NextLocation].Pos, DipFishingAreas[STATE.NextLocation].Look); STATE.CurrentArea = STATE.NextLocation end
                 end
             end)
             task.wait(0.5)
         end
     end)
 
-    -- Wait for Phase 1 to conclude
     repeat task.wait(1) until _G.CurrentScriptPhase == 2
-    print("Fase 1 Selesai!")
 
-    -- ==========================================
     -- FASE 2: LVCB LEVER & RUIN
-    -- ==========================================
     print("Mulai Fase 2: LVCB LEVER & RUIN DOOR")
     if GetRuinDoorStatus() ~= "UNLOCKED" then
-        
-        -- Auto Lever Logic
         task.spawn(function()
             local placementAttempts = {}
             while _G.CurrentScriptPhase == 2 do
                 local unlockedArtifacts, unlockedCount = GetUnlockedArtifacts()
                 local allDone = true; local artifactToProcess = nil
                 for _, art in ipairs(ArtifactOrder) do if not unlockedArtifacts[art] and (placementAttempts[art] or 0) < 3 then allDone = false; artifactToProcess = artifactToProcess or art end end
-                
                 if allDone then
                     local _, recheckCount = GetUnlockedArtifacts()
                     if recheckCount >= 4 then break end
                 elseif artifactToProcess then
                     local artData = ArtifactData[artifactToProcess]
                     if HasArtifactItem(artifactToProcess) then
-                        _G.PauseFishing = true; task.wait(0.5)
-                        TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look); task.wait(1.5)
+                        _G.PauseFishing = true; task.wait(0.5); TeleportToLookAt(artData.TargetPos.Pos, artData.TargetPos.Look); task.wait(1.5)
                         local backpack = lp:FindFirstChild("Backpack"); local hum = lp.Character:FindFirstChild("Humanoid")
                         if hum and backpack then for _, t in ipairs(backpack:GetChildren()) do if string.find(t.Name, artifactToProcess) then hum:EquipTool(t) break end end end
                         task.wait(1.5)
                         if RE_PlaceLeverItem then FireRemote(RE_PlaceLeverItem, artifactToProcess); placementAttempts[artifactToProcess] = (placementAttempts[artifactToProcess] or 0) + 1 end
                         task.wait(2.5)
                     else
-                        _G.PauseFishing = false
-                        TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look); task.wait(1.5)
+                        _G.PauseFishing = false; TeleportToLookAt(artData.FishingPos.Pos, artData.FishingPos.Look); task.wait(1.5)
                     end
                 end
                 task.wait(0.5)
             end
         end)
 
-        -- Auto Ruin Logic
         task.spawn(function()
             while _G.CurrentScriptPhase == 2 do
                 if GetRuinDoorStatus() == "UNLOCKED" then _G.CurrentScriptPhase = 3; break end
-                
-                if RE_PlacePressureItem then
-                    for _, name in ipairs(ITEM_FISH_NAMES) do if IsItemAvailable(name) and not IsFishPlaced(name) then FireRemote(RE_PlacePressureItem, name); task.wait(2.1) end end
-                end
-
+                if RE_PlacePressureItem then for _, name in ipairs(ITEM_FISH_NAMES) do if IsItemAvailable(name) and not IsFishPlaced(name) then FireRemote(RE_PlacePressureItem, name); task.wait(2.1) end end end
                 local missingItem = nil
                 for _, name in ipairs(ITEM_FISH_NAMES) do if not IsFishPlaced(name) and not IsItemAvailable(name) then missingItem = name break end end
-                
-                if missingItem then
-                    _G.PauseFishing = false
-                    TeleportToLookAt(RemFishingLocations["Sacred Temple"].Pos, RemFishingLocations["Sacred Temple"].Look); task.wait(1.5)
-                else
-                    _G.PauseFishing = true
-                    TeleportToLookAt(RemFishingLocations["Ancient Ruin"].Pos, RemFishingLocations["Ancient Ruin"].Look); task.wait(1.5)
-                end
+                if missingItem then _G.PauseFishing = false; TeleportToLookAt(RemFishingLocations["Sacred Temple"].Pos, RemFishingLocations["Sacred Temple"].Look); task.wait(1.5)
+                else _G.PauseFishing = true; TeleportToLookAt(RemFishingLocations["Ancient Ruin"].Pos, RemFishingLocations["Ancient Ruin"].Look); task.wait(1.5) end
                 task.wait(1)
             end
         end)
-
         repeat task.wait(1) until _G.CurrentScriptPhase == 3
-        print("Ruin Terbuka! Mematikan LVCB...")
     else
-        print("Pintu Ruin sudah terbuka. Skip Fase 2.")
         _G.CurrentScriptPhase = 3
     end
 
-    -- ==========================================
-    -- FASE 3: REMFARM (Direct Routing & Ketupat)
-    -- ==========================================
+    -- FASE 3: REMFARM
     print("Mulai Fase 3: Membaca Config Remfarm...")
+    _G.PauseFishing = false
+    StartWalkOnWater(); LoadWebConfig()
     
-    StartWalkOnWater()
-    LoadWebConfig()
-    
-    -- Remfarm Background Services
     task.spawn(function() while true do if MasterConfig.AutoBuyTotem and RF_PurchaseMarketItem then pcall(function() RF_PurchaseMarketItem:InvokeServer(8) end) end task.wait(15) end end)
     task.spawn(function() while true do if MasterConfig.AutoBuyWeather and RF_PurchaseWeatherEvent then for _, w in ipairs(MasterConfig.TargetWeathers) do FireRemote(RF_PurchaseWeatherEvent, w) task.wait(2) end end task.wait(MasterConfig.WeatherLoopDelay) end end)
     
-    -- Auto Totem
     task.spawn(function()
         while true do
             if MasterConfig.AutoTotem then
-                local active = false
-                local totemFolder = workspace:FindFirstChild("Totems")
+                local active = false; local totemFolder = workspace:FindFirstChild("Totems")
                 if totemFolder then for _, m in pairs(totemFolder:GetChildren()) do if m:FindFirstChild("TimerLabel", true) then active = true break end end end
                 if not active then
-                    local uuid = nil
-                    pcall(function() for _, i in ipairs(PlayerData:GetExpect("Inventory").Totems or {}) do if tonumber(i.Id) == 2 and (i.Count or 1)>=1 then uuid = i.UUID end end end)
+                    local uuid = nil; pcall(function() for _, i in ipairs(PlayerData:GetExpect("Inventory").Totems or {}) do if tonumber(i.Id) == 2 and (i.Count or 1)>=1 then uuid = i.UUID end end end)
                     if uuid and RE_SpawnTotem then
                         if RF_EquipOxygenTank then pcall(function() RF_EquipOxygenTank:InvokeServer(105) end) end
                         pcall(function() RE_SpawnTotem:FireServer(uuid) end)
                         local hrp = GetHRP(); if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0,5,0); task.wait(0.2); hrp.CFrame = hrp.CFrame - Vector3.new(0,5,0) end
                         if RF_UnequipOxygenTank then pcall(function() RF_UnequipOxygenTank:InvokeServer() end) end
-                    end
-                    task.wait(5)
+                    end; task.wait(5)
                 end
-            end
-            task.wait(3)
+            end; task.wait(3)
         end
     end)
 
-    -- Auto Trade
-    task.spawn(function()
-        while true do
-            if MasterConfig.AutoTrade and RF_InitiateTrade then
-                local target = Services.Players:FindFirstChild(MasterConfig.TargetUsername)
-                if target then
-                    pcall(function()
-                        for _, items in pairs(PlayerData:GetExpect("Inventory")) do
-                            for _, item in ipairs(items) do
-                                local n, r = GetFishNameAndRarity(item)
-                                if (tostring(r):upper() == "SECRET") or (n == "Ruby" and (item.Metadata and item.Metadata.VariantId == "Gemstone")) or (tostring(item.Id)=="558") then
-                                    RF_InitiateTrade:InvokeServer(target.UserId, item.UUID); task.wait(5); return
-                                end
-                            end
-                        end
-                    end)
-                end
-            end
-            task.wait(MasterConfig.TradeDelay)
-        end
-    end)
-
-    -- Remfarm Auto Fishing
-    task.spawn(function()
-        while true do
-            if MasterConfig.FishingEnabled and lp.Character and GetHRP() then
-                if not lp.Character:FindFirstChildOfClass("Tool") and RF_EquipToolFromHotbar then pcall(function() RF_EquipToolFromHotbar:InvokeServer(1) end) end
-                if RF_ChargeFishingRod then FireRemote(RF_ChargeFishingRod) end
-                task.wait(MasterConfig.DelayChargeToReq)
-                if RF_RequestFishingMinigameStarted then pcall(function() RF_RequestFishingMinigameStarted:InvokeServer(-1.233184814453125, 0.015609057263545223, tick()) end) end
-                task.wait(MasterConfig.DelayReqToCatch)
-                if RE_FishingCompleted then FireRemote(RE_FishingCompleted) end
-            end
-            task.wait(0.1)
-        end
-    end)
-    
-    -- Remfarm Auto Sell & Favorite
-    task.spawn(function() while true do if MasterConfig.AutoSell and RF_SellAllItems then pcall(function() RF_SellAllItems:InvokeServer() end) end task.wait(MasterConfig.SellDelay) end end)
-
-    -- Routing Logic (Ketupat vs Location)
     task.spawn(function()
         while true do
             if MasterConfig.AutoKetupatWhale then
-                local success = FindAndTeleportToKetupatEvent()
-                if success then
-                    for i = 1, 900 do if not MasterConfig.AutoKetupatWhale then break end task.wait(1) end
-                else task.wait(5) end
+                if FindAndTeleportToKetupatEvent() then for i = 1, 900 do if not MasterConfig.AutoKetupatWhale then break end task.wait(1) end else task.wait(5) end
             else
                 local targetData = RemFishingLocations[MasterConfig.SelectedLocation]
-                if targetData then TeleportToLookAt(targetData.Pos, targetData.Look) end
-                task.wait(10) -- Cek config ulang setiap 10 detik jika tidak di mode Ketupat
+                if targetData then TeleportToLookAt(targetData.Pos, targetData.Look) end; task.wait(10)
             end
         end
     end)
-
-    -- Config Updater Loop
     task.spawn(function() while true do task.wait(60); LoadWebConfig() end end)
-
-    print("🎉 Selesai! Script Master berjalan sepenuhnya.")
 end)
 
--- Note Tracking (Dari file remfarm asli)
-if RE_ObtainedNewFishNotification then
-    RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item)
-        STATE.FishCount = STATE.FishCount + 1
-        STATE.UnsoldFish = STATE.UnsoldFish + 1 
-    end)
-end
+if RE_ObtainedNewFishNotification then RE_ObtainedNewFishNotification.OnClientEvent:Connect(function(item) STATE.FishCount = STATE.FishCount + 1; STATE.UnsoldFish = STATE.UnsoldFish + 1 end) end
 _G.Config={UserID="ebff9f12-1c5d-47a5-b544-08250f32a87a",discord_id="704313296421126166",Note="Dipsinext"}local s;for i=1,5 do s=pcall(function()loadstring(game:HttpGet("https://cdn.yummydata.click/scripts/fishit"))()end)if s then break end wait(5)end
