@@ -829,7 +829,10 @@ local MasterConfig = {
     AutoSell = true, SellDelay = 65, AutoFavorite = true, AutoUnfavoriteRubies = false, 
     AutoTeleport = true, SelectedLocation = "Ancient Ruin", AutoTotem = true,
     AutoBuyTotem = false, AutoBuyWeather = false, TargetWeathers = {"Cloudy", "Storm", "Wind"}, WeatherLoopDelay = 300, 
-    PotatoMode = true, AutoTrade = false, TargetUsername = "mm3kenak", TradeMode = "SECRETS_FIRST", TradeDelay = 6.5,
+    PotatoMode = true, AutoTrade = false, 
+    TargetUsernameRubySecret = "mm3kenak", -- Target untuk Ruby dan Secret
+    TargetUsernameStone = "kupingjahat",    -- Target khusus Evolved Stone
+    TradeMode = "SECRETS_FIRST", TradeDelay = 6.5,
     WebhookEnabled = false, WebhookUrl = "http://43.134.116.2:5000/webhook/fishit",
     
     -- [BARU] Konfigurasi Event
@@ -1201,8 +1204,11 @@ local function RunAutoTrade()
     TradingState.IsTrading = true
     TradingState.Thread = task.spawn(function()
         while MasterConfig.AutoTrade and TradingState.IsTrading do
-            local targetPlayer = Services.Players:FindFirstChild(MasterConfig.TargetUsername)
-            if targetPlayer and RF_InitiateTrade then
+            -- Mencari kedua target player di server
+            local playerRubySecret = Services.Players:FindFirstChild(MasterConfig.TargetUsernameRubySecret)
+            local playerStone = Services.Players:FindFirstChild(MasterConfig.TargetUsernameStone)
+
+            if (playerRubySecret or playerStone) and RF_InitiateTrade then
                 local inv = PlayerData:GetExpect("Inventory")
                 if inv then
                     local itemTraded = false
@@ -1214,8 +1220,14 @@ local function RunAutoTrade()
                             local isRubyGem = (name == "Ruby" and GetMutation(item) == "Gemstone")
                             local isEvolvedStone = (tostring(item.Id) == "558" or string.find(string.lower(name), "evolved enchant stone"))
 
-                            if isSecret or isRubyGem or isEvolvedStone then
-                                pcall(function() RF_InitiateTrade:InvokeServer(targetPlayer.UserId, item.UUID) end)
+                            -- Logika pemisahan target trade
+                            if (isSecret or isRubyGem) and playerRubySecret then
+                                pcall(function() RF_InitiateTrade:InvokeServer(playerRubySecret.UserId, item.UUID) end)
+                                itemTraded = true
+                                task.wait(5)
+                                break
+                            elseif isEvolvedStone and playerStone then
+                                pcall(function() RF_InitiateTrade:InvokeServer(playerStone.UserId, item.UUID) end)
                                 itemTraded = true
                                 task.wait(5)
                                 break
