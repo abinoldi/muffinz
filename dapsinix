@@ -26,7 +26,8 @@ local Config = {
     AutoFishing = true,
     AutoSell = true,
     DelayReqToCatch = 0.35,  
-    SellThreshold = 25 
+    SellThreshold = 25,
+    Disable3DRendering = true -- Tambahkan baris ini
 }
 
 pcall(function()
@@ -75,6 +76,13 @@ local function DisableAnimations()
 end
 
 local function ApplyExtremePotato()
+    -- TAMBAHKAN BARIS INI UNTUK DISABLE 3D RENDERING
+    if Config.Disable3DRendering then
+        pcall(function()
+            Services.RunService:Set3dRenderingEnabled(false)
+        end)
+    end
+    -- BATAS PENAMBAHAN
     if VFXControllerModule then
         VFXControllerModule.Handle = function(...) return nil end
         if VFXControllerModule.PlayVFX then VFXControllerModule.PlayVFX.Fire = function(...) return nil end end
