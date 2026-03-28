@@ -27,7 +27,7 @@ local Config = {
     AutoSell = true,
     DelayReqToCatch = 0.35,  
     SellThreshold = 25,
-    Disable3DRendering = true -- Tambahkan baris ini
+    Disable3DRendering = false -- Tambahkan baris ini
 }
 
 pcall(function()
